@@ -3,28 +3,29 @@
  *
  * Each task is a function of (split, suite seed, index). Its loan comes from a
  * life book of one, seeded from the task's key, run thirty months through the
- * contact center: a borrower who falls behind two or three times, promises to
- * pay each time (the scenario's promise, kept or broken, beside the promises
- * the contact center draws from the receipts), and complains often, because
- * the borrower is irritated and has a grievance (the contact center's pins).
- * Two calls are the task's anchors, in turn by index: a promise call (one the
- * borrower kept, then one broken) and a complaint call, within 120 days of
- * each other. The window runs from 10 to 45 days before the first to past the
- * promise's pay-by date and five weeks past the complaint, so it holds what
- * would follow either error. The plan, in turn by index, says what is made on
- * them (`plantStaffErrors`):
+ * contact center: a borrower who falls behind every two to four months and
+ * promises to pay each time (the scenario's promise, kept or broken, beside the
+ * promises the contact center draws from the receipts), calls often, and
+ * complains often, because the borrower is irritated and has a grievance (the
+ * contact center's pins, `AUDIT_PINS`). Two calls are the task's anchors, in
+ * turn by index: a promise call (one the borrower kept, then one broken) and a
+ * complaint call, within 120 days of each other. What the anchors need runs
+ * from ten days before the first to a week past the promise's pay-by date and
+ * past the last day the complaint can be raised again; the window adds 90 to
+ * 210 days more, split at random between before and after, so where the
+ * anchors sit in it says nothing. The plan, in turn by index, says what is
+ * made on them (`plantStaffErrors`):
  *
  *   - clean: nothing, the control; both calls handled as the rules say;
  *   - S-01: the promise not recorded;
  *   - S-02: the complaint not logged;
  *   - both, on the two calls.
  *
- * A clean window holds both anchors, a promise recorded and a complaint
- * logged. Beside an S-01 root most windows hold another promise, recorded,
- * and beside an S-02 root a few hold another complaint, logged; two extra
- * findings are allowed, so reporting every promise or every complaint passes
- * most windows of that one error, and docs/environments.md gives the floors
- * and how many windows hold another.
+ * Beside the roots every window holds promises recorded and complaints logged,
+ * drawn as the contact center draws them, several of each in most: a root these
+ * rules do not give fails a window, so reporting every promise or every
+ * complaint names a false root. A draw whose window holds fewer than
+ * `AUDIT_MIN_HANDLED` of either is redrawn.
  *
  * A draw is kept only when it is fair to grade: the reference, the rulebook as
  * code reading the window through the tools, finds exactly the labels' roots
@@ -45,6 +46,7 @@ import {
   type ProfilePins,
   type StaffErrorRequest,
 } from "../contacts/index.js";
+import { COMPLAINT_PHRASES, says } from "../calls/index.js";
 import { rebuild } from "../call-qa/view.js";
 import { solveNow } from "../refi/reference.js";
 import type { Split } from "../refi/task.js";
@@ -69,28 +71,36 @@ export const auditPlanOf = (index: number): AuditPlan => AUDIT_PLANS[index % AUD
 /** The promise anchor's arm, in turn within a plan: one the borrower kept (0), one broken (1). */
 export const auditArmOf = (index: number): number => Math.floor(index / AUDIT_PLANS.length) % 2;
 
-/** Thirty months from the first payment: two or three delinquencies, each with a promise. */
+/** Thirty months from the first payment: a delinquency every two to four months, each with a promise. */
 export const AUDIT_HISTORY_MONTHS = 30;
 /**
  * The contact center's pins on every task's loan: an English-speaking borrower (v1 reads no interpreted
- * call), irritated, with a grievance that makes a complaint about four times as likely on an inbound call an
- * agent handles (about three in ten such calls; an outbound call carries none).
+ * call), irritated, with a grievance that makes a complaint five times as likely on an inbound call an
+ * agent handles (an outbound call carries none), who calls six times as often as the calibration's
+ * borrower in the same status, and who pays within three weeks of a conversation without having promised
+ * to on it three times in five. docs/environments.md gives what the pins make of a window.
  */
 export const AUDIT_PINS: ProfilePins = {
   language: "en",
   style: "irritated",
-  complaint_multiplier: 4,
+  complaint_multiplier: 5,
+  call_multiplier: 6,
+  kept_promise_share: 0.4,
 };
 /** How far apart the promise call and the complaint call may be. */
 export const ANCHOR_SPAN_DAYS = 120;
+/** The days the window runs beyond what the two anchors need, split at random between before and after. */
+export const AUDIT_WINDOW_EXTRA: readonly [number, number] = [90, 210];
+/** Beside the roots, a window holds at least this many promises recorded and complaints logged. */
+export const AUDIT_MIN_HANDLED = 1;
 
 /** The scenario a key's draw runs, read off the key's stream before anything else is. */
 export const auditScenario = (key: string): Scenario => scenarioFor(rngFor(key));
 
 function scenarioFor(r: Rng): Scenario {
   const events: ScenarioEvent[] = [];
-  let k = r.int(3, 8);
-  for (let n = 0; n < 3 && k <= AUDIT_HISTORY_MONTHS - 6; n++) {
+  let k = r.int(3, 6);
+  for (let n = 0; n < 12 && k <= AUDIT_HISTORY_MONTHS - 6; n++) {
     events.push({ kind: "missed_payment", loan: 0, month: k });
     if (r.chance(0.5)) events.push({ kind: "missed_payment", loan: 0, month: k + 1 });
     events.push({
@@ -101,7 +111,7 @@ function scenarioFor(r: Rng): Scenario {
       pay_in_days: r.int(5, 14),
       kept: r.chance(0.5),
     });
-    k += r.int(5, 9);
+    k += r.int(2, 4);
   }
   return { loans: 1, months: AUDIT_HISTORY_MONTHS, events };
 }
@@ -188,11 +198,15 @@ export function drawContactAuditCandidate(
   const [p, c] = pairs[r.int(0, pairs.length - 1)]!;
   const promise = promiseOf(p);
   const first = p.on < c.on ? p.on : c.on;
-  let from = addDays(first, -r.int(10, 45));
+  // What the anchors need: from ten days before the first to a week past the promise's date and past the latest day
+  // the complaint is raised again. The rest of the window is split at random, so where the anchors sit says nothing.
+  const tail = addDays(promise.pay_by, 7);
+  const after = addDays(c.on, RAISED_AGAIN_AFTER[1] + 1);
+  const extra = r.int(AUDIT_WINDOW_EXTRA[0], AUDIT_WINDOW_EXTRA[1]);
+  const lead = r.int(0, extra);
+  let from = addDays(first, -(10 + lead));
   if (from < start) from = start;
-  const tail = addDays(promise.pay_by, r.int(7, 21));
-  const after = addDays(c.on, RAISED_AGAIN_AFTER[1] + 1 + r.int(0, 14));
-  let to = tail > after ? tail : after;
+  let to = addDays(tail > after ? tail : after, extra - lead);
   if (to > end) to = end;
   const window: Window = { from, to };
 
@@ -236,8 +250,28 @@ export function drawContactAuditCandidate(
     if (!l.contact || !shown.has(l.contact))
       issues.push(`${l.defect_id} ${l.symptom ?? "root"} on ${l.contact} is outside the window`);
   if (res?.skipped.length) issues.push(`the planter skipped ${JSON.stringify(res.skipped)}`);
+  const held = handledBeside(task);
+  if (held.promises < AUDIT_MIN_HANDLED || held.complaints < AUDIT_MIN_HANDLED)
+    issues.push(
+      `the window holds ${held.promises} promises recorded and ${held.complaints} complaints logged beside its roots`,
+    );
   issues.push(...judgeContactAudit(task));
   return { task, issues };
+}
+
+/**
+ * The promises recorded and the complaints logged in a window, which no root can be: every call whose promise the
+ * promise log holds, and every call whose complaint was logged and whose transcript says it in the rubric's words
+ * (one the recognizer hid is no false root a reviewer could name).
+ */
+export function handledBeside(task: ContactAuditTask): { promises: number; complaints: number } {
+  const recorded = new Set(task.promises.map((p) => p.contact));
+  const voiced = (id: string) =>
+    (task.transcripts[id] ?? []).some((l) => COMPLAINT_PHRASES.some((ph) => says(l.text, ph)));
+  return {
+    promises: task.contacts.filter((c) => recorded.has(c.id)).length,
+    complaints: task.contacts.filter((c) => c.complaint_logged && voiced(c.id)).length,
+  };
 }
 
 /** Why a draw was turned away, by kind: each a filter on the suite, which docs/environments.md names. */
@@ -249,6 +283,7 @@ export function turnedAwayBecause(issues: readonly string[]): string {
   if (/misses S-02 raised_again/.test(all)) return "the recognizer hid the complaint raised again";
   if (/(kept_not_marked|broken_not_followed_up)/.test(all))
     return "the payments read otherwise than the promise log";
+  if (/beside its roots/.test(all)) return "too few promises recorded or complaints logged";
   return `other: ${all}`;
 }
 

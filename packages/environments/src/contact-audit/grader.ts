@@ -1,22 +1,26 @@
 /**
- * The grader: the twin's labels, read the way boarding-triage 1.1.0 reads a
- * package's manifest (boarding/grader.ts). A root is graded; a symptom is
- * credit for having seen the error at all; a clean window is a control.
+ * The grader: the twin's labels, read root apart from symptom as
+ * boarding-triage 1.1.0 reads a package's manifest (boarding/grader.ts), with
+ * two differences: a root the window does not hold fails it, and a root's
+ * symptoms are required beside it.
  *
  * The fields:
  *   - for each root, found: a finding names its error, kind "root" and its
  *     call; for an S-01 root, also promise: that finding gives the promise's
  *     amount (in cents) and pay-by date as the call's note does;
- *   - for each root with symptoms, traced: a finding names the root, or failing
- *     that one of its symptoms. A finding that names a symptom but not its
- *     root earns that field alone, so partial credit at most; one that names
- *     the root covers its symptoms, and a symptom named beside it is neither
- *     required nor extra;
- *   - for a window with nothing planted, passed: no finding at all;
- *   - the extra findings, all together: a finding no label names, or a second
- *     finding on one, counted, at most `AUDIT_EXTRA_FINDINGS_CAP`.
- * A pass is every field right. An empty submission passes a clean window; no
- * submission at all passes nothing.
+ *   - for each root, symptoms: every symptom the rules give it is named, each
+ *     on its contact. A finding that names them and not the root earns this
+ *     field alone, so partial credit at most;
+ *   - false roots, one field for every window, a clean one's only field but
+ *     the next: no finding of kind "root" names a call these rules do not make
+ *     a root (a promise the log holds, a complaint logged, a call raising a
+ *     complaint again, or the right call under the wrong error). Calling a
+ *     contact a staff error that it is not is the error a QA reviewer must not
+ *     make, so one such finding fails the window whatever else is right;
+ *   - extra findings: a symptom no label names, or a second finding on one
+ *     thing, counted, at most `AUDIT_EXTRA_FINDINGS_CAP`.
+ * A pass is every field right. An empty submission passes a clean window and
+ * nothing else; no submission at all passes nothing.
  */
 
 import { cents } from "@hm/kernel/money";
@@ -125,25 +129,26 @@ export function gradeContactAudit(
   const symptoms = new Map(task.labels.filter((l) => !l.root_cause).map((l) => [labelKey(l), l]));
   const matched = new Map<string, AuditFinding>();
   const named = new Set<string>();
+  const falseRoots: AuditFinding[] = [];
   const extra: AuditFinding[] = [];
   for (const f of answer?.findings ?? []) {
     const k = keyOf(f.error, f.kind, f.contact);
-    if (roots.has(k) && !matched.has(k)) matched.set(k, f);
-    else if (symptoms.has(k) && !named.has(k)) named.add(k);
+    if (f.kind === "root") {
+      if (!roots.has(k)) falseRoots.push(f);
+      else if (matched.has(k)) extra.push(f);
+      else matched.set(k, f);
+    } else if (symptoms.has(k) && !named.has(k)) named.add(k);
     else extra.push(f);
   }
   const fields: FieldGrade[] = [];
   const add = (field: string, expected: string, got: string | null, ok: boolean) =>
     fields.push({ field, expected, got, ok });
+  const said = (f: { readonly error: string; readonly contact: string }) =>
+    `${f.error} root on ${f.contact}`;
   for (const [k, l] of [...roots].sort((a, b) => (a[0] < b[0] ? -1 : 1))) {
     const f = matched.get(k);
     const at = `${l.defect_id} ${l.contact}`;
-    add(
-      `${at}: found`,
-      `${l.defect_id} root on ${l.contact}`,
-      f ? `${f.error} root on ${f.contact}` : null,
-      !!f,
-    );
+    add(`${at}: found`, `${l.defect_id} root on ${l.contact}`, f ? said(f) : null, !!f);
     if (l.promise) {
       const want = l.promise;
       const got = f?.promise ?? null;
@@ -158,26 +163,22 @@ export function gradeContactAudit(
     }
     const own = [...symptoms].filter(([, s]) => s.defect_id === l.defect_id);
     if (own.length) {
-      const seen = own
-        .filter(([sk]) => named.has(sk))
-        .map(([, s]) => `${s.symptom} on ${s.contact}`);
+      const seen = own.filter(([sk]) => named.has(sk));
+      const list = (xs: typeof own) => xs.map(([, s]) => `${s.symptom} on ${s.contact}`).join(", ");
       add(
-        `${at}: traced`,
-        `the root, or one of ${own.map(([, s]) => `${s.symptom} on ${s.contact}`).join(", ")}`,
-        f ? "the root" : seen.length ? `${seen.join(", ")} (a symptom)` : null,
-        !!f || seen.length > 0,
+        `${at}: symptoms`,
+        list(own),
+        seen.length ? list(seen) : null,
+        seen.length === own.length,
       );
     }
   }
-  if (task.labels.length === 0) {
-    const n = answer?.findings.length ?? 0;
-    add(
-      "passed",
-      "no finding",
-      n === 0 ? "no finding" : `${n} finding${n === 1 ? "" : "s"}`,
-      n === 0,
-    );
-  }
+  add(
+    "false roots",
+    "none",
+    falseRoots.length ? falseRoots.map(said).join(", ") : "none",
+    falseRoots.length === 0,
+  );
   add(
     "extra findings",
     `at most ${AUDIT_EXTRA_FINDINGS_CAP}`,

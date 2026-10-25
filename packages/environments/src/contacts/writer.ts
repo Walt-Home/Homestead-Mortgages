@@ -1242,7 +1242,9 @@ function body(x: Script, reason: InquiryReason, primary: boolean) {
       break;
     case "make_payment":
       if (f.last_payment && f.last_payment.on === f.on) {
-        st.payAmount(x);
+        // Nothing to quote when the borrower is current and no installment is left to come (until contact-audit's
+        // busier books reached one, this threw rather than wrote the call).
+        if (f.past_due || f.next) st.payAmount(x);
         x.agent(
           ["[Is that coming from checking or savings?|What account would you like to use?]"],
           "ask_account",

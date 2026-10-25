@@ -26,7 +26,7 @@ interface Row {
   direction: string;
   mode: string;
   purpose: string;
-  issue: string;
+  reason: string | null;
   agent: string | null;
   complaint_logged: boolean;
 }
@@ -159,7 +159,7 @@ export function* contactAuditSteps(p: Json, _call: Call): Step<Json> {
   const roots02: Row[] = [];
   for (const c of contacts) {
     if (!voiced.has(c.id) || c.complaint_logged) continue;
-    const root = roots02.find((r) => r.issue === c.issue);
+    const root = roots02.find((r) => r.reason === c.reason);
     if (root) {
       findings.push({ error: "S-02", kind: "raised_again", contact: c.id, promise: null });
       continue;

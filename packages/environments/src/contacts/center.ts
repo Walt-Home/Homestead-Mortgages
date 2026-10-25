@@ -46,8 +46,10 @@ import { templateWriter, type ContactTextWriter } from "./writer.js";
  * Beside them, and drawing nothing new on a clean center (held byte for byte against the center without them): two
  * staff errors a twin can make on a call the clean history has (staff.ts), S-01, a promise said and noted and never
  * recorded, and S-02, a complaint voiced and never logged and raised again; the complaint log, read off the logged
- * complaints as a view (complaints.ts); and two pins, the borrower's manner and a multiple of the chance of a
- * complaint.
+ * complaints as a view (complaints.ts); four pins, the borrower's manner, a multiple of the chance of a complaint, a
+ * multiple of the ordinary inbound volume, and the share of conversations a payment follows within three weeks that
+ * take a promise for it; and a call the writer threw on (a payment taken with nothing left to quote), which it now
+ * writes without the quote.
  */
 export const CONTACTS_VERSION = "1.2.0";
 

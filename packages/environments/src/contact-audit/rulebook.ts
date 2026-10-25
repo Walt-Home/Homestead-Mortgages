@@ -26,7 +26,7 @@ export const ACK_PHRASES: readonly string[] = [
 ];
 /** Where a copied-forward note begins, as the comment log writes it. */
 export const NOTE_PREV_MARK = " | PREV: ";
-/** Findings beyond the labels a submission may make and still pass. */
+/** Findings beyond the labels a submission may make and still pass: symptoms only, never a root. */
 export const AUDIT_EXTRA_FINDINGS_CAP = 2;
 
 const q = phraseList;
@@ -63,19 +63,23 @@ Its symptoms:
 
 A call voiced a complaint when some line of its transcript, whoever said it, says ${q(COMPLAINT_PHRASES)}. Every call that voiced one must be logged: its row's complaint_logged is true.
 
-A call in the window that voiced a complaint and has complaint_logged false is an S-02 root, unless an earlier call in the window on the same issue voiced one and has complaint_logged false too: then it is the borrower raising that root's complaint again, and a symptom of that root.
+A call in the window that voiced a complaint and has complaint_logged false is an S-02 root, unless an earlier call in the window with the same reason voiced one and has complaint_logged false too: then it is the borrower raising that root's complaint again, a symptom of that root and never a root of its own. Nobody logged the first, so no case links the two, and the later call may be filed under an issue of its own: its reason is what ties it to the first.
 
 Its symptoms:
 - no_acknowledgment: no line of the root call's transcript says ${q(ACK_PHRASES)}. On the root call's id.
 - no_response: the complaint log holds no case for the root call, so nobody answered it in writing. On the root call's id.
-- raised_again: each later call in the window on the same issue that voiced a complaint and has complaint_logged false. One finding for each, on that call's id.
+- raised_again: each later call in the window with the same reason that voiced a complaint and has complaint_logged false. One finding for each, on that call's id.
 
 ## Submitting
 
-Call submit_audit once with findings, every root and every symptom, each once:
+Call submit_audit once with findings, every root and every symptom the rules give it, each once:
 - error: "S-01" or "S-02";
 - kind: "root", or the symptom's name;
 - contact: the contact id the rule puts it on;
 - promise: on an S-01 root, {amount, pay_by}; null on every other finding.
-How it is graded: a window with no staff error passes with no findings, and any finding fails it. Elsewhere every root must be found, an S-01 root with its promise as the note gives it; a symptom earns part of its root's credit when the root is missed, and beside the root is neither required nor extra; and at most ${AUDIT_EXTRA_FINDINGS_CAP} findings may be ones these rules do not give, a second finding on the same thing among them. A submission that does not fit the schema comes back as an error to correct; a valid one ends the task.
+How it is graded:
+- every root must be found, an S-01 root with its promise as the note gives it, and beside each root every symptom these rules give it, each on its contact: a root without its symptoms does not pass;
+- a root these rules do not give fails the task, whatever else is right: a call whose promise the promise log holds, a call whose complaint was logged, a call raising a complaint again, or a root's call named under the other error is no staff error, and naming it one is the mistake an audit must not make. So a window with no staff error passes only with no root;
+- at most ${AUDIT_EXTRA_FINDINGS_CAP} other findings may be symptoms these rules do not give, a second finding on the same thing among them.
+A submission that does not fit the schema comes back as an error to correct; a valid one ends the task.
 `;

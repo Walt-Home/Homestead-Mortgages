@@ -4361,17 +4361,24 @@ rules from there:
 - **S-01, a promise not tracked.** The borrower promises a payment on a
   call, and the call's words and the agent's note carry it, word for word
   the clean call's. No record is written: the row's `promise_id` is null,
-  the call is dispositioned "information provided" (the disposition of a
-  call that records nothing, which leaves the words as they were), and the
+  the call is dispositioned as it would have been without the promise (a
+  hardship call referred to loss mitigation, never transferred, which
+  would change its words; any other "information provided"), and the
   promise log holds nothing (`unrecorded_promises` keeps the promise, for
-  the writer).
+  the writer). It is made on a promise the contact center drew from a
+  call, never on the scenario's own promise call: that call's purpose code
+  is `promise_to_pay`, a twin keeps every row's purpose, and a
+  `promise_to_pay` call with no promise is one no clean history holds,
+  found from the row without reading its note.
   What the rules then do: nothing ceases the dialer, so it calls inside the
   window, about twice a root in the held-out suite; no "PTP SET" line, and a
   kept promise is never marked kept, a broken one never marked broken or
   the dialer resumed for it. A later call may take a promise of its own,
   which the first would have stopped. A call made before the promise is
   still the clean one's: the promise keeps it from taking one of its own,
-  as it did.
+  as it did, and the dialer stays quiet on the day of a promise taken on an
+  inbound call, the hours before the call among them, as the clean history
+  ceased it for the whole day.
 - **S-02, a complaint not logged.** C-04's error at the call (the row's
   flag, the agent's acknowledgment, the note, the CMPL line), and
   everything after it: the complaint system opens no case (below), so
@@ -4380,11 +4387,17 @@ rules from there:
   it without the complaint, by the same draw (a late fee may be escalated
   anyway; a transfer, which would change the call's words, is a
   referral), and its issue is left open as an escalation's is, so the
-  follow-ups the clean history draws for it are drawn the same. Nothing
-  having come of it, the borrower calls about it again 16 to 35 days later
-  (`RAISED_AGAIN_AFTER`, a design choice: past the 15 days a response
-  takes), on the same issue, a call that voices the complaint and is not
-  logged or escalated either.
+  follow-ups the clean history draws for it are drawn the same. Nobody
+  tells the borrower how to put it in writing either, so no written request
+  follows it, as one may follow a logged complaint (on a clean history every
+  complaint voiced is logged, so that draw is what it was). Nothing having
+  come of it, the borrower calls about it again 3 to 60 days later
+  (`RAISED_AGAIN_AFTER`, a design choice: as soon as a follow-up would be,
+  or weeks later once no written answer has come), a call that voices the
+  complaint and is not logged or escalated either. No case links it to the
+  first, so it is filed as any call about its reason is that day, under an
+  issue of its own (the root's own when the two fall in one month), and its
+  reason is what ties the two.
 
 The complaint system is the servicing app's spec 4.5, "Complaint handling /
 UDAAP", whose blueprint names a complaint log in a case-management system
@@ -4426,9 +4439,14 @@ them is the center without them, held side by side (rows, notes, every
 transcript and C-01 to C-08 planted at 5 %, on 120 loans over 48 months and
 60 over 120, and 80 loans over 72 months with the escrow call pinned).
 call-qa's held-out pin (`4e175948…`) passes as contacts 1.2.0 left it.
-contact-audit's books set two new profile pins, `style` and
-`complaint_multiplier`, which change no draw on a center that does not set
-them.
+contact-audit's books set four profile pins of their own, `style`,
+`complaint_multiplier`, `call_multiplier` (the ordinary inbound volume, month
+by month) and `kept_promise_share` (how often a conversation the next payment
+follows within three weeks takes a promise for it; unset, always), each of
+which changes no draw on a center that does not set it. The audit's busier
+books reached one call the writer had never written, a payment taken on a
+call with nothing left to quote, which threw; it now quotes nothing, which
+changes no call that was written before.
 
 **Not covered yet:**
 
@@ -4695,10 +4713,13 @@ calendar days (spec 4.5). Then the two errors:
 - **S-02.** A call voiced a complaint when any line of its transcript says
   one of the call rubric's complaint phrases (`COMPLAINT_PHRASES`), whoever
   the recognizer labeled. Such a call with `complaint_logged` false is a
-  root, unless an earlier one on the same issue was too. Its symptoms: no
-  line acknowledging it (`ACK_PHRASES`, the contact center's three
-  wordings), no case in the complaint log, and each later call on the same
-  issue that voiced one and was not logged (`raised_again`).
+  root, unless an earlier one with the same reason was too: then it is the
+  borrower raising that root's complaint again, a symptom and never a root.
+  Nobody logged the first, so no case links the two, and the later call may
+  be filed under an issue of its own: its reason is what ties them. Its
+  symptoms: no line acknowledging it (`ACK_PHRASES`, the contact center's
+  three wordings), no case in the complaint log, and each later call with
+  the same reason that voiced one and was not logged (`raised_again`).
 
 **The tools.** Primitives only: `read_notes` (by contact or by days),
 `read_transcript`, `search_transcripts` (every recorded call in the window,
@@ -4706,84 +4727,171 @@ read as call-qa's search reads a line), `read_promises`, `read_complaints`
 (each as it stood at the window's end), `read_payments` and refi's
 `calculate`. No tool compares two records or names an error.
 
-**The grader** is the twin's labels, read the way boarding-triage 1.1.0
-reads its manifest:
+**The grader** is the twin's labels, a root read apart from its symptoms as
+boarding-triage 1.1.0 reads its manifest, with two differences: a root's
+symptoms are required, and a root the window does not hold fails it.
 
-- each root is found when a finding names its error, kind "root" and its
-  call; an S-01 root also has its promise, the amount in cents and the date;
-- a root with symptoms has a third field, traced: a finding names the root,
-  or failing that one of its symptoms. A symptom alone earns that field and
-  fails the window; beside the root it is neither required nor extra;
-- a clean window is a control, one field: passed, no finding at all;
-- extra findings, a second finding on one among them, are one field: at
-  most two.
+- Each root is found when a finding names its error, kind "root" and its
+  call; an S-01 root also has its promise, the amount in cents and the
+  date.
+- Each root has a symptoms field: every symptom the rules give it, each on
+  its contact. The root without them fails; they without the root earn
+  that field and fail on the root.
+- Every window has a false-roots field: a finding of kind "root" that no
+  label names fails the window, whatever else is right. A promise the log
+  holds, a complaint logged, a call raising a complaint again, and a root's
+  call named under the other error are each no staff error, and naming one
+  is the mistake a QA reviewer must not make. A clean window is a control:
+  it passes only with no root.
+- Extra findings are one field, symptoms only, a second finding on one
+  thing among them: at most two.
 
-**The tasks.** Each is a life book of one loan, run 30 months: two or three
-delinquencies, each with the scenario's promise (kept or broken) beside the
-ones the contact center draws from the receipts, and a borrower the contact
-center's pins make irritated and four times as likely to complain (about
-three in ten of the inbound calls an agent handles; an outbound call carries
-none). The task takes two anchors from the
-clean center, in turn by index a promise the borrower kept and one broken,
-and a complaint call, within 120 days of each other; the window runs from 10
-to 45 days before the first to past the promise's date and five weeks past
-the complaint. Four plans in turn make nothing (the control), S-01 on the
-promise, S-02 on the complaint, or both, so the held-out suite (seed 1, 200
-windows, drawn on life 1.2.0 and contacts 1.2.0, pinned by hash) holds 50 of
-each. It has 100 roots of each error, 203 dialer attempts inside a
-promise's window, 50 promises kept and 50 broken, and 100 calls raising a
-complaint again. A window averages 113
-days, both ends counted (42 to 200), 18.3 contacts, 8.8 recorded calls, 2.2
-calls with a promise and 1.8 with a complaint. 53 of the windows' calls are
-about an escrow analysis, 11 of them an S-02 root.
+**A root's symptoms are required.** The rulebook asks for them, and they are
+where a window's arithmetic and timing are: the payments after the call's
+day through the pay-by date, added with the calculator; an attempt later on
+the promise call's own day inside its window and one earlier outside it; the
+three wordings of an acknowledgment; the call raising a complaint again,
+found by its reason. The reference reaches every one on every kept draw, so
+they are fair to require. The roots alone, once false roots fail, would
+already tell a recorded promise from an unrecorded one and a logged
+complaint from an unlogged one; with the symptoms required they pass the
+50 clean windows and nothing else (mean score 0.816), so a pass is the
+whole audit.
+
+**The tasks.** Each is a life book of one loan, run 30 months: a delinquency
+every two to four months, each with the scenario's promise (kept or broken),
+beside the ones the contact center draws from the receipts. Four profile
+pins make the borrower the kind a desk audits: irritated, with a grievance
+that makes a complaint five times as likely (0.419 of the inbound calls an
+agent handles on the books of 400 training keys, seed 11, and 0.335 of every
+handled call; an outbound call carries none), calling six times as often as
+the calibration's borrower in the same status, and paying within three weeks
+of a conversation without having promised to on it three times in five (in
+the calibration's center every such conversation takes a promise, which made
+a kept promise's call the only one of its kind: below). The task takes two
+anchors from the clean center, in turn by index a promise the borrower kept
+and one broken, which the contact center drew from a call (never the
+scenario's own promise call: "Staff errors" above), and a complaint call,
+within 120 days of each other. The window runs from ten days before the
+first to a week past the promise's date and past the last day the complaint
+can be raised again, and 90 to 210 days more, split at random between before
+and after, so where the anchors sit in it says nothing. Four plans in turn
+make nothing (the control), S-01 on the promise, S-02 on the complaint, or
+both, so the held-out suite (seed 1, 200 windows, drawn on life 1.2.0 and
+contacts 1.2.0, pinned by hash) holds 50 of each. It has 100 roots of each
+error, 197 dialer attempts inside a promise's window, 50 promises kept and
+50 broken, and 100 calls raising a complaint again, 3 to 61 days after it
+(24 within 15 days; 18 under the root's own issue, 82 under issues of their
+own). S-01's roots are 77 dialer conversations and 23 inbound calls about a
+payment arrangement; S-02's are on 15 reasons, a hardship (41) and a payment
+arrangement (28) the most. A window averages 252 days, both ends counted (87
+to 378), 48.8 contacts (14 to 112), 25.4 recorded calls, 4.7 calls whose
+note states a promise and 6.2 that voice a complaint. 90 of the windows'
+calls are about an escrow analysis, 5 of them an S-02 root.
+
+**Beside the roots, every window holds promises recorded and complaints
+logged.** Counting the calls whose promise the log holds, and the logged
+calls whose transcript says the complaint in the rubric's words (one the
+recognizer hid is no false root a reviewer could name): at least one of each
+in every window, a draw with fewer being turned away (`AUDIT_MIN_HANDLED`),
+and 4.2 promises (1 to 10) and 5.2 complaints (1 to 17) on average. 192
+windows hold two promises or more and 176 three or more; 175 hold two
+complaints or more and 153 three or more. So reporting every promise or
+every complaint names a false root in every window.
 
 **A draw is kept only when it is fair to grade, and this is a filter.** The
 reference, reading the window as rendered, must find exactly the labels'
 roots and the symptoms a rule names, and nothing more (nothing at all in a
-clean window). On the held-out suite 97 of 200 windows are first draws,
-and the longest took 11; the redraws are 215 books with no pair of anchors,
-6 where the recognizer hid the complaint raised again (a misheard or
-dropped word in the phrase) and 5 where it hid the root's own. Of the first
-draws of 1,000 training tasks (train seed 11), 530 had a pair of anchors
-and reached the check, and 25 were turned away: 14 because the recognizer
-hid the complaint, 10 the complaint raised again, and one because the
-payments read otherwise than the promise log: a scripted promise the
-scenario breaks, which the borrower's own payment met on its date, is
-marked broken. The same filters are v1's limits.
+clean window). On the held-out suite 111 of 200 windows are first draws,
+and the longest took 7; the redraws are 155 books with no pair of anchors,
+9 windows with too few promises recorded or complaints logged beside the
+roots, 4 where the recognizer hid the complaint raised again (a misheard or
+dropped word in the phrase) and 1 where it hid the root's own. Of the first
+draws of 1,000 training tasks (train seed 11), 590 had a pair of anchors and
+reached the check, and 32 were turned away: 15 for too few promises recorded
+or complaints logged, 11 because the recognizer hid the complaint and 6 the
+complaint raised again. None is turned away for its payments any more: a
+scripted promise, which the scenario could break on a day the borrower's own
+payment met it, is never an anchor. The same filters are v1's limits.
 
-**The floors.** Submitting nothing passes the 50 clean windows, with a mean
-score of 0.438. Reporting every call whose note states a promise as an S-01
-root, with its promise, passes 46 (0.545): the S-01 windows with two other
-promises or fewer. Reporting every call that voices a complaint as an S-02
-root passes 51 (0.555): the 49 S-02 windows with two other complaint calls
-or fewer, the call raising it again among them, and two clean ones whose
-logged complaint the recognizer hid. Both together pass 63 (0.663): 35 with
-both errors, 25 with S-01 alone and 3 with S-02 alone. Each floor passes
-little beyond the windows of the one error it reports, a quarter of the
-suite, and within that quarter most of it, because two extra findings are
-allowed and the logs hold few others: a clean window holds both anchors, a
-promise recorded and a complaint logged, but beside an S-01 root the
-promise log holds another promise in 36 of the 50 S-01 windows (40 of the 50
-with both errors), and beside an S-02 root the complaint log holds another
-complaint in 15 of 50 (7 of 50). A policy that reads no transcript and
-reports an S-02 root wherever a call was escalated and not logged passes 49
-(0.441), fewer than submitting nothing: an unlogged complaint is escalated
-by nobody, and the one root it finds is a late-fee call, escalated as a late
-fee may be with no complaint, as a call in two clean windows is.
+**The floors.** Each cheap policy below chooses its roots and is then given
+every symptom the rules give those roots, read off the window as the
+reference reads them, so a floor is what its choice of roots is worth.
+Passes are of 200 windows, then of the 50 clean, S-01, S-02 and both:
+
+| Policy                                                                            | Passes | Clean | S-01 | S-02 | Both |  Mean |
+| --------------------------------------------------------------------------------- | -----: | ----: | ---: | ---: | ---: | ----: |
+| Report nothing                                                                    |     50 |    50 |    0 |    0 |    0 | 0.546 |
+| Every promise (each call whose note states one, as an S-01 root)                  |      0 |     0 |    0 |    0 |    0 | 0.283 |
+| Every complaint (each call whose transcript voices one, as an S-02 root)          |      0 |     0 |    0 |    0 |    0 | 0.423 |
+| Every promise and every complaint                                                 |      0 |     0 |    0 |    0 |    0 | 0.469 |
+| S-01 by disposition: a promise call with no promise, "information provided"       |     10 |     4 |    6 |    0 |    0 | 0.426 |
+| The first such call                                                               |     23 |     4 |   19 |    0 |    0 | 0.421 |
+| S-02 by disposition: escalated and not logged, the first on its issue             |     39 |    39 |    0 |    0 |    0 | 0.462 |
+| Both by disposition                                                               |      9 |     3 |    6 |    0 |    0 | 0.399 |
+| Every promise call with no `promise_id`                                           |      0 |     0 |    0 |    0 |    0 | 0.291 |
+| A `promise_to_pay` call with no `promise_id`                                      |     50 |    50 |    0 |    0 |    0 | 0.542 |
+| A hardship call with no promise, "information provided"                           |     50 |    50 |    0 |    0 |    0 | 0.546 |
+| A promise call with no promise that a payment followed within three weeks         |     48 |    37 |   11 |    0 |    0 | 0.553 |
+| The same, only where it is the only one                                           |     54 |    43 |   11 |    0 |    0 | 0.553 |
+| Every handled call with no CMPL note                                              |      0 |     0 |    0 |    0 |    0 | 0.203 |
+| Every call with no CMPL note whose reason a logged complaint has                  |     12 |    12 |    0 |    0 |    0 | 0.263 |
+| An unlogged call another unlogged call for its reason follows within 3 to 60 days |     21 |     9 |    0 |   12 |    0 | 0.418 |
+| The first such pair                                                               |     23 |     9 |    0 |   14 |    0 | 0.399 |
+| The same, only where it is the only pair                                          |     31 |    19 |    0 |   12 |    0 | 0.472 |
+| A written request on an issue no logged call has                                  |     50 |    50 |    0 |    0 |    0 | 0.546 |
+| A closed call followed on its issue within 15 days                                |     39 |    33 |    0 |    6 |    0 | 0.490 |
+| The promise note nearest the window's middle                                      |     15 |     0 |   15 |    0 |    0 | 0.370 |
+| Every complaint not logged, the raised-again clause left out                      |     50 |    50 |    0 |    0 |    0 | 0.645 |
+| The roots the rules give, no symptom                                              |     50 |    50 |    0 |    0 |    0 | 0.816 |
+
+The clean share is 50, a quarter. No policy passes more than 54, two points
+past it, and none passes a majority of any error's 50 windows, nor of either
+promise arm's 25 within one: the most is 19 S-01 windows, and 11 of an arm's 25
+(the first conversation with no promise and "information provided" on the
+broken arm, and the call with no promise a payment followed, where it is
+the only one, on the kept arm). A test holds every row, and holds each
+policy under those two bounds. The rule itself, clause by clause, passes all
+200, so each row is what leaving a clause out costs: the raised-again clause
+alone costs the 100 windows with an S-02 root, every one of which holds a
+call raising it again.
+
+The rows that read the logs' structure are the tells the first build left in
+the twin, and what each passes now: a scripted `promise_to_pay` call with no
+`promise_id` and "information provided" (S-01 is never made on one), a
+hardship call "information provided" (a hardship call whose promise nobody
+recorded is referred to loss mitigation, as it would have been without one),
+a written request on an issue no logged call has (nobody tells the borrower
+whose complaint nobody logged how to send one), the call raising a complaint
+again 16 to 35 days later on the root's own issue (now 3 to 60 days, under an
+issue of its own, tied by its reason), and a promise call with no promise
+that a payment followed within three weeks (in the calibration's center
+every such call takes a promise, so a kept promise nobody recorded was the
+only one of its kind: the pinned borrower pays without having promised to
+three times in five). Each passes the clean windows it does not name a false
+root in, and few others.
 
 **The proof of fairness.** The reference passes the held-out suite, 300
-training tasks (seed 11) and ten hand-built histories in at most three
+training tasks (seed 11) and fifteen hand-built histories in at most three
 turns and seven tool calls (two and six on the generated windows): one turn
 reads the logs and searches the transcripts, one adds up a window's
-payments, one submits. The histories
-hold each rule on its edge: a promise recorded and kept; one not recorded
-with two attempts in its window; the window's pay-by date in and the day
-after out, and a payment a cent short; an attempt earlier on the promise
-call's day out and one later in; two payments after the call's day adding
-up to the promise, beside one on the call's day that does not count; a
-copied-forward note's promise; a complaint logged and answered on day 9;
-one not logged and raised again; a later complaint on another issue, logged;
-and both on one loan.
+payments, one submits. The histories hold each rule on its edge: a promise
+recorded and kept; one not recorded with two attempts in its window; the
+window's pay-by date in and the day after out, and a payment a cent short;
+an attempt earlier on the promise call's day out and one later in; two
+payments after the call's day adding up to the promise, beside one on the
+call's day that does not count; a copied-forward note's promise; a complaint
+logged and answered on day 9; one not logged and raised again; a later
+complaint for the same fee, logged this time; both on one loan; and, for the
+rules on false roots, a clean window beside promises recorded, kept and
+broken, and complaints logged; an unrecorded promise beside promises the log
+holds; an unlogged complaint beside complaints logged, raised again under an
+issue of its own; one raised again four days later, before an answer was
+due; and a promise on a hardship call referred to loss mitigation, whose
+disposition says nothing either way. On the first three of those, reporting
+every promise or every complaint fails on a false root; on every history
+raising a complaint again, so does leaving the raised-again clause out; and
+on every history with an error, the roots alone fail on their symptoms.
 
 Not in 1.0.0:
 
@@ -4795,9 +4903,10 @@ Not in 1.0.0:
   a notice of error (§1024.35), with clocks of its own, and the contact
   center draws complaints on calls only;
 - a promise or a complaint the recognizer hid from the reviewer, which only
-  the label could tell, and a scripted broken promise its payments met.
+  the label could tell;
+- a staff error on the scenario's own promise call.
 
-Generating the held-out suite takes about twelve seconds.
+Generating the held-out suite takes about thirty seconds on a loaded machine.
 
 ## The Supermortgage Gym
 

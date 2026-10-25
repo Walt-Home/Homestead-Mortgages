@@ -6,8 +6,10 @@
  * from there; the labels tell the root from what follows. contact-audit's
  * rulebook is pinned, its spec cases give what their hand-written labels say,
  * every generated window can be audited from the rulebook and the tools, the
- * grader reads a root apart from its symptoms as boarding-triage does, a
- * clean window is a control, and every plan and symptom turns up.
+ * grader requires a root's symptoms beside it and fails a root the window
+ * does not hold, a clean window is a control, every window holds promises
+ * recorded and complaints logged beside its roots, every plan and symptom
+ * turns up, and no cheap policy passes much beyond the clean windows.
  */
 
 import { describe, expect, it } from "vitest";
@@ -33,6 +35,7 @@ import type { LifeBook } from "../life/generate.js";
 import {
   ACK_PHRASES,
   AUDIT_EXTRA_FINDINGS_CAP,
+  AUDIT_MIN_HANDLED,
   AUDIT_PLANS,
   CONTACT_AUDIT_FINGERPRINT,
   CONTACT_AUDIT_HELDOUT_SUITE,
@@ -53,6 +56,7 @@ import {
   generateContactAuditSuite,
   generateContactAuditTask,
   gradeContactAudit,
+  handledBeside,
   judgeContactAudit,
   parseContactAuditSubmission,
   renderContactAuditTask,
@@ -143,8 +147,14 @@ describe("staff errors in the contact center", () => {
       const c = clean.contacts.find((x) => x.id === rootId)!;
       const w = twin.contacts.find((x) => x.id === rootId)!;
       const promise = clean.promises.find((p) => p.contact_id === rootId)!;
-      // The row: no promise, dispositioned as a call that records nothing; nothing else moved.
-      expect([w.promise_id, w.resolution]).toEqual([null, "information_provided"]);
+      // Never the scenario's own promise call, whose purpose code would give the error away.
+      expect(c.purpose).not.toBe("promise_to_pay");
+      // The row: no promise, dispositioned as the call would have been without it (a hardship call referred to loss
+      // mitigation, never transferred, which would change its words); nothing else moved.
+      expect([w.promise_id, w.resolution]).toEqual([
+        null,
+        c.reason === "hardship" ? "referred_lossmit" : "information_provided",
+      ]);
       expect({
         ...w,
         promise_id: c.promise_id,
@@ -190,7 +200,7 @@ describe("staff errors in the contact center", () => {
         l.cadence
           .flatMap((e) => e.paused)
           .filter((p) => p.reason === "ptp_pending" && p.to === promise.pay_by);
-      expect(paused(clean).length).toBeGreaterThan(0);
+      if (inWindow.length) expect(paused(clean).length).toBeGreaterThan(0);
       // The promise's outcome, as the clean log marked it: kept never marked, broken never followed up.
       const outcome = res.labels.filter(
         (l) => l.symptom === "kept_not_marked" || l.symptom === "broken_not_followed_up",
@@ -242,14 +252,15 @@ describe("staff errors in the contact center", () => {
       // The complaint system opens no case.
       expect(complaintLog(clean, center.key).some((x) => x.contact_id === rootId)).toBe(true);
       expect(complaintLog(twin, center.key).some((x) => x.contact_id === rootId)).toBe(false);
-      // The borrower calls about it again, on the same issue, and nobody logs that either.
+      // The borrower calls about it again, with the same reason, and nobody logs that either. No case links the
+      // call to the first, so it is filed as any call about its reason is that day, under an issue of its own.
       const again = twin.contacts.find((x) => x.id === `${rootId}-S02`)!;
       expect(again).toBeDefined();
       expect([again.direction, again.mode, again.outcome, again.issue, again.reason]).toEqual([
         "inbound",
         "call",
         "conversation",
-        c.issue,
+        `${c.reason}:${again.on.slice(0, 7)}`,
         c.reason,
       ]);
       expect([again.complaint_voiced, again.complaint_logged, again.promise_id]).toEqual([
@@ -264,12 +275,25 @@ describe("staff errors in the contact center", () => {
       const said = transcriptOf(res.defective, book, again.id).turns.map((x) => x.said);
       expect(said.some((x) => COMPLAINT_PHRASES.some((p) => says(x, p)))).toBe(true);
       expect(said.some((x) => ACK_PHRASES.some((p) => says(x, p)))).toBe(false);
-      // Every other contact is the clean one.
+      // Nobody told the borrower how to put it in writing, so no written request follows it, as one may follow a
+      // logged complaint: every contact the twin drops is one such, on the root's issue, and every other is the
+      // clean one.
+      const dropped = clean.contacts.filter(
+        (x) => x.id !== rootId && !twin.contacts.some((y) => y.id === x.id),
+      );
+      for (const x of dropped) {
+        expect(["qualified_written_request", "qwr_acknowledgment"]).toContain(x.purpose);
+        expect(x.issue).toBe(c.issue);
+      }
       expect(
         twin.contacts
           .filter((x) => x.id !== rootId && x.id !== again.id)
           .map((x) => ({ ...x, related: [] })),
-      ).toEqual(clean.contacts.filter((x) => x.id !== rootId).map((x) => ({ ...x, related: [] })));
+      ).toEqual(
+        clean.contacts
+          .filter((x) => x.id !== rootId && !dropped.includes(x))
+          .map((x) => ({ ...x, related: [] })),
+      );
       expect(
         res.labels
           .filter((l) => l.root_cause || l.symptom)
@@ -294,11 +318,11 @@ describe("staff errors in the contact center", () => {
       );
       expect(res.skipped).toEqual([]);
     }
-    // contact-audit/1.0.0/train/3/1779#2 (contacts 1.2.0): a hardship call two days after the promise call takes a
-    // promise of its own once nobody recorded the first, so it is no longer escalated, and the follow-up S-02 was
-    // asked for is never made. S-01 is made alone, and the planter says why.
-    const key = "contact-audit/1.0.0/train/3/1779#2";
-    const got = drawContactAuditCandidate(key, "train", 3, 1779)!;
+    // contact-audit/1.0.0/train/3/7843#2: a hardship call thirteen days after the promise call takes a promise of its
+    // own once nobody recorded the first, so it is no longer escalated, and its follow-up, the call S-02 was asked
+    // for, is never made. S-01 is made alone, and the planter says why.
+    const key = "contact-audit/1.0.0/train/3/7843#2";
+    const got = drawContactAuditCandidate(key, "train", 3, 7843)!;
     expect(got.issues.join(" ")).toMatch(/does not make this call/);
     expect(got.task.labels.filter((l) => l.root_cause).map((l) => l.defect_id)).toEqual(["S-01"]);
   }, 120_000);
@@ -338,6 +362,21 @@ describe("staff errors in the contact center", () => {
       }),
     ).toThrow(/other pins/);
     expect(STAFF_ERRORS["S-01"].eligible({ ...promises[0]!, complaint_voiced: true })).toBe(false);
+    // Nor on the scenario's own promise call: its purpose code says promise_to_pay, and a twin keeps it.
+    const scripted = loan.contacts.find(
+      (c) =>
+        c.purpose === "promise_to_pay" &&
+        c.promise_id !== null &&
+        c.outcome === "conversation" &&
+        !c.complaint_voiced,
+    )!;
+    expect(scripted).toBeDefined();
+    expect(STAFF_ERRORS["S-01"].eligible(scripted)).toBe(false);
+    expect(() =>
+      plantStaffErrors(center, book, [{ id: "S-01", contacts: [scripted.id] }], {
+        pins: { 0: src.pins },
+      }),
+    ).toThrow(/cannot be made/);
   }, 60_000);
 
   it("answers every logged complaint in writing within 15 days, on a servicer business day", () => {
@@ -357,6 +396,243 @@ describe("staff errors in the contact center", () => {
   }, 60_000);
 });
 
+/* ── the floors: cheap policies, each a choice of roots with the symptoms the rules give them ─────────── */
+
+const PROMISE_NOTE =
+  /(\$?\d{1,3}(?:,\d{3})+\.\d{2}|\$?\d+\.\d{2})\s+by\s+(\d{1,2})\/(\d{1,2})\/(\d{4}|\d{2})\b/i;
+type Row = ContactAuditTask["contacts"][number];
+const dayOf = (on: string) => Date.parse(`${on}T00:00:00Z`) / 86_400_000;
+const after = (a: Row, b: Row) => a.on > b.on || (a.on === b.on && a.at > b.at);
+const saysAny = (t: ContactAuditTask, id: string, phrases: readonly string[]) =>
+  (t.transcripts[id] ?? []).some((l) => phrases.some((p) => says(l.text, p)));
+const voiced = (t: ContactAuditTask, c: Row) => saysAny(t, c.id, COMPLAINT_PHRASES);
+/** The promise a call's agent note states in its own part, as the rulebook reads one. */
+function notePromise(t: ContactAuditTask, c: Row): { amount: string; pay_by: string } | null {
+  const n = t.notes.find((x) => x.contact === c.id && x.user === c.agent);
+  const m = n ? PROMISE_NOTE.exec(n.text.split(" | PREV: ")[0]!) : null;
+  if (!m) return null;
+  const yy = m[4]!.length === 2 ? `20${m[4]}` : m[4]!;
+  return { amount: m[1]!, pay_by: `${yy}-${m[2]!.padStart(2, "0")}-${m[3]!.padStart(2, "0")}` };
+}
+const cents = (s: string) => BigInt(s.replace(/[$,]/g, "").replace(".", ""));
+/** An S-01 root on a call, with the promise its note gives (or none) and every symptom the rules then give it. */
+function asS01(t: ContactAuditTask, c: Row): AuditFinding[] {
+  const promise = notePromise(t, c) ?? { amount: "0.00", pay_by: c.on };
+  const out: AuditFinding[] = [{ error: "S-01", kind: "root", contact: c.id, promise }];
+  for (const a of t.contacts)
+    if (
+      a.direction === "outbound" &&
+      a.mode === "call" &&
+      a.purpose === "collection" &&
+      after(a, c) &&
+      a.on <= promise.pay_by
+    )
+      out.push({ error: "S-01", kind: "dialed_in_window", contact: a.id, promise: null });
+  const paid = t.payments
+    .filter((x) => x.on > c.on && x.on <= promise.pay_by)
+    .reduce((s, x) => s + cents(x.amount), 0n);
+  out.push({
+    error: "S-01",
+    kind: paid >= cents(promise.amount) ? "kept_not_marked" : "broken_not_followed_up",
+    contact: c.id,
+    promise: null,
+  });
+  return out;
+}
+/** An S-02 root on a call, with every symptom the rules then give it. */
+function asS02(t: ContactAuditTask, c: Row): AuditFinding[] {
+  const out: AuditFinding[] = [{ error: "S-02", kind: "root", contact: c.id, promise: null }];
+  if (!saysAny(t, c.id, ACK_PHRASES))
+    out.push({ error: "S-02", kind: "no_acknowledgment", contact: c.id, promise: null });
+  if (!t.complaints.some((x) => x.contact === c.id))
+    out.push({ error: "S-02", kind: "no_response", contact: c.id, promise: null });
+  for (const x of t.contacts)
+    if (after(x, c) && x.reason === c.reason && !x.complaint_logged && voiced(t, x))
+      out.push({ error: "S-02", kind: "raised_again", contact: x.id, promise: null });
+  return out;
+}
+const handledInbound = (c: Row) =>
+  c.direction === "inbound" && c.mode === "call" && c.outcome === "conversation" && !!c.agent;
+/** A conversation the contact center may take a promise on: a payment arrangement or hardship call, or the dialer's. */
+const promiseCall = (c: Row) =>
+  c.mode === "call" &&
+  c.outcome === "conversation" &&
+  !!c.agent &&
+  (c.direction === "inbound"
+    ? c.reason === "payment_arrangement" || c.reason === "hardship"
+    : c.purpose === "collection");
+const firstPerReason = (xs: readonly Row[]) =>
+  xs.filter((c, i) => xs.findIndex((x) => x.reason === c.reason) === i);
+const onlyOne = (xs: readonly Row[]) => (xs.length === 1 ? xs : []);
+/** Calls with no promise that a payment followed within three weeks, none of them near a promise the log holds. */
+const paidSoon = (t: ContactAuditTask) =>
+  t.contacts.filter(
+    (c) =>
+      promiseCall(c) &&
+      !c.promise_id &&
+      t.payments.some((x) => x.on > c.on && dayOf(x.on) - dayOf(c.on) <= 21) &&
+      !t.promises.some((p) => dayOf(p.made_on) - 21 <= dayOf(c.on) && c.on <= p.pay_by),
+  );
+/** An unlogged call with a later unlogged call for the same reason inside the days a complaint is raised again. */
+const pairedLater = (t: ContactAuditTask, c: Row) =>
+  t.contacts.some(
+    (x) =>
+      handledInbound(x) &&
+      x.reason === c.reason &&
+      !x.complaint_logged &&
+      dayOf(x.on) - dayOf(c.on) >= RAISED_AGAIN_AFTER[0] &&
+      dayOf(x.on) - dayOf(c.on) <= RAISED_AGAIN_AFTER[1] + 1,
+  );
+const paired = (t: ContactAuditTask) =>
+  firstPerReason(
+    t.contacts.filter((c) => handledInbound(c) && !c.complaint_logged && pairedLater(t, c)),
+  );
+const centerOf = (t: ContactAuditTask) => (dayOf(t.window.from) + dayOf(t.window.to)) / 2;
+
+/** Each policy names its roots; the symptoms the rules give them are added, so a floor is the roots' alone. */
+const CHEAP: Record<
+  string,
+  {
+    s01?: (t: ContactAuditTask) => readonly Row[];
+    s02?: (t: ContactAuditTask) => readonly Row[];
+  }
+> = {
+  // The four the rule was written against.
+  nothing: {},
+  "every promise": { s01: (t) => t.contacts.filter((c) => notePromise(t, c)) },
+  "every complaint": { s02: (t) => t.contacts.filter((c) => voiced(t, c)) },
+  "every promise and every complaint": {
+    s01: (t) => t.contacts.filter((c) => notePromise(t, c)),
+    s02: (t) => t.contacts.filter((c) => voiced(t, c)),
+  },
+  // Dispositions alone.
+  "S-01 by disposition: a promise call with no promise, information provided": {
+    s01: (t) =>
+      t.contacts.filter(
+        (c) => promiseCall(c) && !c.promise_id && c.resolution === "information_provided",
+      ),
+  },
+  "the first such call": {
+    s01: (t) =>
+      t.contacts
+        .filter((c) => promiseCall(c) && !c.promise_id && c.resolution === "information_provided")
+        .slice(0, 1),
+  },
+  "S-02 by disposition: escalated and not logged, the first on its issue": {
+    s02: (t) =>
+      t.contacts.filter(
+        (c, i, xs) =>
+          c.resolution === "escalated" &&
+          !c.complaint_logged &&
+          !!c.agent &&
+          xs.findIndex((x) => x.resolution === "escalated" && x.issue === c.issue) === i,
+      ),
+  },
+  "both by disposition": {
+    s01: (t) =>
+      t.contacts.filter(
+        (c) => promiseCall(c) && !c.promise_id && c.resolution === "information_provided",
+      ),
+    s02: (t) =>
+      t.contacts.filter((c) => c.resolution === "escalated" && !c.complaint_logged && !!c.agent),
+  },
+  // The logs' structure.
+  "every promise call with no promise_id": {
+    s01: (t) => t.contacts.filter((c) => promiseCall(c) && !c.promise_id),
+  },
+  "a promise_to_pay call with no promise_id": {
+    s01: (t) => t.contacts.filter((c) => c.purpose === "promise_to_pay" && !c.promise_id),
+  },
+  "a hardship call with no promise, information provided": {
+    s01: (t) =>
+      t.contacts.filter(
+        (c) =>
+          handledInbound(c) && c.reason === "hardship" && c.resolution === "information_provided",
+      ),
+  },
+  "a promise call with no promise that a payment followed within three weeks": { s01: paidSoon },
+  "the same, only where it is the only one": { s01: (t) => onlyOne(paidSoon(t)) },
+  "every handled call with no CMPL note": {
+    s02: (t) =>
+      t.contacts.filter(
+        (c) => handledInbound(c) && !t.notes.some((n) => n.contact === c.id && n.area === "CMPL"),
+      ),
+  },
+  "every call with no CMPL note whose reason a logged complaint has": {
+    s02: (t) =>
+      t.contacts.filter(
+        (c) =>
+          handledInbound(c) &&
+          !t.notes.some((n) => n.contact === c.id && n.area === "CMPL") &&
+          t.contacts.some((x) => x.complaint_logged && x.reason === c.reason),
+      ),
+  },
+  "an unlogged call another unlogged call for its reason follows within 3 to 60 days": {
+    s02: paired,
+  },
+  "the first such pair": { s02: (t) => paired(t).slice(0, 1) },
+  "the same, only where it is the only pair": { s02: (t) => onlyOne(paired(t)) },
+  "a written request on an issue no logged call has": {
+    s02: (t) =>
+      t.contacts
+        .filter((q) => q.purpose === "qualified_written_request")
+        .map((q) => t.contacts.find((c) => c.issue === q.issue && handledInbound(c)))
+        .filter(
+          (c): c is Row =>
+            !!c && !t.contacts.some((x) => x.issue === c.issue && x.complaint_logged),
+        ),
+  },
+  "a closed call followed on its issue within 15 days": {
+    s02: (t) =>
+      t.contacts.filter(
+        (c) =>
+          handledInbound(c) &&
+          !c.complaint_logged &&
+          ["information_provided", "resolved", "referred_lossmit", "promise_recorded"].includes(
+            c.resolution,
+          ) &&
+          t.contacts.some(
+            (x) =>
+              x.issue === c.issue &&
+              handledInbound(x) &&
+              after(x, c) &&
+              dayOf(x.on) - dayOf(c.on) <= 15,
+          ),
+      ),
+  },
+  "the promise note nearest the window's middle": {
+    s01: (t) =>
+      t.contacts
+        .filter((c) => notePromise(t, c))
+        .sort((a, b) => Math.abs(dayOf(a.on) - centerOf(t)) - Math.abs(dayOf(b.on) - centerOf(t)))
+        .slice(0, 1),
+  },
+  // The rules with one clause left out.
+  "every complaint not logged, the raised-again clause left out": {
+    s02: (t) => t.contacts.filter((c) => voiced(t, c) && !c.complaint_logged),
+  },
+};
+/** The roots the rules give, with no symptom: what a reviewer who found every root and stopped would submit. */
+const rootsOnly = (t: ContactAuditTask): AuditFinding[] =>
+  expectedContactAudit(t).findings.filter((f) => f.kind === "root");
+const policyFindings = (t: ContactAuditTask, p: (typeof CHEAP)[string]): AuditFinding[] => [
+  ...(p.s01?.(t) ?? []).flatMap((c) => asS01(t, c)),
+  ...(p.s02?.(t) ?? []).flatMap((c) => asS02(t, c)),
+];
+/** Windows passed: all, then clean, S-01 alone, S-02 alone and both. */
+function floorOf(
+  tasks: readonly ContactAuditTask[],
+  submit: (t: ContactAuditTask) => readonly AuditFinding[],
+): number[] {
+  const out = [0, 0, 0, 0, 0];
+  for (const t of tasks)
+    if (gradeContactAudit(t, { findings: submit(t) }).pass) {
+      out[0]!++;
+      out[1 + AUDIT_PLANS.indexOf(t.plan.plan)]!++;
+    }
+  return out;
+}
+
 describe("contact-audit", () => {
   it("pins what a model is told, and states each rule the way the labels hold it", () => {
     // Any edit to the rulebook or the tools changes what every model is told: bump
@@ -364,7 +640,7 @@ describe("contact-audit", () => {
     expect(CONTACT_AUDIT_FINGERPRINT.environment).toMatchInlineSnapshot(`
       {
         "name": "contact-audit",
-        "rulebook_sha256": "be03388e01a2ac2d30e2b7949a530a5f1cba0bd9a162a7bc6ba5371bd83a4e39",
+        "rulebook_sha256": "084e33d8c1e6211b243ed8804be80ef2ac20b64a6fef6a078c4b89981b43339d",
         "tools_sha256": "26db4045200d8b9077ed9eefa994a3602e333d32755523e5213811a35e4794fb",
         "version": "1.0.0",
       }
@@ -376,7 +652,10 @@ describe("contact-audit", () => {
     expect(CONTACT_AUDIT_RULEBOOK).toContain(
       "within 15 calendar days of the call (SM_COMPLAINT_RESOLVE_15)",
     );
-    expect(CONTACT_AUDIT_RULEBOOK).toContain(`at most ${AUDIT_EXTRA_FINDINGS_CAP} findings`);
+    expect(CONTACT_AUDIT_RULEBOOK).toContain(`at most ${AUDIT_EXTRA_FINDINGS_CAP} other findings`);
+    expect(CONTACT_AUDIT_RULEBOOK).toContain("a root these rules do not give fails the task");
+    expect(CONTACT_AUDIT_RULEBOOK).toContain("every symptom these rules give it");
+    expect(CONTACT_AUDIT_RULEBOOK).toContain("an earlier call in the window with the same reason");
     const t = ofPlan("S-01+S-02")[0]!;
     const shown = renderContactAuditTask(t);
     expect(shown).not.toMatch(/S-0[12]|label|planted|complaint_voiced|unrecorded|-S0[12]\b/);
@@ -394,6 +673,11 @@ describe("contact-audit", () => {
       "S-02",
       "S-02",
       "S-01+S-02",
+      "clean",
+      "S-01",
+      "S-02",
+      "S-02",
+      "S-01",
     ]);
     expect(
       SPEC.map((t) => expectedContactAudit(t).findings.map((f) => `${f.kind} ${f.contact}`)),
@@ -426,70 +710,138 @@ describe("contact-audit", () => {
         "no_response SPEC-K0020",
         "raised_again SPEC-K0021",
       ],
+      [],
+      ["root SPEC-K0003", "dialed_in_window SPEC-K0004", "kept_not_marked SPEC-K0003"],
+      [
+        "root SPEC-K0020",
+        "no_acknowledgment SPEC-K0020",
+        "no_response SPEC-K0020",
+        "raised_again SPEC-K0021",
+      ],
+      [
+        "root SPEC-K0020",
+        "no_acknowledgment SPEC-K0020",
+        "no_response SPEC-K0020",
+        "raised_again SPEC-K0021",
+      ],
+      [
+        "root SPEC-K0003",
+        "dialed_in_window SPEC-K0004",
+        "dialed_in_window SPEC-K0005",
+        "broken_not_followed_up SPEC-K0003",
+      ],
     ]);
     for (const t of SPEC) expect(judgeContactAudit(t), t.id).toEqual([]);
     const r = await solveAll(SPEC);
     expect(r.misses).toEqual([]);
     expect(new Set(CONTACT_AUDIT_SPEC_CASES.map((c) => c.name)).size).toBe(SPEC.length);
+    // The histories the false-root rule was written for: beside promises recorded and complaints logged, blanket
+    // reporting names a false root, the call raising a complaint again is no root, and a root needs its symptoms.
+    const failed = (t: ContactAuditTask, findings: readonly AuditFinding[]) =>
+      gradeContactAudit(t, { findings })
+        .fields.filter((f) => !f.ok)
+        .map((f) => f.field);
+    for (const i of [10, 11, 12]) {
+      const t = SPEC[i]!;
+      expect(failed(t, policyFindings(t, CHEAP["every promise"]!)), t.id).toContain("false roots");
+      expect(failed(t, policyFindings(t, CHEAP["every complaint"]!)), t.id).toContain(
+        "false roots",
+      );
+    }
+    for (const i of [7, 9, 12, 13]) {
+      const t = SPEC[i]!;
+      const again = CHEAP["every complaint not logged, the raised-again clause left out"]!;
+      expect(failed(t, policyFindings(t, again)), t.id).toContain("false roots");
+    }
+    for (const t of SPEC.filter((x) => x.labels.length))
+      expect(
+        failed(t, rootsOnly(t)).every((f) => f.endsWith(": symptoms")),
+        t.id,
+      ).toBe(true);
   });
 
-  it("grades a root apart from its symptoms: a symptom alone earns part of the credit, the root covers them", () => {
+  it("grades a root with its symptoms, and fails a root the window does not hold", () => {
+    const failed = (t: ContactAuditTask, findings: readonly AuditFinding[]) =>
+      gradeContactAudit(t, { findings })
+        .fields.filter((f) => !f.ok)
+        .map((f) => f.field);
     for (const t of ofPlan("S-01+S-02").slice(0, 6)) {
       const right = expectedContactAudit(t);
       const grade = (findings: readonly AuditFinding[]) => gradeContactAudit(t, { findings });
       expect(grade(right.findings).pass).toBe(true);
+      const s01 = `S-01 ${rootOf(t, "S-01")}`;
+      const s02 = `S-02 ${rootOf(t, "S-02")}`;
+      // A root's symptoms are required: the roots alone fail on them and on nothing else.
       const roots = right.findings.filter((f) => f.kind === "root");
-      expect(grade(roots).pass).toBe(true);
-      const symptom = right.findings.find((f) => f.kind !== "root" && f.error === "S-02")!;
-      const alone = grade([...roots.filter((f) => f.error === "S-01"), symptom]);
-      expect(alone.pass).toBe(false);
-      expect(alone.fields.filter((f) => !f.ok).map((f) => f.field)).toEqual([
-        `S-02 ${rootOf(t, "S-02")}: found`,
+      expect(failed(t, roots).sort()).toEqual([`${s01}: symptoms`, `${s02}: symptoms`]);
+      // Its symptoms without it earn their field and miss the root.
+      const unfound = right.findings.filter((f) => !(f.kind === "root" && f.error === "S-02"));
+      expect(failed(t, unfound)).toEqual([`${s02}: found`]);
+      expect(grade(unfound).score).toBeGreaterThan(
+        grade(right.findings.filter((f) => f.error === "S-01")).score,
+      );
+      // A root the window does not hold fails it, whatever else is right: the call raising the complaint again, a
+      // promise the log holds, a complaint logged, or a root's call under the other error.
+      const plus = (f: AuditFinding) => failed(t, [...right.findings, f]);
+      const again = right.findings.find((f) => f.kind === "raised_again")!;
+      expect(plus({ ...again, kind: "root" })).toEqual(["false roots"]);
+      const held = t.promises[0]!;
+      expect(
+        plus({
+          error: "S-01",
+          kind: "root",
+          contact: held.contact,
+          promise: { amount: held.amount, pay_by: held.pay_by },
+        }),
+      ).toEqual(["false roots"]);
+      const logged = t.contacts.find((c) => c.complaint_logged)!;
+      expect(plus({ error: "S-02", kind: "root", contact: logged.id, promise: null })).toEqual([
+        "false roots",
       ]);
-      expect(alone.score).toBeGreaterThan(grade(roots.filter((f) => f.error === "S-01")).score);
+      expect(
+        plus({ error: "S-02", kind: "root", contact: rootOf(t, "S-01"), promise: null }),
+      ).toEqual(["false roots"]);
       // The promise to the cent and the day; written either way.
-      const s01 = roots.find((f) => f.error === "S-01")!;
-      const cents = (a: string) => a.replace(/[$,]/g, "");
+      const root01 = roots.find((f) => f.error === "S-01")!;
+      const plain = (a: string) => a.replace(/[$,]/g, "");
+      const others = right.findings.filter((f) => f !== root01);
       expect(
         grade([
-          ...roots.filter((f) => f !== s01),
-          { ...s01, promise: { ...s01.promise!, amount: cents(s01.promise!.amount) } },
+          ...others,
+          { ...root01, promise: { ...root01.promise!, amount: plain(root01.promise!.amount) } },
         ]).pass,
       ).toBe(true);
-      const off = {
-        ...s01,
-        promise: {
-          ...s01.promise!,
-          amount: (Number(cents(s01.promise!.amount)) + 0.01).toFixed(2),
-        },
-      };
+      const off = (Number(plain(root01.promise!.amount)) + 0.01).toFixed(2);
       expect(
-        grade([...roots.filter((f) => f !== s01), off])
-          .fields.filter((f) => !f.ok)
-          .map((f) => f.field),
-      ).toEqual([`S-01 ${rootOf(t, "S-01")}: promise`]);
-      // Extra findings: up to the cap, then not; a duplicate is an extra.
+        failed(t, [...others, { ...root01, promise: { ...root01.promise!, amount: off } }]),
+      ).toEqual([`${s01}: promise`]);
+      // Extra findings: symptoms up to the cap, then not; a second finding on a root is an extra, not a false root.
       const stray: AuditFinding = {
         error: "S-01",
         kind: "dialed_in_window",
         contact: t.contacts[0]!.id,
         promise: null,
       };
-      const extra = (n: number) =>
-        grade([...right.findings, ...Array<AuditFinding>(n).fill(stray)]);
-      const strayIsLabel = right.findings.some(
-        (f) => f.kind === stray.kind && f.contact === stray.contact,
-      );
-      if (!strayIsLabel) {
+      if (!right.findings.some((f) => f.kind === stray.kind && f.contact === stray.contact)) {
+        const extra = (n: number) =>
+          grade([...right.findings, ...Array<AuditFinding>(n).fill(stray)]);
         expect(extra(AUDIT_EXTRA_FINDINGS_CAP).pass).toBe(true);
-        expect(extra(AUDIT_EXTRA_FINDINGS_CAP + 1).pass).toBe(false);
+        expect(
+          failed(t, [
+            ...right.findings,
+            ...Array<AuditFinding>(AUDIT_EXTRA_FINDINGS_CAP + 1).fill(stray),
+          ]),
+        ).toEqual(["extra findings"]);
       }
+      expect(grade([...right.findings, root01]).pass).toBe(true);
+      expect(failed(t, [...right.findings, root01, root01, root01])).toEqual(["extra findings"]);
       expect([gradeContactAudit(t, null).pass, gradeContactAudit(t, null).score]).toEqual([
         false,
         0,
       ]);
     }
-    // A clean window is a control: nothing passes it, any finding fails it, and no submission is no decision.
+    // A clean window is a control: it passes with no root, any root fails it, a stray symptom is an extra, and no
+    // submission is no decision.
     const clean = ofPlan("clean")[0]!;
     expect(gradeContactAudit(clean, { findings: [] }).pass).toBe(true);
     const one: AuditFinding = {
@@ -498,11 +850,10 @@ describe("contact-audit", () => {
       contact: clean.contacts[0]!.id,
       promise: null,
     };
-    expect(
-      gradeContactAudit(clean, { findings: [one] })
-        .fields.filter((f) => !f.ok)
-        .map((f) => f.field),
-    ).toEqual(["passed"]);
+    expect(failed(clean, [one])).toEqual(["false roots"]);
+    expect(gradeContactAudit(clean, { findings: [{ ...one, kind: "no_response" }] }).pass).toBe(
+      true,
+    );
     expect(gradeContactAudit(clean, null).pass).toBe(false);
   });
 
@@ -561,54 +912,66 @@ describe("contact-audit", () => {
     );
   });
 
-  it("gives floors to read a score against: nothing, every promise, every complaint", () => {
-    const PROMISE =
-      /(\$?\d{1,3}(?:,\d{3})+\.\d{2}|\$?\d+\.\d{2})\s+by\s+(\d{1,2})\/(\d{1,2})\/(\d{4}|\d{2})\b/i;
-    const everyPromise = (t: ContactAuditTask): AuditFinding[] =>
-      t.contacts.flatMap((c) => {
-        const n = t.notes.find((x) => x.contact === c.id && x.user === c.agent);
-        const m = n ? PROMISE.exec(n.text.split("| PREV:")[0]!) : null;
-        if (!m) return [];
-        const yy = m[4]!.length === 2 ? `20${m[4]}` : m[4]!;
-        const payBy = `${yy}-${m[2]!.padStart(2, "0")}-${m[3]!.padStart(2, "0")}`;
-        return [
-          { error: "S-01", kind: "root", contact: c.id, promise: { amount: m[1]!, pay_by: payBy } },
-        ];
-      });
-    const everyComplaint = (t: ContactAuditTask): AuditFinding[] =>
-      t.contacts
-        .filter((c) =>
-          (t.transcripts[c.id] ?? []).some((l) => COMPLAINT_PHRASES.some((p) => says(l.text, p))),
-        )
-        .map((c) => ({ error: "S-02", kind: "root", contact: c.id, promise: null }));
-    const floor = (f: (t: ContactAuditTask) => readonly AuditFinding[]) => {
-      const g = heldTasks().map((t) => gradeContactAudit(t, { findings: f(t) }));
-      return {
-        passed: g.filter((x) => x.pass).length,
-        mean: Number((g.reduce((s, x) => s + x.score, 0) / g.length).toFixed(3)),
-      };
-    };
-    expect(floor(() => [])).toEqual({ passed: 50, mean: 0.438 });
-    expect(floor(everyPromise)).toEqual({ passed: 46, mean: 0.545 });
-    expect(floor(everyComplaint)).toEqual({ passed: 51, mean: 0.555 });
-    expect(floor((t) => [...everyPromise(t), ...everyComplaint(t)])).toEqual({
-      passed: 63,
-      mean: 0.663,
+  it("gives floors to read a score against, and no cheap policy passes much beyond the clean windows", () => {
+    const tasks = heldTasks();
+    const floors = Object.fromEntries(
+      Object.entries(CHEAP).map(([name, p]) => [name, floorOf(tasks, (t) => policyFindings(t, p))]),
+    );
+    floors["the roots alone, no symptom"] = floorOf(tasks, rootsOnly);
+    // [all, clean, S-01 alone, S-02 alone, both], of 200, 50 of each.
+    expect(floors).toEqual({
+      nothing: [50, 50, 0, 0, 0],
+      "every promise": [0, 0, 0, 0, 0],
+      "every complaint": [0, 0, 0, 0, 0],
+      "every promise and every complaint": [0, 0, 0, 0, 0],
+      "S-01 by disposition: a promise call with no promise, information provided": [10, 4, 6, 0, 0],
+      "the first such call": [23, 4, 19, 0, 0],
+      "S-02 by disposition: escalated and not logged, the first on its issue": [39, 39, 0, 0, 0],
+      "both by disposition": [9, 3, 6, 0, 0],
+      "every promise call with no promise_id": [0, 0, 0, 0, 0],
+      "a promise_to_pay call with no promise_id": [50, 50, 0, 0, 0],
+      "a hardship call with no promise, information provided": [50, 50, 0, 0, 0],
+      "a promise call with no promise that a payment followed within three weeks": [
+        48, 37, 11, 0, 0,
+      ],
+      "the same, only where it is the only one": [54, 43, 11, 0, 0],
+      "every handled call with no CMPL note": [0, 0, 0, 0, 0],
+      "every call with no CMPL note whose reason a logged complaint has": [12, 12, 0, 0, 0],
+      "an unlogged call another unlogged call for its reason follows within 3 to 60 days": [
+        21, 9, 0, 12, 0,
+      ],
+      "the first such pair": [23, 9, 0, 14, 0],
+      "the same, only where it is the only pair": [31, 19, 0, 12, 0],
+      "a written request on an issue no logged call has": [50, 50, 0, 0, 0],
+      "a closed call followed on its issue within 15 days": [39, 33, 0, 6, 0],
+      "the promise note nearest the window's middle": [15, 0, 15, 0, 0],
+      "every complaint not logged, the raised-again clause left out": [50, 50, 0, 0, 0],
+      "the roots alone, no symptom": [50, 50, 0, 0, 0],
     });
-    // Reading no transcript: an S-02 root wherever a call was escalated and not logged, the first on its issue. An
-    // unlogged complaint is escalated by nobody, so this passes fewer windows than submitting nothing: the one root it
-    // finds is a late-fee call, escalated as a late fee may be with no complaint, as two clean windows' are.
-    const byDisposition = (t: ContactAuditTask): AuditFinding[] => {
-      const issues = new Set<string>();
-      return t.contacts.flatMap((c) => {
-        if (c.resolution !== "escalated" || c.complaint_logged || !c.agent || issues.has(c.issue))
-          return [];
-        issues.add(c.issue);
-        return [{ error: "S-02", kind: "root", contact: c.id, promise: null }];
-      });
+    const clean = tasks.filter((t) => t.plan.plan === "clean").length;
+    for (const [name, [all, , ...arms]] of Object.entries(floors)) {
+      // A few points past the clean windows at most, and never a majority of any error's windows.
+      expect(all!, name).toBeLessThanOrEqual(clean + Math.round(tasks.length * 0.03));
+      for (const n of arms) expect(n, name).toBeLessThan(25);
+    }
+    // Nor of either promise arm within one: the windows of each error plan whose promise was kept, and broken.
+    for (const [name, p] of Object.entries(CHEAP))
+      for (const plan of ["S-01", "S-02", "S-01+S-02"] as const)
+        for (const arm of [0, 1]) {
+          const group = tasks.filter((t) => t.plan.plan === plan && t.plan.arm === arm);
+          const passed = group.filter(
+            (t) => gradeContactAudit(t, { findings: policyFindings(t, p) }).pass,
+          ).length;
+          expect(passed, `${name}, ${plan}, arm ${arm}`).toBeLessThan(group.length / 2);
+        }
+    // The rule, clause by clause, passes every window: the floors are what leaving a clause out costs.
+    const rule = {
+      s01: (t: ContactAuditTask) => t.contacts.filter((c) => notePromise(t, c) && !c.promise_id),
+      s02: (t: ContactAuditTask) =>
+        firstPerReason(t.contacts.filter((c) => voiced(t, c) && !c.complaint_logged)),
     };
-    expect(floor(byDisposition)).toEqual({ passed: 49, mean: 0.441 });
-  }, 120_000);
+    expect(floorOf(tasks, (t) => policyFindings(t, rule))).toEqual([200, 50, 50, 50, 50]);
+  }, 300_000);
 
   it("can be audited from the rulebook and the tools: the reference passes the held-out suite and a training suite", async () => {
     for (const tasks of [heldTasks(), train()]) {
@@ -619,9 +982,9 @@ describe("contact-audit", () => {
       expect(r.calls).toBeLessThanOrEqual(7);
     }
     expect(Math.max(...heldout().map((x) => x.attempts))).toBeLessThan(30);
-  }, 600_000);
+  }, 1_800_000);
 
-  it("draws every plan in turn, each a quarter, kept and broken promises, and every symptom", () => {
+  it("draws every plan in turn, each a quarter, kept and broken promises, every symptom, and handled promises and complaints beside them", () => {
     for (const tasks of [heldTasks(), train()]) {
       const by = new Map<string, number>();
       for (const t of tasks)
@@ -629,6 +992,11 @@ describe("contact-audit", () => {
       expect([...by.keys()].sort()).toEqual([...AUDIT_PLANS].sort());
       for (const n of by.values()) expect(n / tasks.length).toBeGreaterThan(0.15);
       for (const t of tasks) expect(contactAuditVerdict(t)).toBe(auditPlanOf(t.index));
+      // Beside the roots, every window holds a promise recorded and a complaint logged.
+      for (const t of tasks) {
+        const h = handledBeside(t);
+        expect(Math.min(h.promises, h.complaints), t.id).toBeGreaterThanOrEqual(AUDIT_MIN_HANDLED);
+      }
     }
     const kinds = new Map<string, number>();
     for (const t of heldTasks())
@@ -636,7 +1004,7 @@ describe("contact-audit", () => {
         kinds.set(`${f.error} ${f.kind}`, (kinds.get(`${f.error} ${f.kind}`) ?? 0) + 1);
     expect(Object.fromEntries([...kinds].sort())).toEqual({
       "S-01 broken_not_followed_up": 50,
-      "S-01 dialed_in_window": 203,
+      "S-01 dialed_in_window": 197,
       "S-01 kept_not_marked": 50,
       "S-01 root": 100,
       "S-02 no_acknowledgment": 100,
@@ -653,20 +1021,15 @@ describe("contact-audit", () => {
             : f.kind === "broken_not_followed_up",
         ),
       ).toBe(true);
-    // A clean window holds both anchors, a promise recorded and a complaint logged. Beside an error's root, the logs
-    // hold another of its kind in most windows, not all: the floors are what that leaves.
-    expect(ofPlan("clean").every((t) => t.promises.length > 0 && t.complaints.length > 0)).toBe(
-      true,
-    );
-    const holding = (plan: string, log: "promises" | "complaints") =>
-      ofPlan(plan).filter((t) => t[log].length > 0).length;
+    // Several of each in most windows: how many hold at least two, and at least three, of each.
+    const held = heldTasks().map(handledBeside);
     expect([
-      holding("S-01", "promises"),
-      holding("S-01+S-02", "promises"),
-      holding("S-02", "complaints"),
-      holding("S-01+S-02", "complaints"),
-    ]).toEqual([36, 40, 15, 7]);
-  }, 600_000);
+      held.filter((h) => h.promises >= 2).length,
+      held.filter((h) => h.promises >= 3).length,
+      held.filter((h) => h.complaints >= 2).length,
+      held.filter((h) => h.complaints >= 3).length,
+    ]).toEqual([192, 176, 175, 153]);
+  }, 1_800_000);
 
   it("keeps a draw only when it is fair to grade", () => {
     for (const t of heldTasks()) expect(judgeContactAudit(t), t.id).toEqual([]);
@@ -688,7 +1051,8 @@ describe("contact-audit", () => {
     };
     expect(judgeContactAudit(added).join(" ")).toMatch(/misses/);
     // First draws of training tasks: the ones with no pair of anchors draw again, and the ones the recognizer's
-    // noise or a promise's payments put off the labels are turned away, and named.
+    // noise, a promise's payments or too few promises recorded and complaints logged put off the labels are
+    // turned away, and named.
     const reasons = new Set<string>();
     for (let i = 0; i < 200; i++) {
       const got = drawContactAuditCandidate(contactAuditTaskId("train", 11, i), "train", 11, i);
@@ -696,7 +1060,7 @@ describe("contact-audit", () => {
     }
     expect([...reasons].filter((x) => x.startsWith("other"))).toEqual([]);
     for (const d of heldout()) for (const x of d.turned_away) expect(x).not.toMatch(/^other/);
-  }, 300_000);
+  }, 600_000);
 
   it("reads the window's own records with the tools, and nothing outside it", () => {
     const t = ofPlan("S-01+S-02")[0]!;
@@ -738,9 +1102,9 @@ describe("contact-audit", () => {
     // A change here moves every score: bump CONTACT_AUDIT_ENVIRONMENT_VERSION, then the pin. The suite is drawn
     // from the life generator and the contact center: a change to either moves it too.
     expect(sha256(heldTasks().map(toJsonLine).join(""))).toMatchInlineSnapshot(
-      `"9722ef265dd70e65975c9d4443b9c253675498e89fa300c448591789e57de9f6"`,
+      `"a0dc825e1b2ef86d41f1ab67459fbbc85ea13d9e1fef91fcc61df0aa48e728e0"`,
     );
-  }, 120_000);
+  }, 600_000);
 
   it("rebuilds a task from its coordinates, and never draws a held-out window into training", () => {
     expect(toJsonLine(generateContactAuditTask("train", 11, 17))).toBe(toJsonLine(train()[17]));
@@ -751,5 +1115,5 @@ describe("contact-audit", () => {
     expect(drawsHeldoutStream(heldTasks()[0]!.id)).toBe(true);
     const answer: ContactAuditAnswer = expectedContactAudit(heldTasks()[1]!);
     expect(gradeContactAudit(heldTasks()[1]!, answer).pass).toBe(true);
-  }, 120_000);
+  }, 600_000);
 });

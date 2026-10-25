@@ -4,7 +4,8 @@
  * the comment log, the transcripts, the promise and complaint logs, the
  * payments and the calculator as the tools, and the twin's labels as the
  * grader, read the way boarding-triage reads a package's manifest: a root
- * apart from its symptoms.
+ * apart from its symptoms, with the symptoms required beside it and a root no
+ * label names failing the window.
  */
 
 import { CONTACTS_VERSION } from "../contacts/center.js";
@@ -49,7 +50,7 @@ export const CONTACT_AUDIT_FINGERPRINT = {
     tools_sha256: sha256(JSON.stringify(CONTACT_AUDIT_TOOLS)),
   },
   grader: {
-    rule_set_version: `the twin's labels, roots and symptoms (S-01, S-02); servicing spec 4.5 SM_COMPLAINT_ACK_1BD, SM_COMPLAINT_RESOLVE_15; contacts ${CONTACTS_VERSION} over life ${LIFE_VERSION}`,
+    rule_set_version: `the twin's labels, each root with its symptoms, a root no label names failing the window (S-01, S-02); servicing spec 4.5 SM_COMPLAINT_ACK_1BD, SM_COMPLAINT_RESOLVE_15; contacts ${CONTACTS_VERSION} over life ${LIFE_VERSION}`,
     port_version: "none: the contact center's own rules, src/contacts/staff.ts",
   },
 } as const;

@@ -9,18 +9,28 @@
  *   S-01  a promise not tracked: the borrower promises a payment on a call,
  *         the call's words and the agent's note carry it, and no promise
  *         record is written (the row's promise_id null, no promise in the
- *         log). What the contact center's rules then do: nothing ceases the
- *         dialer for the promise, so it calls inside the window; a kept
- *         promise is never marked kept; a broken one is never followed up;
+ *         log), the call dispositioned as it would have been without the
+ *         promise (a hardship call referred to loss mitigation, any other as
+ *         information provided). It is made on a promise the contact center
+ *         drew from a call, never on the scenario's own promise call, whose
+ *         purpose code says promise_to_pay: a twin keeps every row's purpose,
+ *         and that code on a call with no promise would give the error away
+ *         without its note being read. What the contact center's rules then
+ *         do: nothing ceases the dialer for the promise, so it calls inside
+ *         the window; a kept promise is never marked kept; a broken one is
+ *         never followed up;
  *   S-02  a complaint not logged: a complaint voiced on a call is not logged
  *         (C-04's error at the call: the row's flag, the agent's
  *         acknowledgment, the note), and nobody escalates it: the call is
  *         dispositioned as its reason would have it without the complaint (a
  *         transfer, which would change its words, as a referral), its issue
  *         left open as an escalation's is. So the complaint system opens no
- *         case (complaints.ts), nothing acknowledges it and nobody answers it
- *         in writing; nothing having come of it, the borrower calls about it
- *         again 16 to 35 days later, and that call is not logged either.
+ *         case (complaints.ts), nothing acknowledges it, nobody answers it in
+ *         writing, and nobody tells the borrower how to put it in writing, so
+ *         no written request follows it as one may follow a logged complaint;
+ *         nothing having come of it, the borrower calls about it again 3 to 60
+ *         days later, a call filed under an issue of its own because no case
+ *         links it to the first, and that call is not logged either.
  *
  * The twin is derived again with the error made (`StaffOverride`,
  * derive.ts): every draw is the clean history's, and the error changes only
@@ -49,12 +59,14 @@
  *   no_acknowledgment       S-02: no acknowledgment on the call;
  *   no_response             S-02: no case, so no written response by the
  *                           fifteenth day;
- *   raised_again            S-02: the borrower's later call about it, on the
- *                           same issue, not logged either.
+ *   raised_again            S-02: the borrower's later call about it, with
+ *                           the same reason, not logged either.
  *
  * A clean book is byte for byte what it was: nothing here runs unless an error
  * is asked for, and `StaffOverride` and `unrecorded_promises` are absent from
- * every clean history. So neither CONTACTS_VERSION nor LIFE_VERSION moves.
+ * every clean history (where every complaint voiced is logged, so a written
+ * request after one is drawn as it was). So neither CONTACTS_VERSION nor
+ * LIFE_VERSION moves.
  */
 
 import type { PlainDate } from "@hm/kernel/calendar";
@@ -115,8 +127,14 @@ export const STAFF_ERRORS: Readonly<Record<StaffErrorId, StaffError>> = {
     table: "contacts",
     field: "promise_id",
     symptoms: ["dialed_in_window", "kept_not_marked", "broken_not_followed_up"],
-    // A call that also carries a complaint is left out: its disposition would be the complaint's either way.
-    eligible: (c) => handledCall(c) && c.promise_id !== null && !c.complaint_voiced,
+    // A call that also carries a complaint is left out: its disposition would be the complaint's either way. So is
+    // the scenario's own promise call, whose purpose code says promise_to_pay: a twin keeps every row's purpose, and a
+    // promise_to_pay call with no promise is one no clean history holds, found by its row without reading its note.
+    eligible: (c) =>
+      handledCall(c) &&
+      c.promise_id !== null &&
+      !c.complaint_voiced &&
+      c.purpose !== "promise_to_pay",
     handling:
       "Record the promise as of the call (its amount and pay-by date as the borrower gave them), so the dialer is ceased " +
       "for its window (the servicing app's early-intervention plan ceases the cadence for a promise to pay) and the promise " +

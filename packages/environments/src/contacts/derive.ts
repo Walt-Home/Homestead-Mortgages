@@ -297,8 +297,11 @@ export interface StaffOverride {
   readonly unlogged_complaint?: string;
 }
 
-/** The days after a complaint nobody logged that the borrower calls about it again: past the 15 days a response takes. */
-export const RAISED_AGAIN_AFTER: readonly [number, number] = [16, 35];
+/**
+ * The days after a complaint nobody logged that the borrower calls about it again: as soon as a follow-up would be,
+ * or weeks later, once no written answer has come by the fifteenth day, up to two months on.
+ */
+export const RAISED_AGAIN_AFTER: readonly [number, number] = [3, 60];
 
 /**
  * A contact's identity across a history and its twin, which number their rows apart: its day and time, direction
@@ -660,6 +663,10 @@ export function deriveLoan(life: LoanLife, ctx: DeriveContext): DerivedLoan {
       return null;
     const next = life.receipts.find((x) => x.on > on && x.mode !== "payoff");
     if (next && daysBetween(on, next.on) <= 21) {
+      // A pinned borrower who pays within three weeks did not always promise to on the call (a draw of its own, made
+      // only when pinned, so nothing else moves).
+      const share = ctx.pins?.kept_promise_share;
+      if (share !== undefined && !(r.next() < share)) return null;
       return {
         made_on: on,
         pay_by: next.on,
@@ -938,20 +945,22 @@ export function deriveLoan(life: LoanLife, ctx: DeriveContext): DerivedLoan {
       unrecordedWindows.push({ from: unrecorded.made_on, minute, to: unrecorded.pay_by });
     // A complaint nobody logged is escalated by nobody (S-02's twin): the call is dispositioned as it would have been
     // without the complaint, by the same draw, but that a transfer, which would change its words, is a referral. The
-    // issue stays open, so the follow-ups below are drawn for it as for an escalated call.
+    // issue stays open, so the follow-ups below are drawn for it as for an escalated call. A promise nobody recorded
+    // (S-01's twin) is dispositioned the same way, as the call would have been without the promise: a hardship call
+    // referred to loss mitigation, any other as information provided, so its words are as they were and it opens
+    // nothing a follow-up would be drawn for.
     const resolution: Resolution = !live
       ? "unresolved"
       : promise
         ? "promise_recorded"
         : complaint && !unlogged
           ? "escalated"
-          : unrecorded
-            ? // The call is dispositioned as one that records nothing, which leaves its words as they were.
-              "information_provided"
-            : reason === "hardship" || reason === "disaster_assistance"
-              ? uRes < 0.5 && !unlogged
-                ? "transferred"
-                : "referred_lossmit"
+          : reason === "hardship" || reason === "disaster_assistance"
+            ? uRes < 0.5 && !unlogged && !unrecorded
+              ? "transferred"
+              : "referred_lossmit"
+            : unrecorded
+              ? "information_provided"
               : reason === "late_fee"
                 ? uRes < 0.4
                   ? "escalated"
@@ -1057,7 +1066,7 @@ export function deriveLoan(life: LoanLife, ctx: DeriveContext): DerivedLoan {
       0.1,
       perYear * STATUS_MULTIPLIER[bucket] - EVENT_CALLS[bucket] * eventScale,
     );
-    const n = poisson(r, yearly / 12);
+    const n = poisson(r, (yearly * (ctx.pins?.call_multiplier ?? 1)) / 12);
     const { y, m: mo } = parts(monthStart);
     const dim = daysInMonth(y, mo);
     if (n === 0) continue;
@@ -1367,6 +1376,13 @@ export function deriveLoan(life: LoanLife, ctx: DeriveContext): DerivedLoan {
           dd = dialOnOrAfter(addDays(w.to, 1));
           continue;
         }
+        // A promise nobody recorded (S-01's twin) ceases nothing, but the clean history ceased the dialer from the
+        // call's own day, the hours before the call among them: the twin keeps that day quiet, so it is the clean
+        // history until the call, and dials again from the next.
+        if (unrecordedWindows.some((u) => u.from === dd)) {
+          dd = dialOnOrAfter(addDays(dd, 1));
+          continue;
+        }
         // Massachusetts: the third call at least eight days after the first of the two before it.
         const twoBack = dialed[dialed.length - 2];
         if (twoInSeven && twoBack !== undefined && daysBetween(twoBack, dd) < 8) {
@@ -1621,7 +1637,9 @@ export function deriveLoan(life: LoanLife, ctx: DeriveContext): DerivedLoan {
           reason: "hardship",
         });
     }
-    if (x.complaint_voiced && uQwr < QWR_AFTER_COMPLAINT)
+    // A logged complaint's borrower is told how to put it in writing (§1024.38(b)(5)), and some do. Nobody tells the
+    // borrower whose complaint nobody logged (S-02's twin; on a clean history every complaint voiced is logged).
+    if (x.complaint_voiced && x.complaint_logged && uQwr < QWR_AFTER_COMPLAINT)
       qwr(r, rollForward(addDays(x.on, qLag), servicerCalendar), x.reason ?? "late_fee", x.issue);
   }
   {
@@ -1697,7 +1715,11 @@ export function deriveLoan(life: LoanLife, ctx: DeriveContext): DerivedLoan {
     }
   }
 
-  /* S-02's twin: nothing came of the complaint, so the borrower calls about it again, and nobody logs it then either */
+  /*
+   * S-02's twin: nothing came of the complaint, so the borrower calls about it again, and nobody logs it then either.
+   * No case was opened to link the call to, so it is filed as any call about its reason is that day: an issue of its
+   * own, which a reviewer ties to the first by its reason and its words, not by the log's index.
+   */
   let raisedAgain: string | null = null;
   const unloggedKey = ctx.staff?.unlogged_complaint;
   if (unloggedKey) {
@@ -1708,7 +1730,6 @@ export function deriveLoan(life: LoanLife, ctx: DeriveContext): DerivedLoan {
       if (dayOfWeek(on) === 0) on = addDays(on, 1);
       const again = push(
         inbound(rngFor(`${lk}/staff/S-02/${unloggedKey}/again`), on, root.reason, {
-          issue: root.issue,
           party: "borrower",
           forceChannel: "call",
           followUp: true,

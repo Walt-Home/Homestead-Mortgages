@@ -288,6 +288,13 @@ export interface ProfilePins {
   readonly style?: ContactProfile["style"];
   /** A multiple of the chance a handled call carries a complaint: a borrower with a grievance. */
   readonly complaint_multiplier?: number;
+  /** A multiple of the borrower's ordinary inbound volume, month by month: a borrower who calls often. */
+  readonly call_multiplier?: number;
+  /**
+   * The chance a conversation the borrower's next payment follows within three weeks takes a promise for it. Unset,
+   * it always does; a borrower pinned below one sometimes pays without having promised to.
+   */
+  readonly kept_promise_share?: number;
 }
 
 /** The cadence's state over one delinquency, kept so a reader can hold the attempts to it. */

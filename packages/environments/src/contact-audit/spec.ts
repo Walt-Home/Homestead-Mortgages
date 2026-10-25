@@ -185,18 +185,26 @@ interface SpecHistory {
 const W = { from: "2027-03-15", to: "2027-05-10" } as const;
 const K = (n: number) => `SPEC-K${String(n).padStart(4, "0")}`;
 
-/** A promise call on 2027-03-22 for $2,165.00 by 2027-04-02, and the dialer around it. */
+/**
+ * A promise call on 2027-03-22 for $2,165.00 by 2027-04-02, and the dialer around it: the borrower calling about a
+ * payment arrangement, or about a hardship. Unrecorded, the call is dispositioned as one that records nothing (a
+ * hardship call referred to loss mitigation), as the contact center's twin dispositions it.
+ */
 function promiseHistory(o: {
   readonly recorded: boolean;
   readonly attempts: readonly (readonly [string, string])[];
   readonly payments: readonly AuditPayment[];
   readonly kept: boolean;
   readonly before?: readonly [string, string];
+  readonly hardship?: boolean;
 }): Pick<SpecHistory, "contacts" | "notes" | "transcripts" | "promises" | "payments"> {
   const call = inboundCall(3, "2027-03-22", "14:10", {
-    purpose: "promise_to_pay",
-    reason: "payment_arrangement",
-    resolution: o.recorded ? "promise_recorded" : "information_provided",
+    reason: o.hardship ? "hardship" : "payment_arrangement",
+    resolution: o.recorded
+      ? "promise_recorded"
+      : o.hardship
+        ? "referred_lossmit"
+        : "information_provided",
     promise_id: o.recorded ? `${K(3)}-P` : null,
   });
   const early = o.before ? [attempt(2, o.before[0], o.before[1])] : [];
@@ -226,8 +234,8 @@ function promiseHistory(o: {
       "2027-03-22",
       "14:16",
       "DMR4471",
-      "COLL",
-      "B1 CLD RE PAST DUE/PTP. VRFD NAME/ADDR. MINI MIRANDA GIVEN. ACCT 21 DPD, TAD $2,165.00. RFD: HOURS CUT. PTP $2,165.00 BY 04/02/27.",
+      o.hardship ? "LM" : "COLL",
+      `B1 CLD RE ${o.hardship ? "HARDSHIP" : "PAST DUE/PTP"}. VRFD NAME/ADDR. MINI MIRANDA GIVEN. ACCT 21 DPD, TAD $2,165.00. RFD: HOURS CUT. PTP $2,165.00 BY 04/02/27.`,
       K(3),
     ),
     ...(o.recorded
@@ -282,11 +290,13 @@ function complaintHistory(o: {
     resolution: o.logged ? "escalated" : "information_provided",
     complaint_logged: o.logged,
   });
+  // A later call about the late fee is filed as any call about it is that day, under an issue of its own: nobody
+  // logged the first, so no case links the two.
   const later = o.again
     ? [
         inboundCall(21, o.again, "09:40", {
           reason: "late_fee",
-          issue: o.elsewhere ? "late_fee:2027-04" : issue,
+          issue: `late_fee:${o.again.slice(0, 7)}`,
           resolution: o.elsewhere ? "escalated" : "information_provided",
           complaint_logged: o.elsewhere ?? false,
         }),
@@ -373,8 +383,8 @@ function complaintHistory(o: {
               channel: "call",
               category: "fees",
               acknowledged_on: o.again,
-              respond_by: "2027-05-03",
-              responded_on: "2027-04-27",
+              respond_by: addDays15(o.again),
+              responded_on: addDays15(o.again, 9),
               response: "NTC_COMPLAINT_RESPONSE",
             },
           ]
@@ -382,6 +392,193 @@ function complaintHistory(o: {
     ],
   };
 }
+
+const MONTHS = [
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
+];
+/** A date as a caller says it: "April 20". */
+const spoken = (d: string): string =>
+  `${MONTHS[Number(d.slice(5, 7)) - 1]} ${Number(d.slice(8, 10))}`;
+
+/** A day `n` days after `d` (15 by default: a complaint's written answer is due by then). */
+const addDays15 = (d: string, n = 15): string =>
+  new Date(Date.parse(`${d}T00:00:00Z`) + n * 86_400_000).toISOString().slice(0, 10);
+
+/**
+ * A promise recorded on a call and handled as the rules say: noted, set, the dialer ceased through its date, and
+ * marked kept or broken on the day (a broken one resumes the cadence).
+ */
+function recordedPromise(o: {
+  readonly n: number;
+  readonly on: string;
+  readonly at: string;
+  readonly outbound: boolean;
+  readonly amount: string;
+  readonly pay_by: string;
+  readonly kept: boolean;
+}): Partial<SpecHistory> {
+  const id = K(o.n);
+  const c = o.outbound
+    ? row(o.n, o.on, o.at, {
+        direction: "outbound",
+        outcome: "conversation",
+        purpose: "collection",
+        resolution: "promise_recorded",
+        promise_id: `${id}-P`,
+      })
+    : inboundCall(o.n, o.on, o.at, {
+        reason: "payment_arrangement",
+        resolution: "promise_recorded",
+        promise_id: `${id}-P`,
+      });
+  const [y, m, d] = o.pay_by.split("-");
+  const short = `${m}/${d}/${y!.slice(2)}`;
+  const plain = o.amount.replace(/[$,]/g, "");
+  return {
+    contacts: [c],
+    notes: [
+      note(
+        o.n * 10,
+        o.on,
+        o.at,
+        "DMR4471",
+        "COLL",
+        `${o.outbound ? "OB CALL TO B1. RPC." : "B1 CLD RE PAST DUE/PTP."} VRFD NAME/ADDR. MINI MIRANDA GIVEN. PTP ${o.amount} BY ${short}.`,
+        id,
+      ),
+      note(o.n * 10 + 1, o.on, o.at, "SYSTEM", "COLL", `PTP SET $${plain} DUE ${short}`, id),
+      note(
+        o.n * 10 + 2,
+        o.pay_by,
+        "23:30",
+        "SYSTEM",
+        "COLL",
+        o.kept ? "PTP KEPT" : "PTP BROKEN - CADENCE RESUMED",
+        id,
+      ),
+    ],
+    transcripts: { [id]: PROMISE_CALL(o.amount, spoken(o.pay_by)) },
+    promises: [
+      {
+        id: `${id}-P`,
+        contact: id,
+        made_on: o.on,
+        pay_by: o.pay_by,
+        amount: o.amount,
+        status: o.kept ? "kept" : "broken",
+      },
+    ],
+    payments: o.kept ? [payment(o.n, o.pay_by, o.amount, [])] : [],
+  };
+}
+
+/** A complaint voiced on a call and handled as spec 4.5 says: acknowledged, logged, and answered in writing. */
+function loggedComplaint(o: {
+  readonly n: number;
+  readonly on: string;
+  readonly reason: string;
+  readonly category: string;
+}): Partial<SpecHistory> {
+  const id = K(o.n);
+  const code = o.reason.toUpperCase().replace(/_/g, " ");
+  return {
+    contacts: [
+      inboundCall(o.n, o.on, "13:05", {
+        reason: o.reason,
+        issue: `${o.reason}:${o.on.slice(0, 7)}`,
+        resolution: "escalated",
+        complaint_logged: true,
+      }),
+    ],
+    notes: [
+      note(
+        o.n * 10,
+        o.on,
+        "13:12",
+        "KLT2208",
+        "CS",
+        `B1 CLD RE ${code}. VRFD NAME/ADDR. BWR UPSET. COMPLAINT LOGGED.`,
+        id,
+      ),
+      note(
+        o.n * 10 + 1,
+        o.on,
+        "13:13",
+        "SYSTEM",
+        "CMPL",
+        `COMPLAINT LOGGED - ${code} - ROUTED TO RESOLUTION TEAM`,
+        id,
+      ),
+    ],
+    transcripts: {
+      [id]: lines(
+        ...OPENING,
+        ["Customer", `I have a question about my ${code.toLowerCase()}.`],
+        ["Agent", "Let me look at that for you. I see what happened there."],
+        [
+          "Customer",
+          "I'm really unhappy with how this has been handled. I want to file a complaint.",
+        ],
+        ["Agent", ACKED],
+        ["Customer", "Okay."],
+      ),
+    },
+    complaints: [
+      {
+        id: `${id}-C`,
+        contact: id,
+        received_on: o.on,
+        channel: "call",
+        category: o.category,
+        acknowledged_on: o.on,
+        respond_by: addDays15(o.on),
+        responded_on: addDays15(o.on, 8),
+        response: "NTC_COMPLAINT_RESPONSE",
+      },
+    ],
+  };
+}
+
+/** Beside the anchors: a promise kept and one broken, each recorded, and two complaints logged and answered. */
+const handled = (): Partial<SpecHistory>[] => [
+  recordedPromise({
+    n: 50,
+    on: "2027-04-12",
+    at: "10:30",
+    outbound: true,
+    amount: "$1,100.00",
+    pay_by: "2027-04-20",
+    kept: true,
+  }),
+  recordedPromise({
+    n: 51,
+    on: "2027-04-27",
+    at: "15:00",
+    outbound: false,
+    amount: "$2,165.00",
+    pay_by: "2027-05-06",
+    kept: false,
+  }),
+  {
+    contacts: [attempt(52, "2027-05-07", "10:15")],
+    notes: [
+      note(520, "2027-05-07", "10:16", "DIALER", "COLL", "DIALER: OB ATTEMPT - NO ANSWER", K(52)),
+    ],
+  },
+  loggedComplaint({ n: 60, on: "2027-04-05", reason: "escrow_analysis", category: "escrow" }),
+  loggedComplaint({ n: 61, on: "2027-04-21", reason: "payment_received", category: "payment" }),
+];
 
 const sortRows = (xs: readonly AuditContact[]) =>
   [...xs].sort((a, b) => (a.on !== b.on ? (a.on < b.on ? -1 : 1) : a.at < b.at ? -1 : 1));
@@ -593,7 +790,7 @@ export const CONTACT_AUDIT_SPEC_CASES: readonly {
     },
   },
   {
-    name: "S-02: a later complaint on another issue, logged, is not the first raised again",
+    name: "S-02: a later complaint about the same fee, logged this time, is not the first raised again",
     history: {
       window: W,
       ...merge(
@@ -624,6 +821,93 @@ export const CONTACT_AUDIT_SPEC_CASES: readonly {
         S02s("no_acknowledgment"),
         S02s("no_response", K(20), "2027-04-08"),
         S02s("raised_again", K(21), "2027-04-20"),
+      ],
+    },
+  },
+  {
+    name: "A clean window beside promises recorded, kept and broken and followed up, and complaints logged and answered: no root",
+    history: {
+      window: W,
+      ...merge(
+        promiseHistory({
+          recorded: true,
+          attempts: [["2027-04-05", "11:00"]],
+          payments: KEPT,
+          kept: true,
+        }),
+        complaintHistory({ logged: true }),
+        ...handled(),
+      ),
+      labels: [],
+    },
+  },
+  {
+    name: "S-01 beside promises recorded, one kept and one broken: a root only where the promise log holds none",
+    history: {
+      window: W,
+      ...merge(
+        promiseHistory({
+          recorded: false,
+          attempts: [["2027-03-25", "09:30"]],
+          payments: KEPT,
+          kept: true,
+        }),
+        ...handled(),
+      ),
+      labels: [
+        S01(),
+        S01s("dialed_in_window", K(4), "2027-03-25"),
+        S01s("kept_not_marked", K(3), "2027-04-02"),
+      ],
+    },
+  },
+  {
+    name: "S-02 beside complaints logged and answered: one root, and the call raising it again, under an issue of its own, a symptom",
+    history: {
+      window: W,
+      ...merge(complaintHistory({ logged: false, again: "2027-04-13" }), ...handled()),
+      labels: [
+        S02(),
+        S02s("no_acknowledgment"),
+        S02s("no_response", K(20), "2027-04-08"),
+        S02s("raised_again", K(21), "2027-04-13"),
+      ],
+    },
+  },
+  {
+    name: "S-02 raised again four days later, before a written answer was due: a symptom all the same",
+    history: {
+      window: W,
+      ...merge(complaintHistory({ logged: false, again: "2027-03-28" }), ordinary()),
+      labels: [
+        S02(),
+        S02s("no_acknowledgment"),
+        S02s("no_response", K(20), "2027-04-08"),
+        S02s("raised_again", K(21), "2027-03-28"),
+      ],
+    },
+  },
+  {
+    name: "S-01 on a hardship call referred to loss mitigation, broken: the disposition says nothing either way, the note says the promise",
+    history: {
+      window: W,
+      ...merge(
+        promiseHistory({
+          recorded: false,
+          hardship: true,
+          attempts: [
+            ["2027-03-26", "17:20"],
+            ["2027-04-01", "09:05"],
+          ],
+          payments: [],
+          kept: false,
+        }),
+      ),
+      labels: [
+        S01(),
+        S01s("dialed_in_window", K(4), "2027-03-26"),
+        S01s("dialed_in_window", K(5), "2027-04-01"),
+        S01s("broken_not_followed_up", K(3), "2027-04-02"),
       ],
     },
   },

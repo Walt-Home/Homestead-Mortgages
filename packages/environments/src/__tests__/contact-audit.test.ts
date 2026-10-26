@@ -20,6 +20,7 @@ import { sha256, toJsonLine } from "../record.js";
 import { rebuild } from "../call-qa/view.js";
 import { COMPLAINT_PHRASES, says } from "../calls/index.js";
 import {
+  INQUIRY_REASONS,
   RAISED_AGAIN_AFTER,
   STAFF_ERRORS,
   complaintLog,
@@ -149,12 +150,17 @@ describe("staff errors in the contact center", () => {
       const promise = clean.promises.find((p) => p.contact_id === rootId)!;
       // Never the scenario's own promise call, whose purpose code would give the error away.
       expect(c.purpose).not.toBe("promise_to_pay");
-      // The row: no promise, dispositioned as the call would have been without it (a hardship call referred to loss
-      // mitigation, never transferred, which would change its words); nothing else moved.
-      expect([w.promise_id, w.resolution]).toEqual([
-        null,
-        c.reason === "hardship" ? "referred_lossmit" : "information_provided",
-      ]);
+      // The row: no promise, dispositioned as a call of its kind that took none is (a hardship call transferred or
+      // referred to loss mitigation, a dialer's conversation referred or information provided, a payment arrangement
+      // information provided or a callback); nothing else moved.
+      expect(w.promise_id).toBeNull();
+      expect(w.resolution).toBeOneOf(
+        c.direction === "outbound"
+          ? ["referred_lossmit", "information_provided"]
+          : c.reason === "hardship"
+            ? ["transferred", "referred_lossmit"]
+            : ["information_provided", "callback_scheduled"],
+      );
       expect({
         ...w,
         promise_id: c.promise_id,
@@ -163,13 +169,19 @@ describe("staff errors in the contact center", () => {
       }).toEqual(c);
       expect(twin.promises.some((p) => p.contact_id === rootId)).toBe(false);
       expect(twin.unrecorded_promises).toEqual([promise]);
-      // The call's words and the agent's note are the clean call's; the system's PTP lines are gone.
-      expect(toJsonLine(transcriptOf(res.defective, book, rootId))).toBe(
-        toJsonLine(transcriptOf(center, book, rootId)),
-      );
+      // The call's words and the agent's note are the clean call's, but for the transfer a hardship call may take,
+      // and the note still states the promise; the system's PTP lines are gone.
       const agentNote = (l: LoanContacts) =>
         l.notes.find((n) => n.contact_id === rootId && n.kind === "agent")!.text;
-      expect(agentNote(twin)).toBe(agentNote(clean));
+      if (w.resolution !== "transferred") {
+        expect(toJsonLine(transcriptOf(res.defective, book, rootId))).toBe(
+          toJsonLine(transcriptOf(center, book, rootId)),
+        );
+        expect(agentNote(twin)).toBe(agentNote(clean));
+      }
+      expect(PROMISE_NOTE.exec(agentNote(twin))?.[0]).toBe(
+        PROMISE_NOTE.exec(agentNote(clean))?.[0],
+      );
       expect(twin.notes.filter((n) => n.contact_id === rootId && /^PTP /.test(n.text))).toEqual([]);
       expect(
         clean.notes.filter((n) => n.contact_id === rootId && /^PTP /.test(n.text)),
@@ -229,26 +241,31 @@ describe("staff errors in the contact center", () => {
         w.complaint_voiced,
         w.complaint_logged,
       ]).toEqual([true, true, true, false]);
-      // Nobody logged it, so nobody escalated it: the call is dispositioned as its reason is (a late fee may be
-      // escalated anyway), never as a transfer, which would change its words.
+      // Nobody logged it, so nobody escalated it: the call is dispositioned as its reason is without a complaint, by
+      // the same draw (a late fee may be escalated anyway, a hardship call transferred or referred).
       expect(c.resolution === "escalated" || c.resolution === "promise_recorded").toBe(true);
       if (c.resolution === "escalated")
         expect(w.resolution !== "escalated" || w.reason === "late_fee").toBe(true);
-      expect(w.resolution).not.toBe("transferred");
+      if (w.resolution === "transferred")
+        expect(w.reason).toBeOneOf(["hardship", "disaster_assistance"]);
       expect({
         ...w,
         complaint_logged: true,
         resolution: c.resolution,
         related: c.related,
       }).toEqual(c);
-      // The call is C-04's: its acknowledgment, its note, its CMPL line, exactly as plantContactDefects leaves them.
+      // The call is C-04's: its acknowledgment, its note, its CMPL line, exactly as plantContactDefects leaves them,
+      // but for the transfer it may take.
       const c04 = plantContactDefects(center, book, [{ id: "C-04", contacts: [rootId] }]);
-      expect(toJsonLine(transcriptOf(res.defective, book, rootId))).toBe(
-        toJsonLine(transcriptOf(c04.defective, book, rootId)),
-      );
       const noteOf = (l: LoanContacts) =>
         l.notes.filter((n) => n.contact_id === rootId).map((n) => n.text);
-      expect(noteOf(twin)).toEqual(noteOf(c04.defective.loans[0]!));
+      if (w.resolution !== "transferred") {
+        expect(toJsonLine(transcriptOf(res.defective, book, rootId))).toBe(
+          toJsonLine(transcriptOf(c04.defective, book, rootId)),
+        );
+        expect(noteOf(twin)).toEqual(noteOf(c04.defective.loans[0]!));
+      }
+      expect(noteOf(twin).some((x) => /COMPLAINT LOGGED/.test(x))).toBe(false);
       // The complaint system opens no case.
       expect(complaintLog(clean, center.key).some((x) => x.contact_id === rootId)).toBe(true);
       expect(complaintLog(twin, center.key).some((x) => x.contact_id === rootId)).toBe(false);
@@ -263,10 +280,10 @@ describe("staff errors in the contact center", () => {
         `${c.reason}:${again.on.slice(0, 7)}`,
         c.reason,
       ]);
-      expect([again.complaint_voiced, again.complaint_logged, again.promise_id]).toEqual([
+      expect([again.complaint_voiced, again.complaint_logged, again.live_contact]).toEqual([
         true,
         false,
-        null,
+        true,
       ]);
       expect(again.resolution !== "escalated" || again.reason === "late_fee").toBe(true);
       const lag = (Date.parse(again.on) - Date.parse(c.on)) / 86_400_000;
@@ -275,24 +292,26 @@ describe("staff errors in the contact center", () => {
       const said = transcriptOf(res.defective, book, again.id).turns.map((x) => x.said);
       expect(said.some((x) => COMPLAINT_PHRASES.some((p) => says(x, p)))).toBe(true);
       expect(said.some((x) => ACK_PHRASES.some((p) => says(x, p)))).toBe(false);
-      // Nobody told the borrower how to put it in writing, so no written request follows it, as one may follow a
-      // logged complaint: every contact the twin drops is one such, on the root's issue, and every other is the
-      // clean one.
-      const dropped = clean.contacts.filter(
-        (x) => x.id !== rootId && !twin.contacts.some((y) => y.id === x.id),
-      );
+      // Until that call nothing else moved: nobody told the borrower how to put the complaint in writing, so no
+      // written request follows it, as one may follow a logged complaint (every contact the twin drops before it is
+      // one such, on the root's issue), and a counselor calling it in sends an authorization first, after the root.
+      // From the call on, the twin is the contact center's rules: a promise taken on it ceases the dialer.
+      const upTo = (l: LoanContacts) =>
+        l.contacts
+          .filter((x) => x.on < again.on && x.id !== rootId)
+          .map((x) => ({ ...x, related: [] }));
+      const dropped = upTo(clean).filter((x) => !upTo(twin).some((y) => y.id === x.id));
+      const added = upTo(twin).filter((x) => !upTo(clean).some((y) => y.id === x.id));
       for (const x of dropped) {
         expect(["qualified_written_request", "qwr_acknowledgment"]).toContain(x.purpose);
         expect(x.issue).toBe(c.issue);
       }
-      expect(
-        twin.contacts
-          .filter((x) => x.id !== rootId && x.id !== again.id)
-          .map((x) => ({ ...x, related: [] })),
-      ).toEqual(
-        clean.contacts
-          .filter((x) => x.id !== rootId && !dropped.includes(x))
-          .map((x) => ({ ...x, related: [] })),
+      for (const x of added) {
+        expect(x.purpose).toBe("third_party_authorization");
+        expect(x.on > c.on).toBe(true);
+      }
+      expect(upTo(twin).filter((x) => !added.includes(x))).toEqual(
+        upTo(clean).filter((x) => !dropped.includes(x)),
       );
       expect(
         res.labels
@@ -310,7 +329,7 @@ describe("staff errors in the contact center", () => {
     }
   }, 300_000);
 
-  it("makes both on one loan, and S-02 alone where S-01's twin does not make its call", () => {
+  it("makes both on one loan, and one alone where the other's twin does not make its call", () => {
     for (const t of ofPlan("S-01+S-02").slice(0, 8)) {
       const { res } = twinOf(t);
       expect(new Set(res.labels.filter((l) => l.root_cause).map((l) => l.defect_id))).toEqual(
@@ -318,13 +337,18 @@ describe("staff errors in the contact center", () => {
       );
       expect(res.skipped).toEqual([]);
     }
-    // contact-audit/1.0.0/train/3/7843#2: a hardship call thirteen days after the promise call takes a promise of its
-    // own once nobody recorded the first, so it is no longer escalated, and its follow-up, the call S-02 was asked
-    // for, is never made. S-01 is made alone, and the planter says why.
-    const key = "contact-audit/1.0.0/train/3/7843#2";
-    const got = drawContactAuditCandidate(key, "train", 3, 7843)!;
-    expect(got.issues.join(" ")).toMatch(/does not make this call/);
-    expect(got.task.labels.filter((l) => l.root_cause).map((l) => l.defect_id)).toEqual(["S-01"]);
+    // contact-audit/1.0.0/train/3/2295#1: a hardship call three days after the promise call takes a promise of its
+    // own once nobody recorded the first, so it is no longer escalated, and its follow-up five days later, the call
+    // S-02 was asked for, is never made. S-01 is made alone, and the planter says why.
+    const one = drawContactAuditCandidate("contact-audit/1.0.0/train/3/2295#1", "train", 3, 2295)!;
+    expect(one.issues.join(" ")).toMatch(/twin with S-01 does not make this call/);
+    expect(one.task.labels.filter((l) => l.root_cause).map((l) => l.defect_id)).toEqual(["S-01"]);
+    // contact-audit/1.0.0/train/3/267#2: the hardship call raising the complaint again takes a promise of its own,
+    // which ceases the dialer through its date, and every attempt after it falls on another day, so the dialer's
+    // conversation S-01 was asked for, two weeks past that date, is never made. S-02 is made alone.
+    const two = drawContactAuditCandidate("contact-audit/1.0.0/train/3/267#2", "train", 3, 267)!;
+    expect(two.issues.join(" ")).toMatch(/twin with S-02 does not make this call/);
+    expect(two.task.labels.filter((l) => l.root_cause).map((l) => l.defect_id)).toEqual(["S-02"]);
   }, 120_000);
 
   it("refuses a contact an error does not fit, and makes one of each on a loan", () => {
@@ -416,8 +440,11 @@ function notePromise(t: ContactAuditTask, c: Row): { amount: string; pay_by: str
 }
 const cents = (s: string) => BigInt(s.replace(/[$,]/g, "").replace(".", ""));
 /** An S-01 root on a call, with the promise its note gives (or none) and every symptom the rules then give it. */
-function asS01(t: ContactAuditTask, c: Row): AuditFinding[] {
-  const promise = notePromise(t, c) ?? { amount: "0.00", pay_by: c.on };
+function asS01(
+  t: ContactAuditTask,
+  c: Row,
+  promise = notePromise(t, c) ?? { amount: "0.00", pay_by: c.on },
+): AuditFinding[] {
   const out: AuditFinding[] = [{ error: "S-01", kind: "root", contact: c.id, promise }];
   for (const a of t.contacts)
     if (
@@ -474,18 +501,21 @@ const paidSoon = (t: ContactAuditTask) =>
       !t.promises.some((p) => dayOf(p.made_on) - 21 <= dayOf(c.on) && c.on <= p.pay_by),
   );
 /** An unlogged call with a later unlogged call for the same reason inside the days a complaint is raised again. */
-const pairedLater = (t: ContactAuditTask, c: Row) =>
+const pairedLater = (t: ContactAuditTask, c: Row, ownIssue = false) =>
   t.contacts.some(
     (x) =>
       handledInbound(x) &&
       x.reason === c.reason &&
       !x.complaint_logged &&
+      (!ownIssue || x.issue !== c.issue) &&
       dayOf(x.on) - dayOf(c.on) >= RAISED_AGAIN_AFTER[0] &&
       dayOf(x.on) - dayOf(c.on) <= RAISED_AGAIN_AFTER[1] + 1,
   );
-const paired = (t: ContactAuditTask) =>
+const paired = (t: ContactAuditTask, ownIssue = false) =>
   firstPerReason(
-    t.contacts.filter((c) => handledInbound(c) && !c.complaint_logged && pairedLater(t, c)),
+    t.contacts.filter(
+      (c) => handledInbound(c) && !c.complaint_logged && pairedLater(t, c, ownIssue),
+    ),
   );
 const centerOf = (t: ContactAuditTask) => (dayOf(t.window.from) + dayOf(t.window.to)) / 2;
 
@@ -572,6 +602,9 @@ const CHEAP: Record<
   },
   "the first such pair": { s02: (t) => paired(t).slice(0, 1) },
   "the same, only where it is the only pair": { s02: (t) => onlyOne(paired(t)) },
+  "the first such pair whose later call is under an issue of its own": {
+    s02: (t) => paired(t, true).slice(0, 1),
+  },
   "a written request on an issue no logged call has": {
     s02: (t) =>
       t.contacts
@@ -631,6 +664,263 @@ function floorOf(
       out[1 + AUDIT_PLANS.indexOf(t.plan.plan)]!++;
     }
   return out;
+}
+
+/* ── the structural floors: policies that read the logs' structure and never a word ─────────────────── */
+
+/*
+ * Each reads only the rows' fields and flags, their dispositions, reasons, purposes, issues and dates, the promise
+ * log's dates, the payments and the comment log's areas and counts, never what a transcript or a note says. With no
+ * words to read, a policy gives its roots the symptoms a structure can: an S-02 root no_acknowledgment, no_response
+ * where the complaint log holds no case for it, and raised_again on the later unlogged calls for its reason (every
+ * one, or the first 3 to 61 days on); an S-01 root its promise guessed as the next payment after the call, which a
+ * kept promise is, and the symptoms the rules give from there. V1 to V8 are the review's of 25 October.
+ */
+const unlogged = (c: Row) => handledInbound(c) && !c.complaint_logged;
+const daysFrom = (a: Row, b: Row) => dayOf(b.on) - dayOf(a.on);
+const laterFor = (t: ContactAuditTask, c: Row) =>
+  t.contacts.filter((x) => after(x, c) && unlogged(x) && x.reason === c.reason);
+const inLag = (c: Row, x: Row) =>
+  daysFrom(c, x) >= RAISED_AGAIN_AFTER[0] && daysFrom(c, x) <= RAISED_AGAIN_AFTER[1] + 1;
+function s02By(t: ContactAuditTask, c: Row, again: "every" | "first" = "every"): AuditFinding[] {
+  const later = laterFor(t, c);
+  const named = again === "every" ? later : later.filter((x) => inLag(c, x)).slice(0, 1);
+  return [
+    { error: "S-02", kind: "root", contact: c.id, promise: null },
+    { error: "S-02", kind: "no_acknowledgment", contact: c.id, promise: null },
+    ...(t.complaints.some((x) => x.contact === c.id)
+      ? []
+      : [{ error: "S-02" as const, kind: "no_response" as const, contact: c.id, promise: null }]),
+    ...named.map((x) => ({
+      error: "S-02" as const,
+      kind: "raised_again" as const,
+      contact: x.id,
+      promise: null,
+    })),
+  ];
+}
+const nextPayment = (t: ContactAuditTask, c: Row) => {
+  const p = t.payments.find((x) => x.on > c.on);
+  return p ? { amount: p.amount, pay_by: p.on } : { amount: "0.00", pay_by: c.on };
+};
+const s01By = (t: ContactAuditTask, c: Row) => asS01(t, c, nextPayment(t, c));
+/** A conversation that could have taken a promise, took none, and a payment followed within 21 days, none near. */
+const keptLike = (t: ContactAuditTask, resolution?: string) =>
+  t.contacts.filter(
+    (c) =>
+      promiseCall(c) &&
+      !c.promise_id &&
+      !c.complaint_logged &&
+      (!resolution || c.resolution === resolution) &&
+      t.payments.some((x) => x.on > c.on && dayOf(x.on) - dayOf(c.on) <= 21) &&
+      !t.promises.some((p) => dayOf(p.made_on) - 21 <= dayOf(c.on) && c.on <= p.pay_by),
+  );
+const firstUnlogged = (reasons: readonly string[]) => (t: ContactAuditTask) =>
+  firstPerReason(t.contacts.filter((c) => unlogged(c) && reasons.includes(c.reason ?? "")));
+/** The first unlogged call of each reason that a later one for its reason follows within 3 to 61 days. */
+const pairStarts = (t: ContactAuditTask) =>
+  firstPerReason(t.contacts.filter((c) => unlogged(c) && laterFor(t, c).some((x) => inLag(c, x))));
+/** A reason whose unlogged calls are exactly two, 3 to 61 days apart: the first of them. */
+const exactPairs = (t: ContactAuditTask) =>
+  [...new Set(t.contacts.filter(unlogged).map((c) => c.reason))].flatMap((r) => {
+    const xs = t.contacts.filter((c) => unlogged(c) && c.reason === r);
+    return xs.length === 2 && inLag(xs[0]!, xs[1]!) ? [xs[0]!] : [];
+  });
+const OPEN = ["pending_documents", "unresolved", "escalated", "callback_scheduled"];
+const crossMonth = (t: ContactAuditTask) =>
+  t.contacts.filter(
+    (c, i) =>
+      unlogged(c) &&
+      c.issue.startsWith(`${c.reason}:`) &&
+      !OPEN.includes(c.resolution) &&
+      t.contacts.findIndex((x) => x.issue === c.issue) === i &&
+      t.contacts.some(
+        (x) => x.issue === c.issue && after(x, c) && x.on.slice(0, 7) > c.on.slice(0, 7),
+      ),
+  );
+const v1 = firstUnlogged(["hardship", "escrow_analysis"]);
+const v2 = (t: ContactAuditTask) => onlyOne(keptLike(t, "information_provided"));
+const v3 = crossMonth;
+const v4 = (t: ContactAuditTask) =>
+  onlyOne(
+    exactPairs(t).filter(
+      (c) => !t.contacts.some((x) => x.complaint_logged && x.reason === c.reason),
+    ),
+  );
+const STRUCTURAL: Record<string, (t: ContactAuditTask) => AuditFinding[]> = {
+  "V1 the first unlogged hardship or escrow-analysis call": (t) =>
+    v1(t).flatMap((c) => s02By(t, c)),
+  "V2 the only conversation with no promise, information provided, a payment within 21 days and no promise near":
+    (t) => v2(t).flatMap((c) => s01By(t, c)),
+  "V2' the same, any disposition": (t) => onlyOne(keptLike(t)).flatMap((c) => s01By(t, c)),
+  "V3 a closed first call on its issue that a later contact follows into the next month": (t) =>
+    v3(t).flatMap((c) => s02By(t, c)),
+  "V4 the only two unlogged calls for a reason no logged call has, 3 to 61 days apart": (t) =>
+    v4(t).flatMap((c) => s02By(t, c)),
+  "V5 V1, or else V3": (t) => (v1(t).length ? v1(t) : v3(t)).flatMap((c) => s02By(t, c)),
+  "V6 V1 and V2": (t) => [
+    ...v1(t).flatMap((c) => s02By(t, c)),
+    ...v2(t).flatMap((c) => s01By(t, c)),
+  ],
+  "V7 V1, or else V2": (t) =>
+    v1(t).length ? v1(t).flatMap((c) => s02By(t, c)) : v2(t).flatMap((c) => s01By(t, c)),
+  "V8 the first unlogged hardship call referred to loss mitigation": (t) =>
+    t.contacts
+      .filter((c) => unlogged(c) && c.reason === "hardship" && c.resolution === "referred_lossmit")
+      .slice(0, 1)
+      .flatMap((c) => s02By(t, c)),
+  "V8 the first unlogged hardship call transferred": (t) =>
+    t.contacts
+      .filter((c) => unlogged(c) && c.reason === "hardship" && c.resolution === "transferred")
+      .slice(0, 1)
+      .flatMap((c) => s02By(t, c)),
+  "the first conversation of V2' kind": (t) =>
+    keptLike(t)
+      .slice(0, 1)
+      .flatMap((c) => s01By(t, c)),
+  "the last": (t) =>
+    keptLike(t)
+      .slice(-1)
+      .flatMap((c) => s01By(t, c)),
+  "the one its payment follows soonest": (t) =>
+    keptLike(t)
+      .map((c) => [c, dayOf(nextPayment(t, c).pay_by) - dayOf(c.on)] as const)
+      .sort((a, b) => a[1] - b[1])
+      .slice(0, 1)
+      .flatMap(([c]) => s01By(t, c)),
+  "the only one the dialer made": (t) =>
+    onlyOne(keptLike(t).filter((c) => c.direction === "outbound")).flatMap((c) => s01By(t, c)),
+  "the only inbound one": (t) =>
+    onlyOne(keptLike(t).filter((c) => c.direction === "inbound")).flatMap((c) => s01By(t, c)),
+  "the first unlogged call a later one for its reason follows within 3 to 61 days": (t) =>
+    pairStarts(t)
+      .slice(0, 1)
+      .flatMap((c) => s02By(t, c, "first")),
+  "the first such call whose later one is under an issue of its own": (t) =>
+    firstPerReason(
+      t.contacts.filter(
+        (c) => unlogged(c) && laterFor(t, c).some((x) => inLag(c, x) && x.issue !== c.issue),
+      ),
+    )
+      .slice(0, 1)
+      .flatMap((c) => {
+        const x = laterFor(t, c).find((y) => inLag(c, y) && y.issue !== c.issue)!;
+        return s02By(t, c, "every").filter((f) => f.kind !== "raised_again" || f.contact === x.id);
+      }),
+  "the last such call": (t) =>
+    pairStarts(t)
+      .slice(-1)
+      .flatMap((c) => s02By(t, c, "first")),
+  "every such call, one a reason": (t) => pairStarts(t).flatMap((c) => s02By(t, c)),
+  "the only such call": (t) => onlyOne(pairStarts(t)).flatMap((c) => s02By(t, c)),
+  "the only such call whose later one is with the borrower and took no promise": (t) =>
+    onlyOne(
+      pairStarts(t).filter((c) =>
+        laterFor(t, c).some((x) => inLag(c, x) && x.with === "borrower" && !x.promise_id),
+      ),
+    ).flatMap((c) => s02By(t, c)),
+  "a reason's only two unlogged calls, 3 to 61 days apart, the only such reason": (t) =>
+    onlyOne(exactPairs(t)).flatMap((c) => s02By(t, c)),
+  "the first unlogged call of the reason with the most": (t) => {
+    const n = new Map<string, number>();
+    for (const c of t.contacts.filter(unlogged)) n.set(c.reason!, (n.get(c.reason!) ?? 0) + 1);
+    const top = [...n].sort((a, b) => b[1] - a[1])[0];
+    return top
+      ? t.contacts
+          .filter((c) => unlogged(c) && c.reason === top[0])
+          .slice(0, 1)
+          .flatMap((c) => s02By(t, c, "first"))
+      : [];
+  },
+  "the unlogged call the most later ones for its reason follow within 3 to 61 days": (t) =>
+    t.contacts
+      .filter(unlogged)
+      .map((c) => [c, laterFor(t, c).filter((x) => inLag(c, x)).length] as const)
+      .filter(([, k]) => k > 0)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 1)
+      .flatMap(([c]) => s02By(t, c, "first")),
+  "the only closed unlogged call followed on its issue within 3 to 15 days": (t) =>
+    onlyOne(
+      t.contacts.filter(
+        (c) =>
+          unlogged(c) &&
+          !OPEN.includes(c.resolution) &&
+          t.contacts.some(
+            (x) =>
+              x.issue === c.issue &&
+              handledInbound(x) &&
+              after(x, c) &&
+              daysFrom(c, x) >= 3 &&
+              daysFrom(c, x) <= 15,
+          ),
+      ),
+    ).flatMap((c) => s02By(t, c)),
+  "the unlogged call before the only later arrangement or hardship call no dialer attempt is near":
+    (t) =>
+      onlyOne(
+        t.contacts
+          .filter(
+            (x) =>
+              unlogged(x) &&
+              (x.reason === "hardship" || x.reason === "payment_arrangement") &&
+              !t.contacts.some(
+                (y) =>
+                  y.direction === "outbound" &&
+                  y.purpose === "collection" &&
+                  Math.abs(daysFrom(x, y)) <= 10,
+              ),
+          )
+          .map((x) =>
+            t.contacts.filter((c) => unlogged(c) && c.reason === x.reason && inLag(c, x)).pop(),
+          )
+          .filter((c): c is Row => !!c),
+      ).flatMap((c) => s02By(t, c, "first")),
+  "the last conversation of V2' kind, and the first call of a pair": (t) => [
+    ...keptLike(t)
+      .slice(-1)
+      .flatMap((c) => s01By(t, c)),
+    ...pairStarts(t)
+      .slice(0, 1)
+      .flatMap((c) => s02By(t, c, "first")),
+  ],
+};
+/** By reason, held to the bounds and not tabled: a reason's first unlogged call, and its only pair. */
+const BY_REASON: Record<string, (t: ContactAuditTask) => AuditFinding[]> = Object.fromEntries(
+  INQUIRY_REASONS.flatMap((r) => [
+    [
+      `the first unlogged ${r} call`,
+      (t: ContactAuditTask) => firstUnlogged([r])(t).flatMap((c) => s02By(t, c)),
+    ],
+    [
+      `the only unlogged ${r} pair`,
+      (t: ContactAuditTask) =>
+        onlyOne(exactPairs(t).filter((c) => c.reason === r)).flatMap((c) => s02By(t, c)),
+    ],
+  ]),
+);
+/**
+ * The bounds a cheap policy is held to on a suite: no more than four points of its windows past the clean ones, and
+ * never a majority of any error plan's windows, nor of either promise arm's within a plan.
+ */
+function holdsTheBounds(
+  tasks: readonly ContactAuditTask[],
+  name: string,
+  submit: (t: ContactAuditTask) => readonly AuditFinding[],
+): void {
+  const passed = tasks.filter((t) => gradeContactAudit(t, { findings: submit(t) }).pass);
+  const clean = tasks.filter((t) => t.plan.plan === "clean").length;
+  expect(passed.length, name).toBeLessThanOrEqual(clean + Math.round(tasks.length * 0.04));
+  for (const plan of ["S-01", "S-02", "S-01+S-02"] as const) {
+    const of = (xs: readonly ContactAuditTask[]) => xs.filter((t) => t.plan.plan === plan);
+    expect(of(passed).length, `${name}, ${plan}`).toBeLessThan(of(tasks).length / 2);
+    for (const arm of [0, 1]) {
+      const inArm = (xs: readonly ContactAuditTask[]) => of(xs).filter((t) => t.plan.arm === arm);
+      expect(inArm(passed).length, `${name}, ${plan}, arm ${arm}`).toBeLessThan(
+        inArm(tasks).length / 2,
+      );
+    }
+  }
 }
 
 describe("contact-audit", () => {
@@ -924,46 +1214,86 @@ describe("contact-audit", () => {
       "every promise": [0, 0, 0, 0, 0],
       "every complaint": [0, 0, 0, 0, 0],
       "every promise and every complaint": [0, 0, 0, 0, 0],
-      "S-01 by disposition: a promise call with no promise, information provided": [10, 4, 6, 0, 0],
-      "the first such call": [23, 4, 19, 0, 0],
-      "S-02 by disposition: escalated and not logged, the first on its issue": [39, 39, 0, 0, 0],
-      "both by disposition": [9, 3, 6, 0, 0],
+      "S-01 by disposition: a promise call with no promise, information provided": [3, 3, 0, 0, 0],
+      "the first such call": [10, 3, 7, 0, 0],
+      "S-02 by disposition: escalated and not logged, the first on its issue": [37, 36, 0, 1, 0],
+      "both by disposition": [3, 2, 0, 1, 0],
       "every promise call with no promise_id": [0, 0, 0, 0, 0],
       "a promise_to_pay call with no promise_id": [50, 50, 0, 0, 0],
       "a hardship call with no promise, information provided": [50, 50, 0, 0, 0],
       "a promise call with no promise that a payment followed within three weeks": [
-        48, 37, 11, 0, 0,
+        19, 18, 1, 0, 0,
       ],
-      "the same, only where it is the only one": [54, 43, 11, 0, 0],
+      "the same, only where it is the only one": [40, 39, 1, 0, 0],
       "every handled call with no CMPL note": [0, 0, 0, 0, 0],
-      "every call with no CMPL note whose reason a logged complaint has": [12, 12, 0, 0, 0],
+      "every call with no CMPL note whose reason a logged complaint has": [0, 0, 0, 0, 0],
       "an unlogged call another unlogged call for its reason follows within 3 to 60 days": [
-        21, 9, 0, 12, 0,
+        6, 2, 0, 4, 0,
       ],
-      "the first such pair": [23, 9, 0, 14, 0],
-      "the same, only where it is the only pair": [31, 19, 0, 12, 0],
+      "the first such pair": [13, 2, 0, 11, 0],
+      "the same, only where it is the only pair": [44, 40, 0, 4, 0],
+      "the first such pair whose later call is under an issue of its own": [16, 4, 0, 12, 0],
       "a written request on an issue no logged call has": [50, 50, 0, 0, 0],
-      "a closed call followed on its issue within 15 days": [39, 33, 0, 6, 0],
-      "the promise note nearest the window's middle": [15, 0, 15, 0, 0],
+      "a closed call followed on its issue within 15 days": [14, 14, 0, 0, 0],
+      "the promise note nearest the window's middle": [13, 0, 13, 0, 0],
       "every complaint not logged, the raised-again clause left out": [50, 50, 0, 0, 0],
       "the roots alone, no symptom": [50, 50, 0, 0, 0],
     });
-    const clean = tasks.filter((t) => t.plan.plan === "clean").length;
-    for (const [name, [all, , ...arms]] of Object.entries(floors)) {
-      // A few points past the clean windows at most, and never a majority of any error's windows.
-      expect(all!, name).toBeLessThanOrEqual(clean + Math.round(tasks.length * 0.03));
-      for (const n of arms) expect(n, name).toBeLessThan(25);
+    // The policies that read the logs' structure and never a word.
+    expect(
+      Object.fromEntries(Object.entries(STRUCTURAL).map(([name, p]) => [name, floorOf(tasks, p)])),
+    ).toEqual({
+      "V1 the first unlogged hardship or escrow-analysis call": [7, 6, 0, 1, 0],
+      "V2 the only conversation with no promise, information provided, a payment within 21 days and no promise near":
+        [40, 39, 1, 0, 0],
+      "V2' the same, any disposition": [42, 39, 3, 0, 0],
+      "V3 a closed first call on its issue that a later contact follows into the next month": [
+        36, 36, 0, 0, 0,
+      ],
+      "V4 the only two unlogged calls for a reason no logged call has, 3 to 61 days apart": [
+        35, 32, 0, 3, 0,
+      ],
+      "V5 V1, or else V3": [6, 5, 0, 1, 0],
+      "V6 V1 and V2": [6, 5, 0, 1, 0],
+      "V7 V1, or else V2": [6, 5, 0, 1, 0],
+      "V8 the first unlogged hardship call referred to loss mitigation": [19, 16, 0, 3, 0],
+      "V8 the first unlogged hardship call transferred": [19, 18, 0, 1, 0],
+      "the first conversation of V2' kind": [31, 23, 8, 0, 0],
+      "the last": [29, 23, 6, 0, 0],
+      "the one its payment follows soonest": [32, 23, 9, 0, 0],
+      "the only one the dialer made": [44, 40, 4, 0, 0],
+      "the only inbound one": [45, 41, 4, 0, 0],
+      "the first unlogged call a later one for its reason follows within 3 to 61 days": [
+        11, 2, 0, 9, 0,
+      ],
+      "the first such call whose later one is under an issue of its own": [13, 4, 0, 9, 0],
+      "the last such call": [10, 2, 0, 8, 0],
+      "every such call, one a reason": [6, 2, 0, 4, 0],
+      "the only such call": [44, 40, 0, 4, 0],
+      "the only such call whose later one is with the borrower and took no promise": [
+        44, 40, 0, 4, 0,
+      ],
+      "a reason's only two unlogged calls, 3 to 61 days apart, the only such reason": [
+        33, 30, 0, 3, 0,
+      ],
+      "the first unlogged call of the reason with the most": [7, 0, 0, 7, 0],
+      "the unlogged call the most later ones for its reason follow within 3 to 61 days": [
+        10, 2, 0, 8, 0,
+      ],
+      "the only closed unlogged call followed on its issue within 3 to 15 days": [43, 42, 0, 1, 0],
+      "the unlogged call before the only later arrangement or hardship call no dialer attempt is near":
+        [41, 39, 0, 2, 0],
+      "the last conversation of V2' kind, and the first call of a pair": [6, 1, 0, 4, 1],
+    });
+    // Every one of them, by reason too, on the held-out suite and on a training suite: at most four points past the
+    // clean windows, and never a majority of any error's windows, nor of either promise arm's within one.
+    for (const suite of [tasks, train()]) {
+      for (const [name, p] of Object.entries(CHEAP))
+        holdsTheBounds(suite, name, (t) => policyFindings(t, p));
+      holdsTheBounds(suite, "the roots alone, no symptom", rootsOnly);
+      for (const [name, p] of Object.entries({ ...STRUCTURAL, ...BY_REASON }))
+        holdsTheBounds(suite, name, p);
     }
-    // Nor of either promise arm within one: the windows of each error plan whose promise was kept, and broken.
-    for (const [name, p] of Object.entries(CHEAP))
-      for (const plan of ["S-01", "S-02", "S-01+S-02"] as const)
-        for (const arm of [0, 1]) {
-          const group = tasks.filter((t) => t.plan.plan === plan && t.plan.arm === arm);
-          const passed = group.filter(
-            (t) => gradeContactAudit(t, { findings: policyFindings(t, p) }).pass,
-          ).length;
-          expect(passed, `${name}, ${plan}, arm ${arm}`).toBeLessThan(group.length / 2);
-        }
     // The rule, clause by clause, passes every window: the floors are what leaving a clause out costs.
     const rule = {
       s01: (t: ContactAuditTask) => t.contacts.filter((c) => notePromise(t, c) && !c.promise_id),
@@ -971,7 +1301,7 @@ describe("contact-audit", () => {
         firstPerReason(t.contacts.filter((c) => voiced(t, c) && !c.complaint_logged)),
     };
     expect(floorOf(tasks, (t) => policyFindings(t, rule))).toEqual([200, 50, 50, 50, 50]);
-  }, 300_000);
+  }, 1_800_000);
 
   it("can be audited from the rulebook and the tools: the reference passes the held-out suite and a training suite", async () => {
     for (const tasks of [heldTasks(), train()]) {
@@ -1004,7 +1334,7 @@ describe("contact-audit", () => {
         kinds.set(`${f.error} ${f.kind}`, (kinds.get(`${f.error} ${f.kind}`) ?? 0) + 1);
     expect(Object.fromEntries([...kinds].sort())).toEqual({
       "S-01 broken_not_followed_up": 50,
-      "S-01 dialed_in_window": 197,
+      "S-01 dialed_in_window": 206,
       "S-01 kept_not_marked": 50,
       "S-01 root": 100,
       "S-02 no_acknowledgment": 100,
@@ -1028,7 +1358,7 @@ describe("contact-audit", () => {
       held.filter((h) => h.promises >= 3).length,
       held.filter((h) => h.complaints >= 2).length,
       held.filter((h) => h.complaints >= 3).length,
-    ]).toEqual([192, 176, 175, 153]);
+    ]).toEqual([186, 144, 195, 184]);
   }, 1_800_000);
 
   it("keeps a draw only when it is fair to grade", () => {
@@ -1102,7 +1432,7 @@ describe("contact-audit", () => {
     // A change here moves every score: bump CONTACT_AUDIT_ENVIRONMENT_VERSION, then the pin. The suite is drawn
     // from the life generator and the contact center: a change to either moves it too.
     expect(sha256(heldTasks().map(toJsonLine).join(""))).toMatchInlineSnapshot(
-      `"a0dc825e1b2ef86d41f1ab67459fbbc85ea13d9e1fef91fcc61df0aa48e728e0"`,
+      `"c8238169f2f52cc4cb2a193ac2aed420ba80e6a6cc8916281f352b7713734f3d"`,
     );
   }, 600_000);
 

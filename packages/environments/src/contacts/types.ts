@@ -288,8 +288,18 @@ export interface ProfilePins {
   readonly style?: ContactProfile["style"];
   /** A multiple of the chance a handled call carries a complaint: a borrower with a grievance. */
   readonly complaint_multiplier?: number;
+  /**
+   * The chance itself, in place of the reason's weight and the multiples above: a borrower with a grievance voices it
+   * on that share of the calls an agent handles, whatever a call is about.
+   */
+  readonly complaint_chance?: number;
   /** A multiple of the borrower's ordinary inbound volume, month by month: a borrower who calls often. */
   readonly call_multiplier?: number;
+  /**
+   * The chance the borrower calls again, 3 to 60 days later, about a matter an agent closed on a call: filed as any
+   * call about its reason is that day. Unset, never: only an issue left open is followed up.
+   */
+  readonly closed_follow_up?: number;
   /**
    * The chance a conversation the borrower's next payment follows within three weeks takes a promise for it. Unset,
    * it always does; a borrower pinned below one sometimes pays without having promised to.

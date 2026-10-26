@@ -10,27 +10,31 @@
  *         the call's words and the agent's note carry it, and no promise
  *         record is written (the row's promise_id null, no promise in the
  *         log), the call dispositioned as it would have been without the
- *         promise (a hardship call referred to loss mitigation, any other as
- *         information provided). It is made on a promise the contact center
- *         drew from a call, never on the scenario's own promise call, whose
- *         purpose code says promise_to_pay: a twin keeps every row's purpose,
- *         and that code on a call with no promise would give the error away
- *         without its note being read. What the contact center's rules then
- *         do: nothing ceases the dialer for the promise, so it calls inside
- *         the window; a kept promise is never marked kept; a broken one is
- *         never followed up;
+ *         promise, by the same draw (a hardship call transferred or referred
+ *         to loss mitigation, a dialer's conversation referred or information
+ *         provided half the time each, any other as its reason has it). It is
+ *         made on a promise the contact center drew from a call, never on the
+ *         scenario's own promise call, whose purpose code says
+ *         promise_to_pay: a twin keeps every row's purpose, and that code on
+ *         a call with no promise would give the error away without its note
+ *         being read. What the contact center's rules then do: nothing ceases
+ *         the dialer for the promise, so it calls inside the window; a kept
+ *         promise is never marked kept; a broken one is never followed up;
  *   S-02  a complaint not logged: a complaint voiced on a call is not logged
  *         (C-04's error at the call: the row's flag, the agent's
  *         acknowledgment, the note), and nobody escalates it: the call is
- *         dispositioned as its reason would have it without the complaint (a
- *         transfer, which would change its words, as a referral), its issue
- *         left open as an escalation's is. So the complaint system opens no
- *         case (complaints.ts), nothing acknowledges it, nobody answers it in
- *         writing, and nobody tells the borrower how to put it in writing, so
- *         no written request follows it as one may follow a logged complaint;
- *         nothing having come of it, the borrower calls about it again 3 to 60
- *         days later, a call filed under an issue of its own because no case
- *         links it to the first, and that call is not logged either.
+ *         dispositioned as its reason would have it without the complaint, by
+ *         the same draw, its issue left open as an escalation's is. So the
+ *         complaint system opens no case (complaints.ts), nothing acknowledges
+ *         it, nobody answers it in writing, and nobody tells the borrower how
+ *         to put it in writing, so no written request follows it as one may
+ *         follow a logged complaint; nothing having come of it, the borrower
+ *         calls about it again 3 to 60 days later, a call filed under an issue
+ *         of its own because no case links it to the first, and that call is
+ *         not logged either. Beside the complaint it is drawn as any call of
+ *         its reason that reaches an agent is: who calls, how it is
+ *         dispositioned, a promise taken on it, a follow-up and the letters
+ *         after it.
  *
  * The twin is derived again with the error made (`StaffOverride`,
  * derive.ts): every draw is the clean history's, and the error changes only
@@ -39,7 +43,8 @@
  * and time, direction, mode, purpose, reason and issue), so every stream keyed
  * by a contact id draws the same and every other call is word for word the
  * clean one; a row the twin adds is named off the root (`<root>-S01-1`, the
- * borrower's call again `<root>-S02`), and a row it drops keeps its id spent.
+ * borrower's call again `<root>-S02`, what follows from it `<root>-S02-1`), and
+ * a row it drops keeps its id spent.
  *
  * The labels are the life generator's (`DefectLabel`), with the contact a
  * finding names for each and, for a symptom a reviewer's rule can name, which
@@ -265,16 +270,20 @@ export function plantStaffErrors(
     let made: Made = asked;
     let twin = twinLoan(center, book.loans[k]!, center.loans[k]!, made, base, writer);
     if ("gone" in twin) {
-      // S-01's twin does not make the call S-02 was asked for (a promise it took instead ended the issue the call
-      // followed up): S-02 is not made, and S-01 is made alone.
+      // One error's twin does not make the call the other was asked for: S-01's, where a promise it let a later call
+      // take ended the issue S-02's call followed up; S-02's, where a promise taken on the call raising the complaint
+      // again ceased the dialer on S-01's day, or kept S-01's call from taking its own. That one is not made, and the
+      // other is made alone.
+      const lost = twin.gone;
+      const kept: StaffErrorId = lost === "S-02" ? "S-01" : "S-02";
       skipped.push({
-        id: "S-02",
-        contact: twin.gone,
-        reason: "the twin with S-01 does not make this call",
+        id: lost,
+        contact: asked[lost]!.id,
+        reason: `the twin with ${kept} does not make this call`,
       });
-      made = { "S-01": asked["S-01"]! };
+      made = { [kept]: asked[kept]! };
       twin = twinLoan(center, book.loans[k]!, center.loans[k]!, made, base, writer);
-      if ("gone" in twin) throw new Error(`${twin.gone}: a call no staff error removes`);
+      if ("gone" in twin) throw new Error(`${asked[twin.gone]!.id}: a call no staff error removes`);
     }
     loans[k] = twin.loan;
     labels.push(...twin.labels);
@@ -351,7 +360,7 @@ function twinLoan(
   made: Made,
   base: DeriveContext,
   writer: ContactTextWriter,
-): { loan: LoanContacts; labels: StaffLabel[]; c04: string[] } | { gone: string } {
+): { loan: LoanContacts; labels: StaffLabel[]; c04: string[] } | { gone: StaffErrorId } {
   // The clean history again, to hold the pins to the center's and to read its keys.
   const again = deriveLoan(life, base);
   if (
@@ -373,8 +382,11 @@ function twinLoan(
     ...(s02 ? { unlogged_complaint: keyOf(s02) } : {}),
   };
   const d = deriveLoan(life, { ...base, staff });
-  if (s01 && !d.unrecorded.length) throw new Error(`${s01.id}: the twin recorded the promise`);
-  if (s02 && !d.keys.includes(keyOf(s02))) return { gone: s02.id };
+  if (s01 && !d.unrecorded.length) {
+    if (s02) return { gone: "S-01" };
+    throw new Error(`${s01.id}: the twin recorded the promise`);
+  }
+  if (s02 && !d.keys.includes(keyOf(s02))) return { gone: "S-02" };
 
   // Ids: the clean one wherever the two hold the same contact.
   const cleanId = new Map(cleanKeys.map((k, i) => [k, clean.contacts[i]!.id]));
@@ -386,7 +398,8 @@ function twinLoan(
     const id =
       d.raised_again !== null && d.keys[i] === d.raised_again && s02
         ? `${s02.id}-S02`
-        : (cleanId.get(k) ?? (s01 ? `${s01.id}-S01-${++added}` : null));
+        : (cleanId.get(k) ??
+          (s01 ? `${s01.id}-S01-${++added}` : s02 ? `${s02.id}-S02-${++added}` : null));
     if (id === null) throw new Error(`${raw}: a row no staff error adds`);
     finalOf.set(raw, id);
   });
@@ -535,21 +548,28 @@ function twinLoan(
       after(t, s01) &&
       t.on <= promise01.pay_by;
     labels.push(
-      label(s02again ? "S-02" : "S-01", "contacts", "*", t.id, t.on, null, summary(t), {
+      label(s02again || !s01 ? "S-02" : "S-01", "contacts", "*", t.id, t.on, null, summary(t), {
         contact: s02again || inWindow ? t.id : null,
         symptom: s02again ? "raised_again" : inWindow ? "dialed_in_window" : null,
       }),
     );
   }
 
-  // The promise log.
+  // The promise log. A promise is the error's whose call made it; one S-02's call raising the complaint again takes
+  // is S-02's, and every other one the twin moved is S-01's where S-01 is made.
+  const promiseOwner = (p: PromiseRecord): StaffErrorId => {
+    const c = contacts.find((x) => x.id === p.contact_id);
+    return c ? owner(c) : s01 ? "S-01" : "S-02";
+  };
   const cleanPromises = new Map(clean.promises.map((p) => [p.id, p]));
   const twinPromises = new Map(promises.map((p) => [p.id, p]));
   for (const [id, p] of cleanPromises) {
     const t = twinPromises.get(id);
     const isRoot = s01 !== undefined && p.contact_id === s01.id;
     if (!t) {
-      labels.push(label("S-01", "contact_promises", "*", id, p.made_on, promiseText(p), null));
+      labels.push(
+        label(promiseOwner(p), "contact_promises", "*", id, p.made_on, promiseText(p), null),
+      );
       if (isRoot)
         labels.push(
           label("S-01", "contact_promises", "status", id, p.pay_by, p.status, null, {
@@ -563,7 +583,7 @@ function twinLoan(
       if (toJsonLine(p[f] ?? null) !== toJsonLine(t[f] ?? null))
         labels.push(
           label(
-            "S-01",
+            promiseOwner(p),
             "contact_promises",
             f,
             id,
@@ -575,7 +595,9 @@ function twinLoan(
   }
   for (const [id, t] of twinPromises)
     if (!cleanPromises.has(id))
-      labels.push(label("S-01", "contact_promises", "*", id, t.made_on, null, promiseText(t)));
+      labels.push(
+        label(promiseOwner(t), "contact_promises", "*", id, t.made_on, null, promiseText(t)),
+      );
 
   // The comment log.
   const errorOfNote = (n: NoteRecord): StaffErrorId => {
@@ -621,7 +643,7 @@ function twinLoan(
     if (toJsonLine(ep) !== toJsonLine(t ?? null))
       labels.push(
         label(
-          "S-01",
+          s01 ? "S-01" : "S-02",
           "contact_cadence",
           "paused",
           ep.start,

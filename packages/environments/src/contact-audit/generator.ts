@@ -4,10 +4,10 @@
  * Each task is a function of (split, suite seed, index). Its loan comes from a
  * life book of one, seeded from the task's key, run thirty months through the
  * contact center: a borrower who falls behind every two to four months and
- * promises to pay each time (the scenario's promise, kept or broken, beside the
- * promises the contact center draws from the receipts), calls often, and
- * complains often, because the borrower is irritated and has a grievance (the
- * contact center's pins, `AUDIT_PINS`). Two calls are the task's anchors, in
+ * promises to pay on half of them (the scenario's promise, kept or broken,
+ * beside the promises the contact center draws from the receipts), calls
+ * often, and complains on a third of the calls, about whatever the call is
+ * about (the contact center's pins, `AUDIT_PINS`). Two calls are the task's anchors, in
  * turn by index: a promise call (one the borrower kept, then one broken) and a
  * complaint call, within 120 days of each other. What the anchors need runs
  * from ten days before the first to a week past the promise's pay-by date and
@@ -41,6 +41,7 @@ import type { Scenario, ScenarioEvent } from "../life/scenario.js";
 import {
   RAISED_AGAIN_AFTER,
   STAFF_ERRORS,
+  contactKey,
   plantStaffErrors,
   type ContactRecord,
   type ProfilePins,
@@ -71,22 +72,31 @@ export const auditPlanOf = (index: number): AuditPlan => AUDIT_PLANS[index % AUD
 /** The promise anchor's arm, in turn within a plan: one the borrower kept (0), one broken (1). */
 export const auditArmOf = (index: number): number => Math.floor(index / AUDIT_PLANS.length) % 2;
 
-/** Thirty months from the first payment: a delinquency every two to four months, each with a promise. */
+/** Thirty months from the first payment: a delinquency every two to four months. */
 export const AUDIT_HISTORY_MONTHS = 30;
 /**
  * The contact center's pins on every task's loan: an English-speaking borrower (v1 reads no interpreted
- * call), irritated, with a grievance that makes a complaint five times as likely on an inbound call an
- * agent handles (an outbound call carries none), who calls six times as often as the calibration's
- * borrower in the same status, and who pays within three weeks of a conversation without having promised
- * to on it three times in five. docs/environments.md gives what the pins make of a window.
+ * call), irritated, with a grievance voiced on 35 % of the inbound calls an agent handles whatever the call
+ * is about (an outbound call carries none), so a call of any reason is as likely as any other to carry one
+ * and, as often, not; who calls nine times as often as the calibration's borrower in the same status, and
+ * calls again 3 to 60 days later about two in five of the matters an agent closed, as S-02's borrower calls
+ * again about a complaint nobody logged; and who pays within three weeks of a conversation without having
+ * promised to on it 85 % of the time. docs/environments.md gives what the pins make of a window.
  */
 export const AUDIT_PINS: ProfilePins = {
   language: "en",
   style: "irritated",
-  complaint_multiplier: 5,
-  call_multiplier: 6,
-  kept_promise_share: 0.4,
+  complaint_chance: 0.35,
+  call_multiplier: 9,
+  closed_follow_up: 0.4,
+  kept_promise_share: 0.15,
 };
+/**
+ * The share of the scenario's delinquencies that carry its own promise call. On the others the contact
+ * center draws the promises from what the borrower then did, so a conversation the next payment follows
+ * with no promise taken on it is as ordinary as one that took one.
+ */
+export const AUDIT_SCRIPTED_PROMISE_SHARE = 0.5;
 /** How far apart the promise call and the complaint call may be. */
 export const ANCHOR_SPAN_DAYS = 120;
 /** The days the window runs beyond what the two anchors need, split at random between before and after. */
@@ -103,14 +113,11 @@ function scenarioFor(r: Rng): Scenario {
   for (let n = 0; n < 12 && k <= AUDIT_HISTORY_MONTHS - 6; n++) {
     events.push({ kind: "missed_payment", loan: 0, month: k });
     if (r.chance(0.5)) events.push({ kind: "missed_payment", loan: 0, month: k + 1 });
-    events.push({
-      kind: "promise_to_pay",
-      loan: 0,
-      month: k,
-      day: r.int(18, 26),
-      pay_in_days: r.int(5, 14),
-      kept: r.chance(0.5),
-    });
+    const day = r.int(18, 26);
+    const payIn = r.int(5, 14);
+    const kept = r.chance(0.5);
+    if (r.chance(AUDIT_SCRIPTED_PROMISE_SHARE))
+      events.push({ kind: "promise_to_pay", loan: 0, month: k, day, pay_in_days: payIn, kept });
     k += r.int(2, 4);
   }
   return { loans: 1, months: AUDIT_HISTORY_MONTHS, events };
@@ -178,8 +185,12 @@ export function drawContactAuditCandidate(
   const start = loan.contacts[0]?.on;
   if (!start) return null;
   const promiseOf = (c: ContactRecord) => loan.promises.find((p) => p.id === c.promise_id)!;
+  // An anchor is a call the planter can name: no other contact on the loan shares its key.
+  const keys = new Map<string, number>();
+  for (const c of loan.contacts) keys.set(contactKey(c), (keys.get(contactKey(c)) ?? 0) + 1);
+  const named = (c: ContactRecord) => keys.get(contactKey(c)) === 1;
   const promiseCalls = loan.contacts.filter((c) => {
-    if (c.servicer !== "us" || !STAFF_ERRORS["S-01"].eligible(c)) return false;
+    if (c.servicer !== "us" || !STAFF_ERRORS["S-01"].eligible(c) || !named(c)) return false;
     const p = promiseOf(c);
     return p.status === (arm === 0 ? "kept" : "broken") && addDays(p.pay_by, 7) <= end;
   });
@@ -187,6 +198,7 @@ export function drawContactAuditCandidate(
     (c) =>
       c.servicer === "us" &&
       STAFF_ERRORS["S-02"].eligible(c) &&
+      named(c) &&
       addDays(c.on, RAISED_AGAIN_AFTER[1] + 1) <= end,
   );
   const pairs = promiseCalls.flatMap((p) =>
@@ -277,8 +289,10 @@ export function handledBeside(task: ContactAuditTask): { promises: number; compl
 /** Why a draw was turned away, by kind: each a filter on the suite, which docs/environments.md names. */
 export function turnedAwayBecause(issues: readonly string[]): string {
   const all = issues.join("\n");
-  if (/does not make this call/.test(all))
+  if (/twin with S-01 does not make this call/.test(all))
     return "S-01's twin does not make the call S-02 was asked for";
+  if (/twin with S-02 does not make this call/.test(all))
+    return "S-02's twin does not make the call S-01 was asked for";
   if (/misses S-02 root/.test(all)) return "the recognizer hid the complaint";
   if (/misses S-02 raised_again/.test(all)) return "the recognizer hid the complaint raised again";
   if (/(kept_not_marked|broken_not_followed_up)/.test(all))

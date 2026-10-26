@@ -79,6 +79,20 @@ export interface TapePreview {
     readonly column: string | null;
     readonly rows: number;
   }[];
+  /**
+   * Loans on this tape whose number differs from a loan already on the book
+   * only in how it is written — scientific notation, spaces, dashes, leading
+   * zeros. Loaded as they are, each is a second loan beside the first. The
+   * rows are the first two hundred; `count` is all of them.
+   */
+  readonly nearDuplicates: {
+    readonly count: number;
+    readonly rows: readonly {
+      readonly row: number;
+      readonly number: string;
+      readonly onBook: string;
+    }[];
+  };
 }
 
 export interface DeskServicer {
@@ -200,6 +214,13 @@ export interface TapeFiles {
   readonly supplement?: WireFile;
 }
 
+/**
+ * The load's body: the files the review read, and — only when the person
+ * ticked it, having seen them — leave to load the near-duplicates as new
+ * loans. Without it the load refuses a tape that has any.
+ */
+export type TapeLoadFiles = TapeFiles & { readonly allowNearDuplicates?: true };
+
 export const MAX_FILE_BYTES = 30 * 1024 * 1024;
 
 function toBase64(bytes: Uint8Array): string {
@@ -278,7 +299,7 @@ export const deskImports = (slug: string, init: Call = {}) =>
 export const previewTape = (files: TapeFiles, init: Call = {}) =>
   hm<TapePreview>("/preview", { ...init, body: files });
 
-export const loadTape = (files: TapeFiles, init: Call = {}) =>
+export const loadTape = (files: TapeLoadFiles, init: Call = {}) =>
   hm<TapeLoad>("/imports", { ...init, body: files });
 
 export const reviewBook = (servicerSlug: string, init: Call = {}) =>
@@ -333,7 +354,7 @@ export function progressPercent(p: Progress): number {
   return Math.round(((before + LOAD_WEIGHTS[p.stage] * within) / all) * 100);
 }
 
-export const loadTapeWithProgress = (files: TapeFiles, onProgress: (p: Progress) => void) =>
+export const loadTapeWithProgress = (files: TapeLoadFiles, onProgress: (p: Progress) => void) =>
   stream<TapeLoad, Progress>("/imports/stream", files, onProgress);
 
 export const reviewBookWithProgress = (servicerSlug: string, onProgress: (p: Progress) => void) =>

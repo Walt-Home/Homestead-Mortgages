@@ -23,6 +23,7 @@
 
 import { prisma, Prisma } from "@hm/db";
 import {
+  centsOfTokens,
   meterMonth,
   meterTerms,
   runRate,
@@ -30,6 +31,7 @@ import {
   monthKey,
   PRICE_SHEET,
   statementWire,
+  type LoanChargeWire,
   type MeteredLoan,
   type MeteredObservation,
   type ObservedStatus,
@@ -46,7 +48,8 @@ import {
   type PlainDate,
 } from "@hm/kernel/calendar";
 import { AppError } from "../middleware/error-handler.js";
-import type { Db } from "./db.js";
+import { lockBook } from "./book-lock.js";
+import { type Db, ownsTransaction } from "./db.js";
 import { dayEt } from "./refi-offers.js";
 import { assertSlug } from "./tape-desk.js";
 
@@ -203,6 +206,119 @@ export async function statementFor(
   };
 }
 
+/* ── a statement's loans, as a spreadsheet ─────────────────────────────── */
+
+/** A cell of a CSV: quoted when it carries a comma, a quote or a line break. */
+const csvCell = (v: string | number | null): string => {
+  const s = v === null ? "" : String(v);
+  return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+};
+
+/**
+ * A loan's charge as a closed statement may hold it: the wire of the day it
+ * was closed, which before the cycle was itemized (7 October 2026) carried
+ * no rows.
+ */
+type StoredCharge = Omit<LoanChargeWire, "rows" | "touchTokens"> & {
+  readonly rows?: LoanChargeWire["rows"];
+  readonly touchTokens?: string;
+};
+
+/** Cents as dollars to the cent, "1234.56". */
+const dollars = (cents: bigint): string => {
+  const sign = cents < 0n ? "-" : "";
+  const abs = cents < 0n ? -cents : cents;
+  return `${sign}${abs / 100n}.${(abs % 100n).toString().padStart(2, "0")}`;
+};
+
+/**
+ * The loans a month's statement billed, one row each, as a CSV a person can
+ * open beside the statement: when each was watched from and ended, the days
+ * counted, the balance the charge was read from and the observation it came
+ * from, the tokens of every line of the statement, and the charge. A last
+ * TOTAL row carries the statement's own totals, which the rows above it add
+ * up to — a closed month from the row it was closed into, any other month
+ * from the meter run live, exactly as `statementFor` answers it.
+ */
+export async function statementLoansCsv(
+  args: { readonly slug: string; readonly month: PlainDate; readonly now?: Date },
+  db: Db = prisma,
+): Promise<{ readonly filename: string; readonly csv: string }> {
+  const answer = await statementFor(args, db);
+  const s = answer.statement;
+  const codes = s.lines.map((l) => l.code);
+  // The touch line is counted in events and carried on a loan as its touch
+  // tokens; every other line is a balance row, carried in the loan's rows.
+  const touchCodes = new Set(
+    s.lines.filter((l) => l.quantity.kind === "events").map((l) => l.code),
+  );
+  const balanceCodes = codes.filter((c) => !touchCodes.has(c));
+  const header = [
+    "loan_number",
+    "watched_from",
+    "ended_on",
+    "days_billed",
+    "days_in_month",
+    "balance_as_of",
+    "balance_status",
+    "balance_dollars",
+    ...codes.map((c) => `tokens_${c}`),
+    "total_tokens",
+    "charge_dollars",
+  ];
+  const lines = [header.map(csvCell).join(",")];
+  for (const loan of s.loans as readonly StoredCharge[]) {
+    const rows = new Map((loan.rows ?? []).map((r) => [r.code, r.tokens]));
+    const tokensFor = (code: string): string => {
+      if (touchCodes.has(code)) return loan.touchTokens ?? "0";
+      const own = rows.get(code);
+      if (own !== undefined) return own;
+      // A statement closed before the rows were itemized carries one balance
+      // line, and the loan's tokens are that line's.
+      return loan.rows === undefined && balanceCodes.length === 1 ? loan.tokens : "0";
+    };
+    const total = BigInt(loan.tokens) + BigInt(loan.touchTokens ?? "0");
+    lines.push(
+      [
+        loan.number,
+        loan.watchedFrom,
+        loan.endedOn,
+        loan.days,
+        s.daysInMonth,
+        loan.basis?.asOf ?? null,
+        loan.basis?.status ?? null,
+        loan.basis ? dollars(BigInt(loan.basis.principalBalanceCents)) : null,
+        ...codes.map(tokensFor),
+        total.toString(),
+        dollars(centsOfTokens(total)),
+      ]
+        .map(csvCell)
+        .join(","),
+    );
+  }
+  lines.push(
+    [
+      "TOTAL",
+      null,
+      null,
+      s.loanDays,
+      s.daysInMonth,
+      null,
+      null,
+      dollars(BigInt(s.balanceCents)),
+      ...s.lines.map((l) => l.tokens),
+      s.tokens,
+      dollars(BigInt(s.cents)),
+    ]
+      .map(csvCell)
+      .join(","),
+  );
+  return {
+    filename: `${answer.servicer.slug}-${s.month}-loans.csv`,
+    csv: `${lines.join("\r\n")}\r\n`,
+  };
+}
+
 /**
  * The book's run rate today — MRR and ARR, as the meter's own estimates
  * (`@hm/billing`, `runRate`): a whole month at the newest balances, and
@@ -322,32 +438,43 @@ export async function closeBillingMonth(
   const closed: { slug: string; tokens: string; cents: string }[] = [];
   const alreadyClosed: string[] = [];
   for (const s of servicers) {
-    const existing = await db.billingStatement.findUnique({
-      where: { servicerId_month: { servicerId: s.id, month: dateOf(month) } },
-      select: { id: true },
-    });
-    if (existing) {
+    // Each servicer's month is metered and kept holding its book, so a tape
+    // taken back meanwhile either lands first and is not billed, or waits
+    // and then finds the month closed (`book-lock.ts`).
+    const close = async (tx: Db) => {
+      await lockBook(tx, s.id);
+      const existing = await tx.billingStatement.findUnique({
+        where: { servicerId_month: { servicerId: s.id, month: dateOf(month) } },
+        select: { id: true },
+      });
+      if (existing) return null;
+      const loans = await meteredBook(s.id, last, tx);
+      const statement = meterMonth(loans, month);
+      const wire = statementWire(statement);
+      await tx.billingStatement.create({
+        data: {
+          servicerId: s.id,
+          month: dateOf(month),
+          sheetVersion: PRICE_SHEET.version,
+          loansBilled: statement.loansBilled,
+          loanMonths: new Prisma.Decimal(statement.loanMonths),
+          balanceCents: statement.balanceCents,
+          tokens: statement.tokens,
+          cents: statement.cents,
+          statement: wire as unknown as Prisma.InputJsonValue,
+          closedBy: args.closedBy,
+        },
+        select: { id: true },
+      });
+      return wire;
+    };
+    const wire = ownsTransaction(db)
+      ? await prisma.$transaction(close, { maxWait: 10_000, timeout: 120_000 })
+      : await close(db);
+    if (!wire) {
       alreadyClosed.push(s.slug);
       continue;
     }
-    const loans = await meteredBook(s.id, last, db);
-    const statement = meterMonth(loans, month);
-    const wire = statementWire(statement);
-    await db.billingStatement.create({
-      data: {
-        servicerId: s.id,
-        month: dateOf(month),
-        sheetVersion: PRICE_SHEET.version,
-        loansBilled: statement.loansBilled,
-        loanMonths: new Prisma.Decimal(statement.loanMonths),
-        balanceCents: statement.balanceCents,
-        tokens: statement.tokens,
-        cents: statement.cents,
-        statement: wire as unknown as Prisma.InputJsonValue,
-        closedBy: args.closedBy,
-      },
-      select: { id: true },
-    });
     closed.push({ slug: s.slug, tokens: wire.tokens, cents: wire.cents });
   }
   return { month: monthKey(month), closed, alreadyClosed };

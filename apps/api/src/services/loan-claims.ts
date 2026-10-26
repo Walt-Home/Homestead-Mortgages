@@ -31,6 +31,7 @@
 
 import { prisma } from "@hm/db";
 import { AppError } from "../middleware/error-handler.js";
+import { lockBook } from "./book-lock.js";
 import { ownsTransaction, type Db } from "./db.js";
 import { claimUrl, hashInvitationToken, mintInvitationToken } from "./invitations.js";
 import { moveLoanIfLegal, toDomainLoanState } from "./loan-transition.js";
@@ -67,6 +68,10 @@ export async function mintLoanClaim(
   if (ownsTransaction(db)) {
     return prisma.$transaction((tx) => mintLoanClaim(input, tx));
   }
+  // A tape being taken back reads its loans' claims before it deletes them;
+  // this waits for it, or it for this, so a link is never minted onto a loan
+  // a removal is about to take with it (`book-lock.ts`).
+  await lockBook(db, input.servicerId);
   const loan = await db.loan.findFirst({
     where: { servicerId: input.servicerId, servicerLoanNumber: input.servicerLoanNumber },
     select: {

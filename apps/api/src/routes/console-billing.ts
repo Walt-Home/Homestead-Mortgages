@@ -21,6 +21,7 @@ import {
   monthFromKey,
   setAnnualTokenPool,
   statementFor,
+  statementLoansCsv,
   billingTerms,
   runRateFor,
 } from "../services/billing.js";
@@ -368,6 +369,19 @@ export function consoleBillingRouter(gate: ConsoleStaffGateOptions): Router {
       const slug = z.string().min(1).parse(req.params.slug);
       const month = monthFromKey(z.string().parse(req.params.month));
       res.json(await statementFor({ slug, month }));
+    }),
+  );
+
+  /** The loans a month's statement billed, one row each with a TOTAL row last, as a CSV to download. */
+  router.get(
+    "/servicers/:slug/statements/:month/loans.csv",
+    asyncRoute(async (req, res) => {
+      const slug = z.string().min(1).parse(req.params.slug);
+      const month = monthFromKey(z.string().parse(req.params.month));
+      const { filename, csv } = await statementLoansCsv({ slug, month });
+      res.setHeader("Content-Type", "text/csv; charset=utf-8");
+      res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+      res.send(csv);
     }),
   );
 

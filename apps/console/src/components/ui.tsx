@@ -5,6 +5,7 @@
 
 import {
   forwardRef,
+  type AnchorHTMLAttributes,
   type ButtonHTMLAttributes,
   type InputHTMLAttributes,
   type ReactNode,
@@ -62,6 +63,33 @@ export const Button = forwardRef<
     </button>
   );
 });
+
+/**
+ * A link dressed as a button, for what the browser fetches itself — a
+ * download, say. A button inside an anchor is not a link in every browser.
+ */
+export function ButtonLink({
+  variant = "secondary",
+  size = "md",
+  icon,
+  className,
+  children,
+  ...rest
+}: AnchorHTMLAttributes<HTMLAnchorElement> & {
+  variant?: ButtonVariant;
+  size?: ButtonSize;
+  icon?: IconName;
+}) {
+  return (
+    <a
+      className={clsx(BUTTON_BASE, BUTTON_VARIANT[variant], BUTTON_SIZE[size], className)}
+      {...rest}
+    >
+      {icon ? <Icon name={icon} size={16} /> : null}
+      {children}
+    </a>
+  );
+}
 
 /** A square icon button, for chrome: close, menu, back. */
 export function IconButton({

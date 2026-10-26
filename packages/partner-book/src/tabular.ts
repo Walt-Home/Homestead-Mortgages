@@ -7,11 +7,21 @@
  * that keeps columns positional rather than keying them by header, because
  * the m3 tape carries "Current Occupancy" twice and a keyed parser would
  * collapse the pair.
+ *
+ * Every cell comes back as text either way, and the file says which it was,
+ * because the same text is not the same evidence in the two: a workbook's
+ * numeric cell is the double its writer stored, a CSV's is what some program
+ * printed (`FileKind` in `m3-v1.ts`).
  */
 
+import type { FileKind } from "./m3-v1.js";
 import { readXlsx } from "./vendored/xlsx.js";
 
-export type ParsedFile = { readonly headers: string[]; readonly rows: string[][] };
+export type ParsedFile = {
+  readonly kind: FileKind;
+  readonly headers: string[];
+  readonly rows: string[][];
+};
 
 const isXlsx = (filename: string, bytes: Uint8Array): boolean =>
   /\.xlsx$/i.test(filename) ||
@@ -75,7 +85,8 @@ const trimRow = (r: readonly string[]): string[] => {
 
 export function readTabular(filename: string, bytes: Uint8Array): ParsedFile {
   let rows: string[][];
-  if (isXlsx(filename, bytes)) {
+  const kind: FileKind = isXlsx(filename, bytes) ? "xlsx" : "csv";
+  if (kind === "xlsx") {
     const wb = readXlsx(bytes);
     rows = (wb.sheets[0]?.rows ?? []).map((r) => r.map((c) => c ?? ""));
   } else {
@@ -86,5 +97,5 @@ export function readTabular(filename: string, bytes: Uint8Array): ParsedFile {
   }
   rows = rows.map(trimRow).filter((r) => r.some((c) => c.trim() !== ""));
   const headers = (rows.shift() ?? []).map((h) => h.trim());
-  return { headers, rows: rows.map((r) => headers.map((_, i) => r[i] ?? "")) };
+  return { kind, headers, rows: rows.map((r) => headers.map((_, i) => r[i] ?? "")) };
 }

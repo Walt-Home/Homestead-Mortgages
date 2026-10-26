@@ -4,11 +4,23 @@
  * and `@hm/billing`'s statement, spelled here once for the screens.
  */
 
-import { call, type Call } from "./api.js";
+import { call, doorPath, type Call } from "./api.js";
 
 export async function billing<T>(path: string, init: Call = {}): Promise<T> {
   return (await call<T>(path, init, "billing")).data;
 }
+
+/**
+ * A month's statement, one row per loan billed, as a CSV the browser
+ * downloads itself: the session is a same-origin cookie, so a plain link
+ * carries it. A closed month is the stored statement; any other is metered
+ * as it is read, exactly as the page shows it.
+ */
+export const statementLoansCsvUrl = (slug: string, month: string): string =>
+  doorPath(
+    "billing",
+    `/servicers/${encodeURIComponent(slug)}/statements/${encodeURIComponent(month)}/loans.csv`,
+  );
 
 export interface BillingServicer {
   readonly slug: string;

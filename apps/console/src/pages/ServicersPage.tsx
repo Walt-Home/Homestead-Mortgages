@@ -10,15 +10,20 @@
  * A servicer can also be added here before its first tape, so that its
  * team is invited, its billing profile is filled and its bank account is
  * on file by the day the tape arrives; the desk's load then lands on it.
+ *
+ * Each servicer's page also carries its tapes: every one the book was
+ * built from, whether the book adds up, and the way to take a tape back
+ * off it (`#tapes`, which the desk links to).
  */
 
 import { useEffect, useMemo, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Page } from "../components/Page.js";
 import { ServicerTeam } from "../components/ServicerTeam.js";
 import { Sheet } from "../components/Sheet.js";
 import { Table, type Column } from "../components/Table.js";
+import { TapeReconciliation } from "../components/TapeReconciliation.js";
 import { Button, EmptyState, Field, Input, Notice, Stat } from "../components/ui.js";
 import { Loading } from "../components/Loading.js";
 import { fmtDate, plural } from "../lib/format.js";
@@ -197,8 +202,16 @@ export function ServicersPage() {
 
 export function ServicerPage() {
   const { slug } = useParams();
+  const { hash } = useLocation();
   const servicers = useServicers();
   const servicer = servicers.data?.find((s) => s.slug === slug) ?? null;
+  // The desk links to the tapes by their anchor; the router leaves scrolling to the page.
+  const found = servicer !== null;
+  useEffect(() => {
+    if (!found || !hash) return;
+    const at = document.getElementById(hash.slice(1));
+    if (at) requestAnimationFrame(() => at.scrollIntoView({ block: "start" }));
+  }, [found, hash]);
 
   if (servicers.isPending) return <Loading what="Reading the servicer" />;
   if (!servicer) {
@@ -224,6 +237,9 @@ export function ServicerPage() {
       }
       actions={
         <>
+          <Link to={`/partner-book?servicer=${encodeURIComponent(servicer.slug)}`}>
+            <Button variant="secondary">Book</Button>
+          </Link>
           <Link to={`/billing/${servicer.slug}`}>
             <Button variant="secondary">Billing</Button>
           </Link>
@@ -253,6 +269,18 @@ export function ServicerPage() {
         <Stat label="Team" value={servicer.team.active.toLocaleString()} hint="signed in" />
         <Stat label="Invited" value={servicer.team.invited.toLocaleString()} hint="not yet taken" />
       </div>
+
+      <section id="tapes" className="mt-8 scroll-mt-6 space-y-4">
+        <div>
+          <h2 className="text-lg font-semibold tracking-tight text-fg">Tapes</h2>
+          <p className="mt-1 max-w-prose text-sm text-fg-2">
+            Every tape the book was built from, oldest first: what each carried, what it loaded, the
+            loans it added and the ones it found already here. The loans the tapes added, less the
+            ones removed, are the book.
+          </p>
+        </div>
+        <TapeReconciliation slug={servicer.slug} />
+      </section>
 
       <section className="mt-8 space-y-4">
         <div>

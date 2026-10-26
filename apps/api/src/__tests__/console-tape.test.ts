@@ -16,7 +16,7 @@ import express from "express";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { prisma } from "@hm/db";
 import type { FixtureMailConnector } from "@hm/connectors";
-import { NORTHLIGHT, sampleAsOfFor, sampleBook, toCsv } from "@hm/partner-book";
+import { NORTHLIGHT, sampleAsOfFor, sampleBook, toCsv, writeXlsx } from "@hm/partner-book";
 import { config } from "../config.js";
 import { errorHandler } from "../middleware/error-handler.js";
 import { consoleTapeRouter } from "../routes/console-tape.js";
@@ -181,6 +181,40 @@ describe("previewing a tape", () => {
     // Nothing was written.
     expect(await prisma.loan.count()).toBe(before);
     expect(await prisma.servicer.count({ where: { slug: NORTHLIGHT.slug } })).toBe(0);
+  });
+
+  it("finds the address a workbook supplement gives, when its writer stored the number as a double", async () => {
+    // A Java writer stores a ten-digit loan number as "1.002938531E9". The
+    // reader hands back a stored number's text as it hands back a text
+    // cell's, so a text cell stands in for the stored one here.
+    const number = (n: number) => 1002938530 + n;
+    const javaWrote = (n: number) => {
+      const digits = String(number(n));
+      return `${digits[0]}.${digits.slice(1).replace(/0+$/, "")}E${digits.length - 1}`;
+    };
+    const book = sampleBook((l) => ({ servicer_loan_number: number(l.n) }));
+    const withAddress = book.loans.filter((l) => l.supplement_email !== null);
+    const supplement = writeXlsx([
+      ["servicer_loan_number", "borrower_email"],
+      ...withAddress.map((l) => [javaWrote(l.n), l.supplement_email]),
+    ]);
+    const r = await call<{
+      supplement: { matched: number; withEmail: number };
+      rows: { number: string; email: string | null }[];
+    }>("POST", "/preview", {
+      servicer: SERVICER,
+      profile: "m3-v1",
+      tape: { filename: "northlight.xlsx", base64: b64(book.tape) },
+      supplement: { filename: "supplement.xlsx", base64: b64(supplement) },
+    });
+    expect(r.status).toBe(200);
+    expect(withAddress.length).toBeGreaterThan(0);
+    expect(r.body.supplement.matched).toBe(withAddress.length);
+    expect(r.body.supplement.withEmail).toBe(withAddress.length);
+    const first = withAddress[0]!;
+    expect(r.body.rows.find((x) => x.number === String(number(first.n)))!.email).toBe(
+      first.supplement_email,
+    );
   });
 
   it("refuses a tape missing a required header, by name, before reading a row", async () => {

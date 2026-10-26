@@ -33,20 +33,21 @@ const TAPE_STATUS: Record<string, { word: string; tone: Tone }> = {
   matured: { word: "Matured", tone: "neutral" },
   transferred: { word: "Transferred", tone: "neutral" },
 };
-const tapeStatus = (s: string) => TAPE_STATUS[s] ?? { word: s.replace(/_/g, " "), tone: "neutral" };
+export const tapeStatus = (s: string) =>
+  TAPE_STATUS[s] ?? { word: s.replace(/_/g, " "), tone: "neutral" };
 
 /** "the rate reduction clears the floor; the savings are positive" → one sentence. */
-function sentence(reasons: readonly string[]): string {
+export function sentence(reasons: readonly string[]): string {
   if (reasons.length === 0) return "";
   const joined = reasons.join("; ");
   return `${joined.charAt(0).toUpperCase()}${joined.slice(1)}.`;
 }
 
-function termWord(months: number): string {
+export function termWord(months: number): string {
   return months % 12 === 0 ? plural(months / 12, "year") : plural(months, "month");
 }
 
-function addressLines(a: PortalLoanDetail["address"]): string | null {
+export function addressLines(a: PortalLoanDetail["address"]): string | null {
   const street = [a.line1, a.line2].filter(Boolean).join(", ");
   const place = [a.city, [a.state, a.postalCode].filter(Boolean).join(" ")]
     .filter(Boolean)

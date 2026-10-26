@@ -1,10 +1,14 @@
 /**
  * Loans: search by number, open one.
+ *
+ * These are the loans boarded on the servicing app, on its own database.
+ * A servicer's tape never fills it: the loans a tape carries are ours, on
+ * the Partner book, and the page says so rather than look empty.
  */
 
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { Page, Section } from "../components/Page.js";
 import { Table, type Column } from "../components/Table.js";
 import { Input, Notice, Pill, type Tone } from "../components/ui.js";
@@ -82,7 +86,19 @@ export function LoansPage() {
     [],
   );
   return (
-    <Page title="Loans" description="Every loan this platform holds, by number.">
+    <Page
+      title="Loans"
+      description={
+        <>
+          Every loan boarded on the servicing app, by number. Loans a servicer sends on tape are on
+          the{" "}
+          <Link to="/partner-book" className="underline hover:text-fg">
+            Partner book
+          </Link>
+          .
+        </>
+      }
+    >
       <Section>
         <form
           className="relative mb-3 max-w-md"

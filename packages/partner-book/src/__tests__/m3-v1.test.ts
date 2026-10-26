@@ -32,6 +32,15 @@ describe("money", () => {
     expect(parseMoneyCents("0")).toBe("0");
   });
 
+  it("reads a stored double's scientific notation to the cent, and not a display's", () => {
+    expect(parseMoneyCents("1.25E7")).toBe("1250000000");
+    expect(parseMoneyCents("$1.2345678912E7")).toBe("1234567891");
+    expect(parseMoneyCents("(1.5E3)")).toBe("-150000");
+    expect(parseMoneyCents("5.0E-3")).toBe("1");
+    // A spreadsheet's display, rounded to what the column could show.
+    expect(parseMoneyCents("4.41366E+05")).toBe(null);
+  });
+
   it("answers null for what it cannot read, never a number", () => {
     expect(parseMoneyCents("")).toBe(null);
     expect(parseMoneyCents("n/a")).toBe(null);
@@ -49,6 +58,17 @@ describe("rates", () => {
     expect(parseRatePct("1")).toBe("100.000");
     expect(parseRatePct("-1")).toBe(null);
     expect(parseRatePct("seven")).toBe(null);
+  });
+
+  it("reads a stored double's scientific notation, and refuses what it cannot hold", () => {
+    expect(parseRatePct("4.4999999999999998E-2")).toBe("4.500");
+    expect(parseRatePct("5.0E-4")).toBe("0.050");
+    expect(parseRatePct("7.25E0")).toBe("7.250");
+    expect(parsePctDecimal("8.0E1")).toBe("80.000");
+    expect(parsePctDecimal("8.0E+1")).toBe(null);
+    // Past the kernel's thirty decimal places: unreadable, not a throw.
+    expect(parseRatePct("1.0E-40")).toBe(null);
+    expect(parsePctDecimal("0.1234567890123456789012345678901")).toBe(null);
   });
 
   it("keeps a percentage as written and never rescales it", () => {
@@ -98,6 +118,8 @@ describe("dates", () => {
     expect(parseDateIso("61")).toBe("1900-03-01");
     expect(parseDateIso("46266")).toBe("2026-09-01");
     expect(parseDateIso("0")).toBe(null);
+    // No writer stores a serial in scientific notation.
+    expect(parseDateIso("4.6266E4")).toBe(null);
   });
 
   it("refuses a day the month does not have", () => {
@@ -114,6 +136,9 @@ describe("integers and booleans", () => {
     expect(parseIntCell("1,200")).toBe(1200);
     expect(parseIntCell("748.5")).toBe(null);
     expect(parseIntCell("")).toBe(null);
+    expect(parseIntCell("1.2E7")).toBe(12_000_000);
+    expect(parseIntCell("7.48E2")).toBe(748);
+    expect(parseIntCell("7.485E2")).toBe(null);
   });
 
   it("reads flags", () => {

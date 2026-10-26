@@ -2,6 +2,10 @@
  * People and accounts (his 34.2 directory): every party with an account,
  * searchable, and each one's record with contact details masked until a
  * compliance or officer role unmasks them with a reason.
+ *
+ * These are the servicing app's accounts. The homeowners on a servicer's
+ * tape are not among them — the tape loads onto our book, the Partner book
+ * — and the page says so rather than look empty.
  */
 
 import { useMemo, useState } from "react";
@@ -219,7 +223,19 @@ export function PeoplePage() {
   const error = (term.length >= 3 ? search.error : list.error) as ApiError | null;
 
   return (
-    <Page title="People" description="Everyone with an account, and what each of them is here for.">
+    <Page
+      title="People"
+      description={
+        <>
+          Everyone with an account on the servicing app, and what each of them is here for. The
+          homeowners on a servicer&rsquo;s tape are on the{" "}
+          <Link to="/partner-book" className="underline hover:text-fg">
+            Partner book
+          </Link>
+          , with their loans.
+        </>
+      }
+    >
       <Section>
         <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center">
           <form

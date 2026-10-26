@@ -23,6 +23,9 @@ import {
   inviteServicerTeam,
   listServicerTeam,
   removeServicerMember,
+  SERVICER_BOOK_PAGE,
+  servicerBookLoan,
+  servicerBookLoans,
 } from "../services/servicer-team.js";
 import {
   createServicer,
@@ -35,6 +38,7 @@ import {
   reviewBook,
   todayEt,
 } from "../services/tape-desk.js";
+import { bookTapes, removeTape } from "../services/tape-removal.js";
 
 /**
  * A file on the wire: its name and its bytes, base64, gzipped first when the
@@ -66,6 +70,8 @@ const TapeBody = z
       .optional(),
     tape: FileSchema,
     supplement: FileSchema.optional(),
+    /** Load even though the preview found loans the book holds under another spelling of the number. */
+    allowNearDuplicates: z.boolean().optional(),
   })
   .strict();
 
@@ -105,6 +111,24 @@ const ServicerBody = z
     displayName: z.string().trim().min(1).max(200),
   })
   .strict();
+
+/** A tape taken back: the loans it removes, confirmed by the person asking, and why. */
+const RemoveBody = z
+  .object({
+    confirmLoans: z.number().int().min(0),
+    reason: z.string().trim().min(1).max(500),
+  })
+  .strict();
+
+/** The servicer a desk route names, or a 404 that says so. */
+async function servicerIdOf(slug: unknown): Promise<string> {
+  const servicer =
+    typeof slug === "string" && slug !== ""
+      ? await prisma.servicer.findUnique({ where: { slug }, select: { id: true } })
+      : null;
+  if (!servicer) throw new AppError(404, "No servicer by that name.", "NOT_FOUND");
+  return servicer.id;
+}
 
 const TeamBody = z
   .object({
@@ -193,6 +217,64 @@ export function consoleTapeRouter(gate: ConsoleStaffGateOptions): Router {
     }),
   );
 
+  /** A servicer's loans, a page at a time — what its team reads in the portal, from our book. */
+  router.get(
+    "/servicers/:slug/loans",
+    asyncRoute(async (req, res) => {
+      const servicerId = await servicerIdOf(req.params.slug);
+      const query = z
+        .object({
+          q: z.string().max(200).optional(),
+          offset: z.coerce.number().int().min(0).default(0),
+          limit: z.coerce.number().int().min(1).max(SERVICER_BOOK_PAGE).default(SERVICER_BOOK_PAGE),
+        })
+        .parse(req.query);
+      res.json(await servicerBookLoans(servicerId, query));
+    }),
+  );
+
+  /** One loan on a servicer's book. Another servicer's loan, and no loan at all, answer alike. */
+  router.get(
+    "/servicers/:slug/loans/:loanId",
+    asyncRoute(async (req, res) => {
+      const servicerId = await servicerIdOf(req.params.slug);
+      const id = z.string().uuid().safeParse(req.params.loanId);
+      const loan = id.success ? await servicerBookLoan(servicerId, id.data) : null;
+      if (!loan) {
+        throw new AppError(404, "No loan by that id on this servicer's book.", "NOT_FOUND");
+      }
+      res.json({ loan });
+    }),
+  );
+
+  /** The servicer's tapes, added up: what each made, what is left of it, and whether it can be taken back. */
+  router.get(
+    "/servicers/:slug/tapes",
+    asyncRoute(async (req, res) => {
+      res.json(await bookTapes(String(req.params.slug)));
+    }),
+  );
+
+  /**
+   * Take one tape back off the book, with the reason and the number of loans
+   * it removes typed by the person asking, under their staff id.
+   */
+  router.post(
+    "/servicers/:slug/tapes/:tapeId/remove",
+    asyncRoute(async (req, res) => {
+      const body = RemoveBody.parse(req.body);
+      res.json(
+        await removeTape({
+          slug: String(req.params.slug),
+          tapeId: String(req.params.tapeId),
+          confirmLoans: body.confirmLoans,
+          reason: body.reason,
+          staff: { id: req.staff!.id, legalName: req.staff!.legalName },
+        }),
+      );
+    }),
+  );
+
   router.get(
     "/imports",
     asyncRoute(async (req, res) => {
@@ -219,7 +301,11 @@ export function consoleTapeRouter(gate: ConsoleStaffGateOptions): Router {
     }),
   );
 
-  /** The load itself. 201 when it wrote, 200 when this exact tape was loaded before, 422 when refused. */
+  /**
+   * The load itself. 201 when it wrote, 200 when this exact tape was loaded
+   * before, 422 when refused, 409 when it carries loans the book holds under
+   * another spelling of the number and the body did not say that is meant.
+   */
   router.post(
     "/imports",
     asyncRoute(async (req, res) => {
@@ -231,6 +317,7 @@ export function consoleTapeRouter(gate: ConsoleStaffGateOptions): Router {
         billingMonth: billingMonthOf(body),
         tape: bytesOf(body.tape),
         supplement: body.supplement ? bytesOf(body.supplement) : null,
+        allowNearDuplicates: body.allowNearDuplicates ?? false,
       });
       const status =
         loaded.result.status === "rejected" ? 422 : loaded.result.status === "loaded" ? 201 : 200;
@@ -253,6 +340,7 @@ export function consoleTapeRouter(gate: ConsoleStaffGateOptions): Router {
             billingMonth: billingMonthOf(body),
             tape: bytesOf(body.tape),
             supplement: body.supplement ? bytesOf(body.supplement) : null,
+            allowNearDuplicates: body.allowNearDuplicates ?? false,
           },
           prisma,
           send,

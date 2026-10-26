@@ -90,6 +90,9 @@ const BASE: Record<Door, string> = {
   staff: "/console/hm/staff",
 };
 
+/** A path at a door, as a link: for what the browser fetches itself, a download say. */
+export const doorPath = (door: Door, path: string): string => `${BASE[door]}${path}`;
+
 export async function call<T>(
   path: string,
   init: Call = {},

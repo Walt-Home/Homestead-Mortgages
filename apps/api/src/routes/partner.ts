@@ -9,7 +9,9 @@
  *
  *   GET  /me                  who am I, and how deep are we wired to you
  *   POST /book/imports        a tape and its supplement, base64 in JSON —
- *                             201 loaded, 200 already loaded, 422 rejected
+ *                             201 loaded, 200 already loaded, 422 rejected,
+ *                             409 when it carries loans already on the book
+ *                             under another spelling of the number
  *   GET  /book/imports        the servicer's imports, newest first
  *   GET  /book/imports/:id    one, with its report; a stranger's is a 404
  *   GET  /book/status         tapes read, the latest as-of, loans by state
@@ -59,6 +61,12 @@ const ImportBody = z
       .optional(),
     tape: FileSchema,
     supplement: FileSchema.optional(),
+    /**
+     * Load a tape that carries loans the book holds under another spelling
+     * of the number. Without it such a tape is refused, 409
+     * TAPE_NEAR_DUPLICATES, and nothing is written.
+     */
+    allowNearDuplicates: z.boolean().optional(),
   })
   .strict();
 
@@ -84,6 +92,7 @@ partnerRouter.post("/book/imports", async (req, res) => {
       billedFrom: body.billingMonth ? `${body.billingMonth}-01` : null,
       tape: bytesOf(body.tape),
       supplement: body.supplement ? bytesOf(body.supplement) : null,
+      allowNearDuplicates: body.allowNearDuplicates ?? false,
     });
   } catch (err) {
     // The one thing the reader refuses by name before it reads a byte.

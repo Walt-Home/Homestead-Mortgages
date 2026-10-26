@@ -22,6 +22,7 @@ import { INVOICE_WORDS, InvoicePanel } from "../components/InvoicePanel.js";
 import { useToast } from "../components/Toast.js";
 import {
   Button,
+  ButtonLink,
   EmptyState,
   Field,
   Input,
@@ -44,6 +45,7 @@ import {
   monthsSince,
   openInvoicePage,
   paymentMethodWord,
+  statementLoansCsvUrl,
   stripeDashboardUrl,
   tokensWord,
   type BillingList,
@@ -321,6 +323,15 @@ export function BillingServicerPage() {
               </option>
             ))}
           </Select>
+          {month ? (
+            <ButtonLink
+              href={statementLoansCsvUrl(slug, month)}
+              download
+              title={`One row per loan billed in ${monthLabel(month)}, and a total`}
+            >
+              Download loans (CSV)
+            </ButtonLink>
+          ) : null}
           {answer?.standing === "open" && month ? (
             <Button
               variant="primary"
@@ -444,7 +455,14 @@ export function BillingServicerPage() {
             title="By loan"
             aside={
               <span className="text-sm text-fg-3">
-                {plural(s.loans.length, "loan")} consumed something
+                {plural(s.loans.length, "loan")} consumed something ·{" "}
+                <a
+                  href={statementLoansCsvUrl(slug, s.month)}
+                  download
+                  className="text-fg-2 underline hover:text-fg"
+                >
+                  Download loans (CSV)
+                </a>
               </span>
             }
             className="mt-8"

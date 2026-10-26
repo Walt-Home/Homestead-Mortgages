@@ -38,6 +38,7 @@ import { Sheet } from "../components/Sheet.js";
 import { Table, type Column } from "../components/Table.js";
 import {
   Button,
+  Checkbox,
   Field,
   FilterPill,
   Input,
@@ -73,6 +74,7 @@ import {
   type PreviewRow,
   type TapeFiles,
   type TapeLoad,
+  type TapeLoadFiles,
   type TapePreview,
   VERDICT_FILTERS,
   VERDICT_RANK,
@@ -210,6 +212,13 @@ export function TapePage() {
   const homeownerMailOn = settings.data?.homeownerMail === "on";
   const steps = homeownerMailOn ? STEPS : STEPS.filter((s) => s.key !== "invite");
   const [wire, setWire] = useState<TapeFiles | null>(null);
+  // Leave to load loans the book already holds under another spelling, as
+  // new loans. Never assumed: it is ticked on the review, having seen them.
+  const [allowNearDuplicates, setAllowNearDuplicates] = useState(false);
+  const loadWire = useMemo<TapeLoadFiles | null>(
+    () => (wire && allowNearDuplicates ? { ...wire, allowNearDuplicates: true } : wire),
+    [wire, allowNearDuplicates],
+  );
 
   // One servicer to begin with picks itself; a new one is typed.
   useEffect(() => {
@@ -246,6 +255,7 @@ export function TapePage() {
     if (!tape || !servicer) return;
     setBusy(true);
     setError(null);
+    setAllowNearDuplicates(false);
     try {
       const files: TapeFiles = {
         servicer,
@@ -273,6 +283,7 @@ export function TapePage() {
     setPreview(null);
     setVerdicts(null);
     setWire(null);
+    setAllowNearDuplicates(false);
     setError(null);
   }
 
@@ -283,8 +294,11 @@ export function TapePage() {
       ["desk-servicers"],
       ["desk-imports"],
       ["partners"],
-      ["book-imports"],
-      ["book-loans"],
+      ["servicer-book-loans"],
+      ["tape-reconciliation"],
+      ["billing-servicer"],
+      ["billing-statement"],
+      ["billing-servicers"],
       ["loans"],
       ["home"],
     ])
@@ -477,6 +491,14 @@ export function TapePage() {
                     Choose a servicer to see where their book stands.
                   </p>
                 )}
+                {chosen && chosen.book.imports > 0 ? (
+                  <Link
+                    to={`/servicers/${chosen.slug}#tapes`}
+                    className="mt-3 inline-block text-sm text-fg-2 underline hover:text-fg"
+                  >
+                    Every tape loaded, and how the book adds up
+                  </Link>
+                ) : null}
               </div>
               {chosen && (history.data?.length ?? 0) > 0 ? (
                 <div className="rounded-lg border border-line bg-surface p-4">
@@ -501,14 +523,16 @@ export function TapePage() {
           <ReviewStep
             preview={preview}
             supplementGiven={!!supplement}
+            allowNearDuplicates={allowNearDuplicates}
+            onAllowNearDuplicates={setAllowNearDuplicates}
             onBack={startOver}
             onLoad={() => setStep("load")}
           />
         )}
 
-        {step === "load" && preview && wire && tape && (
+        {step === "load" && preview && loadWire && tape && (
           <LoadStep
-            wire={wire}
+            wire={loadWire}
             preview={preview}
             onFinish={(v) => {
               afterLoad(v);
@@ -680,11 +704,16 @@ function Drop({
 function ReviewStep({
   preview,
   supplementGiven,
+  allowNearDuplicates,
+  onAllowNearDuplicates,
   onBack,
   onLoad,
 }: {
   preview: TapePreview;
   supplementGiven: boolean;
+  /** Whether the person has said to load the near-duplicates as new loans. */
+  allowNearDuplicates: boolean;
+  onAllowNearDuplicates: (allow: boolean) => void;
   onBack: () => void;
   onLoad: () => void;
 }) {
@@ -783,6 +812,10 @@ function ReviewStep({
 
   // The day the verdicts in the Refi column were recorded: they are stored, not computed here.
   const reviewedOn = preview.rows.find((r) => r.review)?.review?.asOf ?? null;
+  // Loans the book already holds under another spelling of their numbers.
+  // A load that would add them as new loans waits until somebody says so.
+  const near = preview.nearDuplicates ?? { count: 0, rows: [] };
+  const held = near.count > 0 && !allowNearDuplicates;
 
   return (
     <div className="mt-8 space-y-6">
@@ -799,7 +832,12 @@ function ReviewStep({
           <Button variant="ghost" onClick={onBack}>
             Change the files
           </Button>
-          <Button variant="primary" disabled={preview.rejected} onClick={onLoad}>
+          <Button
+            variant="primary"
+            disabled={preview.rejected || held}
+            title={held ? "Some loans on this tape are already on the book; see below." : undefined}
+            onClick={onLoad}
+          >
             {preview.alreadyLoaded ? "Load it anyway" : "Load the tape"}
           </Button>
         </div>
@@ -822,6 +860,10 @@ function ReviewStep({
           All {preview.headers.required} required columns are present.
         </Notice>
       )}
+
+      {!preview.rejected && near.count > 0 ? (
+        <NearDuplicates near={near} allow={allowNearDuplicates} onAllow={onAllowNearDuplicates} />
+      ) : null}
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
         <Stat label="Rows on the tape" value={preview.rowsTotal.toLocaleString()} />
@@ -937,7 +979,92 @@ function ReviewStep({
   );
 }
 
+/** How many of the near-duplicates the review lists; the count says how many more. */
+const NEAR_SHOWN = 20;
+
+/**
+ * Loans on the tape the book already holds under another spelling of their
+ * numbers. A Java spreadsheet writer stores a ten-digit loan number as
+ * `1.002027994E9`; read as text, that matched nothing, and on 26 October
+ * 2026 a re-exported tape of 245 loans already on the book loaded as 245
+ * more. The load now waits for somebody to say these are new loans.
+ */
+function NearDuplicates({
+  near,
+  allow,
+  onAllow,
+}: {
+  near: TapePreview["nearDuplicates"];
+  allow: boolean;
+  onAllow: (allow: boolean) => void;
+}) {
+  const shown = near.rows.slice(0, NEAR_SHOWN);
+  return (
+    <section className="space-y-3">
+      <Notice
+        tone="danger"
+        title={`${plural(near.count, "loan")} on this tape ${
+          near.count === 1 ? "is" : "are"
+        } already on the book under another spelling`}
+      >
+        Each number differs from a loan the book holds only in how it is written: scientific
+        notation, spaces, dashes or leading zeros. Loaded as they are, each becomes a second loan
+        beside the first, and both are counted and billed. Ask for the file again with the numbers
+        as the book has them, or load them as new loans if they really are different loans.
+      </Notice>
+      <div className="overflow-hidden rounded-lg border border-line-2 bg-surface">
+        <Table
+          dense
+          columns={[
+            {
+              key: "row",
+              header: "Row",
+              mono: true,
+              width: "w-14",
+              hideOnCard: true,
+              render: (r) => r.row,
+            },
+            {
+              key: "number",
+              header: "On the tape",
+              mono: true,
+              primary: true,
+              render: (r) => r.number,
+            },
+            { key: "onBook", header: "On the book", mono: true, render: (r) => r.onBook },
+          ]}
+          rows={shown}
+          rowKey={(r) => `${r.row}-${r.number}`}
+        />
+      </div>
+      {near.count > shown.length ? (
+        <p className="text-sm text-fg-3">
+          The first {shown.length.toLocaleString()} of {plural(near.count, "loan")}.
+        </p>
+      ) : null}
+      <Checkbox
+        label="Load them anyway as new loans"
+        checked={allow}
+        onChange={(e) => onAllow(e.target.checked)}
+      />
+    </section>
+  );
+}
+
 /* ── load ──────────────────────────────────────────────────────────────────── */
+
+/**
+ * A refusal's code wherever the answer put it: on the error itself, or —
+ * when a stream ended on a refused answer rather than an error line —
+ * inside our envelope beside the message.
+ */
+function refusalCode(e: ApiError): string | null {
+  if (e.code) return e.code;
+  const nested = e.extra.error as { code?: unknown } | undefined;
+  return nested && typeof nested === "object" && typeof nested.code === "string"
+    ? nested.code
+    : null;
+}
 
 type Phase<T> =
   | { state: "idle" }
@@ -993,7 +1120,7 @@ function LoadStep({
   onTeam,
   onBack,
 }: {
-  wire: TapeFiles;
+  wire: TapeLoadFiles;
   preview: TapePreview;
   /** The load is the whole job: out to the servicer's page. */
   onFinish: (verdicts: Record<string, Verdict> | null) => void;
@@ -1108,12 +1235,25 @@ function LoadStep({
             ) : null}
           </>
         )}
-        renderFailed={(e) => (
-          <div className="space-y-3">
-            <Notice tone="danger">{e.message}</Notice>
-            <Button onClick={() => void loadDb()}>Try again</Button>
-          </div>
-        )}
+        renderFailed={(e) =>
+          refusalCode(e) === "TAPE_NEAR_DUPLICATES" ? (
+            <div className="space-y-3">
+              <Notice
+                tone="danger"
+                title="Some loans on this tape are already on the book under another spelling"
+              >
+                {e.message} Nothing was written. Go back to the review to see them, and load them as
+                new loans only if they really are different loans.
+              </Notice>
+              <Button onClick={onBack}>Back to the review</Button>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <Notice tone="danger">{e.message}</Notice>
+              <Button onClick={() => void loadDb()}>Try again</Button>
+            </div>
+          )
+        }
       />
 
       <PhaseCard

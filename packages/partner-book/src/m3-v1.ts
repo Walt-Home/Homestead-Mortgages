@@ -8,9 +8,9 @@
  * become ISO, Excel serials converted; Y/N and 1/0 become booleans. A cell
  * that cannot be read is a row exception naming the column, and the row keeps
  * every other fact. Headers the profile does not know are kept verbatim under
- * `raw`. A row is skipped only when it has no servicer loan number, no
- * property state, or no readable balance and rate — and the skip is on the
- * report.
+ * `raw`. A row is skipped only when it has no servicer loan number, a loan
+ * number the reader cannot read exactly, no property state, or no readable
+ * balance and rate — and the skip is on the report.
  *
  * Columns marked `investor` are the partner's investor economics. They never
  * leave this module as facts: `docs/states.md` forbids the acquisition channel
@@ -21,7 +21,7 @@
  * a test all use.
  */
 
-import { Decimal } from "@hm/kernel/money";
+import { Decimal, SCALE } from "@hm/kernel/money";
 import { daysInMonth } from "@hm/kernel/calendar";
 import { excelSerialToIsoDate } from "./vendored/xlsx.js";
 
@@ -57,14 +57,28 @@ export type RowExceptionCode =
   | "implausible_value"
   | "name_unsplit"
   | "no_property_address"
-  | "no_term";
+  | "no_term"
+  | "loan_number_scientific"
+  | "loan_number_not_exact";
 
 export type RowException = {
   row: number;
   servicer_loan_number: string | null;
   code: RowExceptionCode;
   column?: string;
+  /** What the person loading the file can do about it, where the code alone does not say. */
+  detail?: string;
 };
+
+/**
+ * Where a row's text came from, because the same text means different things
+ * in the two. A workbook hands back a numeric cell as the text its writer
+ * stored for the double — a Java writer stores a ten-digit loan number as
+ * "1.002938533E9" — and that text names the number exactly. A CSV cell is
+ * whatever a program printed, and a spreadsheet prints a long number the way
+ * it fits the column ("1.00294E+11"), with the digits it did not show gone.
+ */
+export type FileKind = "xlsx" | "csv";
 
 const C = (
   header: string,
@@ -228,11 +242,146 @@ export function normalizeHeader(h: string): string {
   return h.trim().replace(/\s+/g, " ").toLowerCase();
 }
 
+// ── numbers in scientific notation ────────────────────────────────────────
+
+/**
+ * A number in scientific notation, written out in plain digits: "1.25E7" →
+ * "12500000", "5.0E-4" → "0.0005", "-1.5E2" → "-150". String arithmetic —
+ * the mantissa's digits with the point moved — and never a double, so every
+ * digit written is kept and none is invented. Null when the text is not
+ * scientific notation, when its exponent is past any double's, and when the
+ * exponent carries a plus sign.
+ *
+ * The plus sign is the line between a number as stored and a number as
+ * shown. A writer storing a double prints the exponent bare — Java's
+ * "1.002938533E9", Excel's own "4.4999999999999998E-2" — while a spreadsheet
+ * showing a long number in a column too narrow for it prints "1.00294E+11",
+ * rounded to what fits, and a CSV saved from it carries the rounding. Some
+ * writers do sign the exponent from 10^15 up, past any balance or rate; a
+ * loan number that long, stored that way, is refused and asked for as text
+ * (`readLoanNumber`).
+ */
+export function expandScientific(text: string): string | null {
+  const m = /^([+-]?)(\d*)(?:\.(\d*))?[eE]([+-]?)(\d+)$/.exec(text.trim());
+  if (!m) return null;
+  const [, sign = "", int = "", frac = "", expSign = "", expDigits = ""] = m;
+  if ((int === "" && frac === "") || expSign === "+") return null;
+  const exp = (expSign === "-" ? -1 : 1) * Number(expDigits);
+  // A double's exponent runs from -324 to 308.
+  if (!Number.isSafeInteger(exp) || Math.abs(exp) > 400) return null;
+  const digits = int + frac;
+  const point = int.length + exp;
+  let whole: string;
+  let fraction: string;
+  if (point <= 0) {
+    whole = "0";
+    fraction = "0".repeat(-point) + digits;
+  } else if (point >= digits.length) {
+    whole = digits + "0".repeat(point - digits.length);
+    fraction = "";
+  } else {
+    whole = digits.slice(0, point);
+    fraction = digits.slice(point);
+  }
+  whole = whole.replace(/^0+(?=\d)/, "");
+  fraction = fraction.replace(/0+$/, "");
+  if (/^0*$/.test(whole + fraction)) return "0";
+  return (sign === "-" ? "-" : "") + whole + (fraction ? `.${fraction}` : "");
+}
+
+/**
+ * Scientific notation as a program prints a number: one digit, then a point,
+ * more digits and an exponent ("1.002938533E9", "1.00294E+11"), or no point
+ * and a signed exponent ("1E+11"). "4E2" and "2019E0012" are not this, since
+ * no program prints a number that way, and an identifier may well be either.
+ */
+const SCIENTIFIC = /^[+-]?\d(?:\.\d+[eE][+-]?\d+|[eE][+-]\d+)$/;
+
+/**
+ * 2^53 − 1: past it a double cannot hold every whole number, so the digits
+ * of one that large are the writer's rounding.
+ */
+const MAX_EXACT_WHOLE = BigInt(Number.MAX_SAFE_INTEGER);
+
+/**
+ * A stored number's text — scientific, or a whole number with a ".0" as Java
+ * writes one below 10^7 — as the whole number it names, in digits; null when
+ * it names none exactly: a fraction, a negative, a value past 2^53 − 1, or an
+ * exponent with a plus sign (see `expandScientific`).
+ */
+function exactWholeNumber(text: string): string | null {
+  const plain = SCIENTIFIC.test(text) ? expandScientific(text) : text.replace(/\.0+$/, "");
+  return plain !== null && /^\d+$/.test(plain) && BigInt(plain) <= MAX_EXACT_WHOLE ? plain : null;
+}
+
+export type LoanNumberRefusal = {
+  readonly code: "loan_number_scientific" | "loan_number_not_exact";
+  readonly detail: string;
+};
+
+/**
+ * A loan-number cell as the loan number it is, or the reason it cannot be
+ * read without guessing digits. The cell is trimmed and not empty.
+ *
+ * From a workbook, a number the writer stored — "1.002938533E9", or
+ * "1234567.0" — is written out in its digits when it names a whole number
+ * exactly, and refused as `loan_number_not_exact` when it does not. From a
+ * CSV, scientific notation is never written out: it may be a spreadsheet's
+ * display with digits already gone, so it is refused as
+ * `loan_number_scientific`. Anything else is the loan number as written,
+ * dashes, letters and leading zeros kept.
+ */
+export function readLoanNumber(cell: string, kind: FileKind): string | LoanNumberRefusal {
+  const t = cell.trim();
+  const scientific = SCIENTIFIC.test(t);
+  if (scientific && kind === "csv") {
+    return {
+      code: "loan_number_scientific",
+      detail:
+        `The loan number reads "${t}", a number in scientific notation, the way a spreadsheet ` +
+        "shows a long one, and the digits it did not show may be gone. Format the loan-number " +
+        "column as text and export the file again.",
+    };
+  }
+  if (scientific || (kind === "xlsx" && /^\d+\.0+$/.test(t))) {
+    return (
+      exactWholeNumber(t) ?? {
+        code: "loan_number_not_exact",
+        detail:
+          `The workbook holds the loan number as "${t}", which names no whole number exactly, ` +
+          "so its digits would be a guess. Format the loan-number column as text and export the " +
+          "workbook again.",
+      }
+    );
+  }
+  return t;
+}
+
+/**
+ * A loan number as a key to compare two by, never as one to store: the same
+ * loan written "1002938533", "1.002938533E9", "001002938533" or "1002-938533"
+ * comes back "1002938533". Scientific notation is written out when it names
+ * a whole number exactly (`exactWholeNumber`); otherwise spaces and dashes
+ * go, and a number that is all digits, with or without a ".0", loses its
+ * leading zeros and the ".0". An identifier with letters keeps them as
+ * written. Null when nothing is left, or when the notation names no whole
+ * number exactly — "1.00294E+11" included, which may be a display's rounding.
+ */
+export function plainLoanNumber(raw: string): string | null {
+  const t = raw.trim();
+  if (SCIENTIFIC.test(t)) return exactWholeNumber(t);
+  const s = t.replace(/[\s-]+/g, "");
+  if (!s) return null;
+  const whole = /^(\d+)(?:\.0+)?$/.exec(s);
+  return whole ? whole[1]!.replace(/^0+(?=\d)/, "") : s;
+}
+
 // ── parsers (pure; null = unreadable; "" is the caller's empty cell) ──────
 
 /**
  * "$441,366.13" | "441366.13" | "(1,234.50)" | "1,234.50-" → "44136613" /
- * "-123450"; half-up to the cent; null when unreadable.
+ * "-123450"; a stored double's scientific notation ("1.25E7") written out
+ * first (`expandScientific`); half-up to the cent; null when unreadable.
  */
 export function parseMoneyCents(cell: string): string | null {
   let s = cell.trim();
@@ -256,6 +405,7 @@ export function parseMoneyCents(cell: string): string | null {
     s = s.slice(1).trim();
   }
   s = s.replace(/,/g, "");
+  s = expandScientific(s) ?? s;
   const m = /^(\d*)(?:\.(\d*))?$/.exec(s);
   if (!m) return null;
   const int = m[1] ?? "";
@@ -295,7 +445,9 @@ export function fourDigitYear(yy: number, now: Date = new Date()): number {
 /**
  * ISO (with or without a time), yyyy/mm/dd, m/d/yyyy, m-d-yyyy, m/d/yy
  * (each with or without a time; the two-digit year by `fourDigitYear`),
- * yyyymmdd, Excel serial text → "YYYY-MM-DD"; null when unreadable.
+ * yyyymmdd, Excel serial text → "YYYY-MM-DD"; null when unreadable. A serial
+ * is never read from scientific notation: every writer prints the serials 1
+ * to 2,958,465 plainly, so a date cell written that way was not stored as one.
  */
 export function parseDateIso(cell: string, now: Date = new Date()): string | null {
   const s = cell.trim();
@@ -325,9 +477,16 @@ export function parseDateIso(cell: string, now: Date = new Date()): string | nul
   return null;
 }
 
+/**
+ * A plain decimal, or a stored double's scientific notation written out;
+ * null past the kernel's SCALE decimal places, which no rate or percentage
+ * reaches and which the kernel would refuse by throwing.
+ */
 function parsePlainDecimal(s: string): Decimal | null {
-  const t = s.replace(/,/g, "").trim();
+  const written = s.replace(/,/g, "").trim();
+  const t = expandScientific(written) ?? written;
   if (!/^[+-]?(\d+\.?\d*|\.\d+)$/.test(t)) return null;
+  if ((t.split(".")[1] ?? "").length > SCALE) return null;
   const fixed = t.startsWith(".")
     ? "0" + t
     : t.startsWith("-.")
@@ -339,8 +498,8 @@ function parsePlainDecimal(s: string): Decimal | null {
 }
 
 /**
- * "7.25" | "7.250%" | "0.0725" (≤ 1 without a % sign → ×100) → "7.250"
- * (3 dp, half-up); null when unreadable or negative.
+ * "7.25" | "7.250%" | "0.0725" | "7.25E-2" (≤ 1 without a % sign → ×100) →
+ * "7.250" (3 dp, half-up); null when unreadable or negative.
  */
 export function parseRatePct(cell: string): string | null {
   let s = cell.trim();
@@ -374,10 +533,11 @@ export function parseBathsDecimal(cell: string): string | null {
   return parsePctDecimal(s);
 }
 
-/** "748" | "748.0" | "1,200" → number; null when unreadable. */
+/** "748" | "748.0" | "1,200" | "1.2E7" → number; null when unreadable. */
 export function parseIntCell(cell: string): number | null {
-  const s = cell.trim().replace(/,/g, "");
-  if (!s) return null;
+  const written = cell.trim().replace(/,/g, "");
+  if (!written) return null;
+  const s = expandScientific(written) ?? written;
   const m = /^([+-]?\d+)(?:\.0*)?$/.exec(s);
   if (!m) return null;
   const n = Number(m[1]);
@@ -487,12 +647,18 @@ export type MappedRow = {
   skip: RowExceptionCode | null;
 };
 
-/** Map one tape row. Investor columns are read for the gate and then dropped. */
+/**
+ * Map one tape row. Investor columns are read for the gate and then dropped.
+ * `kind` is where the row's text came from, and decides only how the loan
+ * number is read (`readLoanNumber`); a caller that cannot say reads it as a
+ * CSV's, which is never rewritten.
+ */
 export function mapTapeRow(
   profile: TapeProfile,
   headers: readonly string[],
   row: readonly string[],
   rowNo: number,
+  kind: FileKind = "csv",
 ): MappedRow {
   const cols = resolveColumns(profile, headers);
   const facts: Record<string, Fact> = {};
@@ -527,7 +693,13 @@ export function mapTapeRow(
     facts[col.key] = v;
   });
   const loanCell = facts[profile.loanNumber];
-  const loanNo = typeof loanCell === "string" && loanCell.trim() !== "" ? loanCell.trim() : null;
+  const written = typeof loanCell === "string" && loanCell.trim() !== "" ? loanCell.trim() : null;
+  const loanRead = written === null ? null : readLoanNumber(written, kind);
+  const refused = loanRead !== null && typeof loanRead !== "string" ? loanRead : null;
+  // A refused number stays as written, on the fact and on the report, so the
+  // person can find the row in their own file.
+  const loanNo = typeof loanRead === "string" ? loanRead : written;
+  facts[profile.loanNumber] = loanNo;
   const exceptions: RowException[] = unreadable.map((column) => ({
     row: rowNo,
     servicer_loan_number: loanNo,
@@ -537,11 +709,21 @@ export function mapTapeRow(
   let skip: RowExceptionCode | null = null;
   const state = facts["property_state"];
   if (loanNo === null) skip = "no_loan_number";
+  else if (refused) skip = refused.code;
   else if (typeof state !== "string" || state.trim() === "") skip = "no_state";
   else if (facts["upb_cents"] === null || facts["note_rate_pct"] === null) {
     skip = "no_balance_or_rate";
   }
-  if (skip) exceptions.push({ row: rowNo, servicer_loan_number: loanNo, code: skip });
+  if (refused) {
+    const column = profile.columns.find((c) => c.key === profile.loanNumber);
+    exceptions.push({
+      row: rowNo,
+      servicer_loan_number: loanNo,
+      code: refused.code,
+      column: column?.header ?? profile.loanNumber,
+      detail: refused.detail,
+    });
+  } else if (skip) exceptions.push({ row: rowNo, servicer_loan_number: loanNo, code: skip });
   else {
     // A rate above 25 % or a balance above the original principal by more
     // than a tenth loads, with `implausible_value` naming the column.

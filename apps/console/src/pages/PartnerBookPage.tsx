@@ -1,576 +1,486 @@
 /**
- * The partner book (his 34.3): each partner's tape and clock, the loans on
- * it with the review's verdict, the imports, and the day's reviews.
+ * The partner book: the loans each servicer sends on tape, as our loans
+ * database holds them — the book the tape desk writes. Each loan with the
+ * newest review's verdict, the offer and where the homeowner's invitation
+ * stands, and every tape the book was built from, reconciled against it.
+ *
+ * It reads our own door and nothing of the servicing app's. The servicing
+ * app keeps a partner book of its own, on its own database, which a tape
+ * loaded at the desk never reaches: this page read that one until 26
+ * October 2026, when a book of two thousand loans was loaded on production
+ * and the page showed none of them.
  */
 
-import { useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { Page, Section } from "../components/Page.js";
-import { Table, type Column } from "../components/Table.js";
 import { Sheet } from "../components/Sheet.js";
+import { Table, type Column } from "../components/Table.js";
+import { TapeReconciliation } from "../components/TapeReconciliation.js";
 import {
   Button,
+  EmptyState,
+  Input,
   Notice,
   Pill,
   Rows,
   Segmented,
   Select,
+  Spinner,
   Stat,
-  type Tone,
 } from "../components/ui.js";
-import { api } from "../lib/api.js";
-import { useAuth } from "../lib/auth.js";
-import { fmtDate, fmtDateTime, fmtRelative, money, parseTs, pct, words } from "../lib/format.js";
+import { Loading } from "../components/Loading.js";
+import { fmtDate, money, plural } from "../lib/format.js";
+import { BOOK_PAGE, bookLoan, bookLoans, type BookLoan } from "../lib/book.js";
+import { deskServicers, verdictTone, verdictWord, type Verdict } from "../lib/tape.js";
+import { claimCell, offerCell, stateWord } from "../partners/pages/BookPage.js";
+import { addressLines, sentence, tapeStatus, termWord } from "../partners/pages/LoanPage.js";
 
-interface Partner {
-  partner_party_id: string;
-  legal_name: string;
-  loans_monitored: number;
-  on_hold: number;
-  imports: number;
-  last_as_of_date: string | null;
-  next_expected: string | null;
-  clock_status: "armed" | "breached" | "none";
-  late: boolean;
-}
-interface BookLoan {
-  loan_id: string;
-  servicer_loan_number: string;
-  partner_party_id: string;
-  partner_legal_name: string;
-  status: string;
-  state: string | null;
-  city: string | null;
-  homeowner: {
-    party_id: string | null;
-    legal_name: string | null;
-    email_masked: string | null;
-  } | null;
-  facts_as_of: string | null;
-  upb_cents: string | number | null;
-  note_rate_pct: string | number | null;
-  pi_cents: string | number | null;
-  next_due_date: string | null;
-  servicing_status: string | null;
-  account_activated: boolean;
-  latest_review: {
-    verdict?: string;
-    as_of_date?: string;
-    reasons?: string[];
-    verdict_words?: string;
-    reasons_in_words?: string[];
-  } | null;
-  latest_readiness: { ready?: boolean; missing?: string[]; as_of_date?: string } | null;
-  on_hold: boolean;
-}
-interface Import {
-  import_id: string;
-  partner_party_id: string;
-  as_of_date: string;
-  profile: string;
-  status: string;
-  created_at: string;
-  rows_total: number;
-  rows_loaded: number;
-  rows_exception: number;
-  loans_created: number;
-  loans_updated: number;
-  loans_unchanged: number;
-  on_hold: number;
-}
-interface Day {
-  as_of_date: string;
-  reviews: {
-    count: number;
-    by_verdict: Record<string, number>;
-    on_hold: number;
-    lines: {
-      loan_id: string;
-      servicer_loan_number?: string;
-      verdict: string;
-      reasons?: string[];
-      verdict_words?: string;
-      reasons_in_words?: string[];
-    }[];
-  };
-  readiness: {
-    checked: number;
-    ready: number;
-    not_ready: number;
-    by_missing_item: Record<string, number>;
-  };
-}
+type Tab = "loans" | "tapes";
 
-const verdictTone = (v?: string): Tone =>
-  v === "candidate"
-    ? "ok"
-    : v === "watching"
-      ? "info"
-      : v === "not_now"
-        ? "warn"
-        : v === "excluded"
-          ? "neutral"
-          : "neutral";
+const verdictPill = (v: string) => (
+  <Pill tone={verdictTone(v as Verdict)}>{verdictWord(v as Verdict)}</Pill>
+);
 
 export function PartnerBookPage() {
   const navigate = useNavigate();
-  const { role } = useAuth();
-  const [partner, setPartner] = useState<string>("");
-  const [tab, setTab] = useState<"loans" | "imports" | "today">("loans");
-  const [verdict, setVerdict] = useState("all");
-  const [selected, setSelected] = useState<BookLoan | null>(null);
-
-  const partners = useQuery({
-    queryKey: ["partners", role],
-    queryFn: () => api<{ partners: Partner[] }>("/partner-book/partners"),
-  });
-  const loans = useQuery({
-    queryKey: ["book-loans", role, partner, verdict],
-    queryFn: () =>
-      api<{
-        loans: BookLoan[];
-        counts: {
-          loans: number;
-          on_hold: number;
-          by_verdict: Record<string, number>;
-          ready: number;
-        };
-      }>("/partner-book/loans", {
-        query: { partner: partner || undefined, verdict: verdict === "all" ? undefined : verdict },
-      }),
-    enabled: tab === "loans",
-  });
-  const imports = useQuery({
-    queryKey: ["book-imports", role, partner],
-    queryFn: () =>
-      api<{ imports: Import[] }>("/partner-book/imports", {
-        query: { partner: partner || undefined, lines: "false" },
-      }),
-    enabled: tab === "imports",
-  });
-  const day = useQuery({
-    queryKey: ["book-day", role, partner],
-    queryFn: () => api<Day>("/partner-book/reviews", { query: { partner: partner || undefined } }),
-    enabled: tab === "today",
-  });
-
-  const loanColumns = useMemo<Column<BookLoan>[]>(
-    () => [
-      {
-        key: "loan",
-        header: "Loan",
-        primary: true,
-        render: (r) => (
-          <div className="flex flex-col gap-0.5">
-            <span className="font-mono text-base font-medium text-fg">
-              {r.servicer_loan_number}
-            </span>
-            <span className="text-sm text-fg-2">
-              {r.homeowner?.legal_name ?? "—"}
-              {r.city ? ` · ${r.city}, ${r.state ?? ""}` : ""}
-            </span>
-          </div>
-        ),
+  const [params, setParams] = useSearchParams();
+  const servicers = useQuery({ queryKey: ["desk-servicers"], queryFn: () => deskServicers() });
+  const list = servicers.data ?? [];
+  const slug = list.find((s) => s.slug === params.get("servicer"))?.slug ?? list[0]?.slug ?? "";
+  const chosen = list.find((s) => s.slug === slug) ?? null;
+  const tab: Tab = params.get("tab") === "tapes" ? "tapes" : "loans";
+  const set = (next: { servicer?: string; tab?: Tab }) =>
+    setParams(
+      (p) => {
+        const out = new URLSearchParams(p);
+        if (next.servicer !== undefined) out.set("servicer", next.servicer);
+        if (next.tab !== undefined) {
+          if (next.tab === "loans") out.delete("tab");
+          else out.set("tab", next.tab);
+        }
+        return out;
       },
+      { replace: true },
+    );
+
+  const [q, setQ] = useState("");
+  const [offset, setOffset] = useState(0);
+  const [selected, setSelected] = useState<BookLoan | null>(null);
+  const needle = q.trim();
+  // Another servicer is another book: its paging and search start over.
+  useEffect(() => {
+    setQ("");
+    setOffset(0);
+    setSelected(null);
+  }, [slug]);
+  const loans = useQuery({
+    queryKey: ["servicer-book-loans", slug, needle, offset],
+    queryFn: () => bookLoans(slug, { q: needle, offset, limit: BOOK_PAGE }),
+    enabled: slug !== "" && tab === "loans",
+    // The page a reader was on stays up while the next arrives; another servicer's never does.
+    placeholderData: (previous, query) => (query?.queryKey[1] === slug ? previous : undefined),
+  });
+
+  const columns = useMemo<Column<BookLoan>[]>(
+    () => [
+      { key: "number", header: "Loan", render: (r) => r.number, mono: true, primary: true },
+      { key: "borrower", header: "Borrower", render: (r) => r.borrower ?? "—" },
+      { key: "property", header: "City", render: (r) => r.property ?? "—" },
       {
-        key: "upb",
+        key: "balance",
         header: "Balance",
         align: "right",
-        mono: true,
-        render: (r) => <span className="text-fg">{money(r.upb_cents)}</span>,
+        render: (r) => <span className="tabular-nums">{money(r.balanceCents)}</span>,
       },
       {
         key: "rate",
         header: "Rate",
         align: "right",
-        mono: true,
-        render: (r) => <span className="text-fg">{pct(r.note_rate_pct)}</span>,
+        render: (r) => <span className="tabular-nums">{r.noteRatePct}%</span>,
       },
       {
-        key: "pi",
-        header: "P&I",
-        align: "right",
-        mono: true,
-        render: (r) => <span className="text-fg-2">{money(r.pi_cents)}</span>,
-      },
-      {
-        key: "verdict",
+        key: "review",
         header: "Review",
         render: (r) =>
-          r.latest_review?.verdict ? (
-            <Pill tone={verdictTone(r.latest_review.verdict)}>
-              {words(r.latest_review.verdict)}
-            </Pill>
+          r.review ? (
+            <span className="inline-flex items-center gap-2">
+              {verdictPill(r.review.verdict)}
+              <span className="text-xs text-fg-3">{fmtDate(r.review.asOf)}</span>
+            </span>
           ) : (
-            <span className="text-fg-3">Unreviewed</span>
+            <span className="text-fg-3">Not yet reviewed</span>
           ),
       },
-      {
-        key: "ready",
-        header: "Ready",
-        render: (r) =>
-          r.latest_readiness ? (
-            <Pill tone={r.latest_readiness.ready ? "ok" : "neutral"}>
-              {r.latest_readiness.ready
-                ? "Ready"
-                : `${r.latest_readiness.missing?.length ?? "?"} missing`}
-            </Pill>
-          ) : (
-            <span className="text-fg-3">—</span>
-          ),
-      },
-      {
-        key: "status",
-        header: "Status",
-        render: (r) => (
-          <span className="text-fg-2">
-            {words(r.status)}
-            {r.on_hold ? " · on hold" : ""}
-          </span>
-        ),
-      },
+      { key: "offer", header: "Offer", render: (r) => offerCell(r.offer) },
+      { key: "claim", header: "Homeowner", render: (r) => claimCell(r.claim, r.state) },
     ],
     [],
   );
 
-  const p = partners.data?.partners ?? [];
-  const chosen = p.find((x) => x.partner_party_id === partner);
+  const actions = (
+    <>
+      {list.length > 1 ? (
+        <Select
+          value={slug}
+          onChange={(e) => set({ servicer: e.target.value })}
+          aria-label="Servicer"
+          className="w-64"
+        >
+          {list.map((s) => (
+            <option key={s.slug} value={s.slug}>
+              {s.displayName}
+            </option>
+          ))}
+        </Select>
+      ) : null}
+      <Button variant="primary" icon="plus" onClick={() => navigate("/tape")}>
+        Load a tape
+      </Button>
+    </>
+  );
+
+  if (servicers.isPending) return <Loading what="Reading the book" />;
+  if (servicers.isError) {
+    return (
+      <Page title="Partner book" actions={actions}>
+        <Notice tone="danger" title="The book could not be read">
+          {(servicers.error as Error).message}
+        </Notice>
+      </Page>
+    );
+  }
+  if (!chosen) {
+    return (
+      <Page title="Partner book" actions={actions}>
+        <EmptyState icon="book" title="No book yet">
+          Load a servicer&rsquo;s tape at the desk, and its loans are here.
+        </EmptyState>
+      </Page>
+    );
+  }
+
+  const b = chosen.book;
+  const verdicts = b.analysis?.verdicts;
+  const total = loans.data?.total ?? b.loans.total;
+  const shownFrom = total === 0 ? 0 : offset + 1;
+  const shownTo = Math.min(offset + BOOK_PAGE, total);
 
   return (
     <Page
       title="Partner book"
-      description="The loans partners send on tape, the reviews run over them, and what each is waiting on."
-      actions={
+      description="The loans servicers send on tape, the review run over them each morning, and every tape the book was built from."
+      meta={
         <>
-          {p.length > 1 ? (
-            <Select
-              value={partner}
-              onChange={(e) => setPartner(e.target.value)}
-              aria-label="Partner"
-              className="w-56"
-            >
-              <option value="">Every partner</option>
-              {p.map((x) => (
-                <option key={x.partner_party_id} value={x.partner_party_id}>
-                  {x.legal_name}
-                </option>
-              ))}
-            </Select>
-          ) : null}
-          <Button variant="primary" icon="plus" onClick={() => navigate("/tape")}>
-            Load a tape
-          </Button>
+          <Link to={`/servicers/${chosen.slug}`} className="hover:underline">
+            {chosen.displayName}
+          </Link>
+          {b.lastAsOf ? ` · tape as of ${fmtDate(b.lastAsOf)}` : " · no tape loaded yet"}
+          {b.analysis ? ` · reviewed ${fmtDate(b.analysis.asOf)}` : ""}
         </>
       }
+      actions={actions}
       wide
     >
-      {partners.error ? <Notice tone="danger">{(partners.error as Error).message}</Notice> : null}
-      {p.length ? (
-        <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
-          {(chosen ? [chosen] : p).slice(0, 4).map((x) => (
-            <Stat
-              key={x.partner_party_id}
-              label={x.legal_name}
-              value={x.loans_monitored.toLocaleString()}
-              tone={x.late ? "danger" : undefined}
-              hint={
-                x.clock_status === "breached" || x.late
-                  ? `Tape late · expected ${fmtDate(x.next_expected)}`
-                  : x.next_expected && (parseTs(x.next_expected)?.getTime() ?? 0) < Date.now()
-                    ? `Tape expected ${fmtDate(x.next_expected)} · ${x.on_hold} on hold`
-                    : x.next_expected
-                      ? `Next tape ${fmtRelative(x.next_expected)} · ${x.on_hold} on hold`
-                      : `${x.imports} imports`
-              }
-              onClick={() => setPartner(chosen ? "" : x.partner_party_id)}
-            />
-          ))}
-        </div>
-      ) : null}
+      <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+        <Stat label="Loans" value={b.loans.total.toLocaleString()} />
+        <Stat
+          label="Tapes loaded"
+          value={b.imports.toLocaleString()}
+          hint={b.lastAsOf ? `newest as of ${fmtDate(b.lastAsOf)}` : "none yet"}
+          onClick={() => set({ tab: "tapes" })}
+        />
+        <Stat
+          label="Candidates"
+          value={(verdicts?.candidate ?? 0).toLocaleString()}
+          tone={verdicts?.candidate ? "ok" : undefined}
+          hint={b.analysis ? `reviewed ${fmtDate(b.analysis.asOf)}` : "not yet reviewed"}
+        />
+        <Stat label="Watching" value={(verdicts?.watching ?? 0).toLocaleString()} />
+        <Stat label="Not now" value={(verdicts?.not_now ?? 0).toLocaleString()} />
+        <Stat label="Excluded" value={(verdicts?.excluded ?? 0).toLocaleString()} />
+      </div>
 
       <Section>
         <div className="mb-3 flex flex-wrap items-center gap-3">
           <Segmented
             label="View"
             value={tab}
-            onChange={setTab}
+            onChange={(t) => set({ tab: t })}
             options={[
-              { value: "loans", label: "Loans" },
-              { value: "imports", label: "Imports" },
-              { value: "today", label: "Today's review" },
+              { value: "loans", label: "Loans", count: b.loans.total },
+              { value: "tapes", label: "Tapes", count: b.imports },
             ]}
           />
           {tab === "loans" ? (
-            <Segmented
-              label="Verdict"
-              value={verdict}
-              onChange={setVerdict}
-              options={[
-                { value: "all", label: "All", count: loans.data?.counts.loans },
-                {
-                  value: "candidate",
-                  label: "Candidates",
-                  count: loans.data?.counts.by_verdict?.candidate,
-                },
-                {
-                  value: "watching",
-                  label: "Watching",
-                  count: loans.data?.counts.by_verdict?.watching,
-                },
-                {
-                  value: "not_now",
-                  label: "Not now",
-                  count: loans.data?.counts.by_verdict?.not_now,
-                },
-                {
-                  value: "excluded",
-                  label: "Excluded",
-                  count: loans.data?.counts.by_verdict?.excluded,
-                },
-              ]}
+            <Input
+              value={q}
+              onChange={(e) => {
+                setQ(e.target.value);
+                setOffset(0);
+              }}
+              placeholder="Find a loan by number or city"
+              aria-label="Find a loan"
+              className="w-full max-w-md"
             />
           ) : null}
         </div>
-        <div className="overflow-hidden rounded-lg border border-line-2 bg-surface">
-          {tab === "loans" ? (
-            <Table
-              columns={loanColumns}
-              rows={loans.data?.loans}
-              rowKey={(r) => r.loan_id}
-              onRowClick={setSelected}
-              loading={loans.isLoading}
-              empty={{ icon: "book", title: "No loans on the book" }}
-            />
-          ) : null}
-          {tab === "imports" ? (
-            <Table
-              columns={[
-                {
-                  key: "asof",
-                  header: "As of",
-                  primary: true,
-                  render: (i) => (
-                    <span className="font-medium text-fg">{fmtDate(i.as_of_date)}</span>
-                  ),
-                },
-                {
-                  key: "status",
-                  header: "Status",
-                  render: (i) => (
-                    <Pill
-                      tone={
-                        i.status === "loaded"
-                          ? "ok"
-                          : i.status === "rejected"
-                            ? "danger"
-                            : "neutral"
-                      }
-                    >
-                      {words(i.status)}
-                    </Pill>
-                  ),
-                },
-                {
-                  key: "rows",
-                  header: "Rows",
-                  align: "right",
-                  render: (i) => (
-                    <span className="text-fg-2">
-                      {i.rows_loaded.toLocaleString()} / {i.rows_total.toLocaleString()}
-                    </span>
-                  ),
-                },
-                {
-                  key: "changes",
-                  header: "Created · updated · unchanged",
-                  align: "right",
-                  render: (i) => (
-                    <span className="text-fg-2">
-                      {i.loans_created} · {i.loans_updated} · {i.loans_unchanged}
-                    </span>
-                  ),
-                },
-                {
-                  key: "exceptions",
-                  header: "Exceptions",
-                  align: "right",
-                  render: (i) => (
-                    <span className={i.rows_exception ? "text-warn" : "text-fg-3"}>
-                      {i.rows_exception}
-                    </span>
-                  ),
-                },
-                {
-                  key: "when",
-                  header: "Loaded",
-                  render: (i) => <span className="text-fg-2">{fmtDateTime(i.created_at)}</span>,
-                },
-              ]}
-              rows={imports.data?.imports}
-              rowKey={(i) => i.import_id}
-              loading={imports.isLoading}
-              empty={{ icon: "book", title: "No tapes loaded" }}
-            />
-          ) : null}
-          {tab === "today" ? (
-            <div className="p-4">
-              {day.data ? (
-                <>
-                  <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
-                    <Stat
-                      label="Reviewed"
-                      value={day.data.reviews.count}
-                      hint={`as of ${fmtDate(day.data.as_of_date)}`}
-                    />
-                    <Stat
-                      label="Candidates"
-                      value={day.data.reviews.by_verdict?.candidate ?? 0}
-                      tone="ok"
-                    />
-                    <Stat label="Watching" value={day.data.reviews.by_verdict?.watching ?? 0} />
-                    <Stat
-                      label="Ready to proceed"
-                      value={`${day.data.readiness.ready} / ${day.data.readiness.checked}`}
-                    />
-                  </div>
-                  <Table
-                    columns={[
-                      {
-                        key: "loan",
-                        header: "Loan",
-                        primary: true,
-                        render: (l) => (
-                          <span className="font-mono text-fg">
-                            {l.servicer_loan_number ?? l.loan_id}
-                          </span>
-                        ),
-                      },
-                      {
-                        key: "verdict",
-                        header: "Verdict",
-                        render: (l) => (
-                          <Pill tone={verdictTone(l.verdict)}>{words(l.verdict)}</Pill>
-                        ),
-                      },
-                      {
-                        key: "why",
-                        header: "Why",
-                        render: (l) => (
-                          <span className="text-fg-2">
-                            {(l.reasons_in_words ?? l.reasons ?? []).join("; ")}
-                          </span>
-                        ),
-                      },
-                    ]}
-                    rows={day.data.reviews.lines}
-                    rowKey={(l) => l.loan_id}
-                    empty={{ title: "No reviews today" }}
-                  />
-                </>
-              ) : day.error ? (
-                <Notice tone="danger">{(day.error as Error).message}</Notice>
-              ) : null}
+
+        {tab === "loans" ? (
+          <>
+            <div className="overflow-hidden rounded-lg border border-line-2 bg-surface">
+              <Table
+                columns={columns}
+                rows={loans.data?.rows}
+                rowKey={(r) => r.id}
+                onRowClick={setSelected}
+                loading={loans.isLoading}
+                dense
+                empty={{
+                  icon: "book",
+                  title: needle ? `Nothing matches “${needle}”` : "No loans on the book",
+                }}
+              />
             </div>
-          ) : null}
-        </div>
-        {loans.error || imports.error ? (
-          <Notice tone="danger" className="mt-3">
-            {((loans.error ?? imports.error) as Error).message}
-          </Notice>
-        ) : null}
+            {loans.isError ? (
+              <Notice tone="danger" className="mt-3">
+                {(loans.error as Error).message}
+              </Notice>
+            ) : (
+              <div className="mt-3 flex flex-wrap items-center gap-3 text-sm text-fg-2">
+                <span>
+                  {total === 0
+                    ? ""
+                    : `Showing ${shownFrom.toLocaleString()}–${shownTo.toLocaleString()} of ${plural(total, "loan")}${needle ? " that match" : ""}`}
+                </span>
+                {loans.isFetching && !loans.isLoading ? <Spinner /> : null}
+                {offset > 0 ? (
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => setOffset(Math.max(0, offset - BOOK_PAGE))}
+                  >
+                    Previous
+                  </Button>
+                ) : null}
+                {shownTo < total ? (
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => setOffset(offset + BOOK_PAGE)}
+                  >
+                    Next {Math.min(BOOK_PAGE, total - shownTo).toLocaleString()}
+                  </Button>
+                ) : null}
+              </div>
+            )}
+          </>
+        ) : (
+          <TapeReconciliation slug={chosen.slug} />
+        )}
       </Section>
-      {selected ? <BookLoanSheet loan={selected} onClose={() => setSelected(null)} /> : null}
+
+      {selected ? (
+        <BookLoanSheet
+          slug={chosen.slug}
+          servicerName={chosen.displayName}
+          loan={selected}
+          onClose={() => setSelected(null)}
+        />
+      ) : null}
     </Page>
   );
 }
 
-function BookLoanSheet({ loan, onClose }: { loan: BookLoan; onClose: () => void }) {
-  const { role } = useAuth();
+/** One loan, whole: what its tapes said, each morning's verdict and why, the offers, the claim. */
+function BookLoanSheet({
+  slug,
+  servicerName,
+  loan,
+  onClose,
+}: {
+  slug: string;
+  servicerName: string;
+  loan: BookLoan;
+  onClose: () => void;
+}) {
   const detail = useQuery({
-    queryKey: ["book-loan", role, loan.loan_id],
-    queryFn: () =>
-      api<{
-        loan: Record<string, unknown>;
-        reviews: {
-          as_of_date: string;
-          verdict: string;
-          verdict_words?: string;
-          reasons_in_words?: string[];
-          reasons?: string[];
-        }[];
-        readiness: { as_of_date: string; ready: boolean; missing: string[] }[];
-        offers: { opportunity_id: string; status: string; offer_valid_until: string | null }[];
-      }>(`/partner-book/loans/${loan.loan_id}`),
+    queryKey: ["servicer-book-loan", slug, loan.id],
+    queryFn: () => bookLoan(slug, loan.id),
   });
-  const d = detail.data;
-  const review = loan.latest_review;
+  const d = detail.data ?? null;
+  const tape = d?.tapes[0] ?? null;
+  const review = d?.reviews[0] ?? null;
+  const address = d ? addressLines(d.address) : null;
+
   return (
     <Sheet
       open
       onClose={onClose}
-      title={loan.servicer_loan_number}
-      subtitle={`${loan.partner_legal_name} · ${words(loan.status)}`}
+      title={<span className="font-mono">{loan.number}</span>}
+      subtitle={[loan.borrower, loan.property, servicerName].filter(Boolean).join(" · ")}
       wide
     >
-      <Rows
-        rows={[
-          { label: "Homeowner", value: loan.homeowner?.legal_name ?? "—" },
-          { label: "Balance", value: money(loan.upb_cents), mono: true },
-          { label: "Rate", value: pct(loan.note_rate_pct), mono: true },
-          { label: "P&I", value: money(loan.pi_cents), mono: true },
-          { label: "Next due", value: fmtDate(loan.next_due_date) },
-          { label: "Tape as of", value: fmtDate(loan.facts_as_of) },
-          { label: "Account", value: loan.account_activated ? "Activated" : "Not activated" },
-        ]}
-      />
-      {review ? (
-        <div className="mt-5">
-          <div className="mb-2 flex items-center gap-2 text-sm font-medium text-fg">
-            Latest review <Pill tone={verdictTone(review.verdict)}>{words(review.verdict)}</Pill>
-            <span className="text-xs font-normal text-fg-3">{fmtDate(review.as_of_date)}</span>
+      {detail.isPending ? (
+        <div className="flex items-center gap-2 py-6 text-sm text-fg-2">
+          <Spinner /> Reading the loan…
+        </div>
+      ) : detail.isError || !d ? (
+        <Notice tone="danger" title="The loan could not be read">
+          {detail.error instanceof Error ? detail.error.message : "Try again in a moment."}
+        </Notice>
+      ) : (
+        <div className="space-y-6">
+          <Rows
+            rows={[
+              { label: "Standing", value: stateWord(d.state) },
+              {
+                label: "Balance",
+                value: tape
+                  ? `${money(tape.principalBalanceCents)} as of ${fmtDate(tape.asOf)}`
+                  : "—",
+              },
+              {
+                label: "Rate",
+                value: `${tape?.currentRatePct ?? d.terms.noteRatePct}% ${
+                  d.terms.rateType === "arm" ? "adjustable" : "fixed"
+                }`,
+              },
+              {
+                label: "Status on the tape",
+                value: tape ? (
+                  <Pill tone={tapeStatus(tape.status).tone}>{tapeStatus(tape.status).word}</Pill>
+                ) : (
+                  "—"
+                ),
+              },
+              { label: "Property", value: address ?? "—" },
+              { label: "Original principal", value: money(d.terms.originalPrincipalCents) },
+              { label: "Term", value: termWord(d.terms.termMonths) },
+              {
+                label: "Originated",
+                value: d.terms.originatedOn ? fmtDate(d.terms.originatedOn) : "—",
+              },
+              {
+                label: "Matures",
+                value: d.terms.maturityOn ? fmtDate(d.terms.maturityOn) : "—",
+              },
+              { label: "Watched since", value: fmtDate(d.watchedSince) },
+            ]}
+          />
+
+          <div>
+            <div className="mb-2 flex items-center gap-2 text-sm font-medium text-fg">
+              Latest review
+              {review ? verdictPill(review.verdict) : null}
+              {review ? (
+                <span className="text-xs font-normal text-fg-3">{fmtDate(review.asOf)}</span>
+              ) : null}
+            </div>
+            {review ? (
+              <p className="text-base text-fg-2">{sentence(review.reasons) || "—"}</p>
+            ) : (
+              <p className="text-base text-fg-3">
+                Not yet reviewed. Every loan on the book is reviewed each morning against that
+                day&rsquo;s rate.
+              </p>
+            )}
           </div>
-          <ul className="list-disc space-y-1 pl-5 text-base text-fg-2">
-            {(review.reasons_in_words ?? review.reasons ?? []).map((r, i) => (
-              <li key={i}>{r}</li>
-            ))}
-          </ul>
+
+          <div>
+            <div className="mb-2 text-sm font-medium text-fg">The homeowner</div>
+            <Rows
+              rows={[
+                { label: "Invitation", value: claimCell(d.claim, d.state) },
+                { label: "Sent to", value: d.claim?.deliveredTo ?? "—" },
+                {
+                  label: "Sent",
+                  value: d.claim?.deliveredAt ? fmtDate(d.claim.deliveredAt) : "—",
+                },
+                {
+                  label: "Claimed",
+                  value: d.claim?.acceptedAt ? fmtDate(d.claim.acceptedAt) : "—",
+                },
+              ]}
+            />
+          </div>
+
+          <div>
+            <div className="mb-2 text-sm font-medium text-fg">Offers</div>
+            {d.offers.length ? (
+              <Rows
+                rows={d.offers.map((o) => ({
+                  label: `${fmtDate(o.detectedOn)} · ${
+                    o.currentRatePct ? `${o.currentRatePct}% → ` : ""
+                  }${o.newRatePct}%${
+                    o.monthlySavingsCents ? ` · ${money(o.monthlySavingsCents)} a month` : ""
+                  }`,
+                  value: offerCell(o),
+                }))}
+              />
+            ) : (
+              <p className="text-base text-fg-3">
+                No offer has been made on this loan. One is made the morning a review finds it a
+                candidate.
+              </p>
+            )}
+          </div>
+
+          {d.tapes.length ? (
+            <div>
+              <div className="mb-2 text-sm font-medium text-fg">
+                What {plural(d.tapes.length, "tape")} said
+              </div>
+              <div className="overflow-hidden rounded-lg border border-line-2">
+                <Table
+                  dense
+                  columns={[
+                    { key: "asOf", header: "As of", primary: true, render: (t) => fmtDate(t.asOf) },
+                    {
+                      key: "status",
+                      header: "Status",
+                      render: (t) => (
+                        <Pill tone={tapeStatus(t.status).tone}>{tapeStatus(t.status).word}</Pill>
+                      ),
+                    },
+                    {
+                      key: "balance",
+                      header: "Balance",
+                      align: "right",
+                      render: (t) => (
+                        <span className="tabular-nums">{money(t.principalBalanceCents)}</span>
+                      ),
+                    },
+                    {
+                      key: "late",
+                      header: "Days late",
+                      align: "right",
+                      render: (t) => (
+                        <span className="tabular-nums">{t.delinquencyDays ?? "—"}</span>
+                      ),
+                    },
+                  ]}
+                  rows={d.tapes}
+                  rowKey={(t) => String(d.tapes.indexOf(t))}
+                />
+              </div>
+            </div>
+          ) : null}
+
+          {d.reviews.length > 1 ? (
+            <div>
+              <div className="mb-2 text-sm font-medium text-fg">Earlier reviews</div>
+              <Rows
+                rows={d.reviews.slice(1, 8).map((r) => ({
+                  label: fmtDate(r.asOf),
+                  value: verdictPill(r.verdict),
+                }))}
+              />
+            </div>
+          ) : null}
         </div>
-      ) : null}
-      {d?.readiness?.[0] ? (
-        <div className="mt-5">
-          <div className="mb-2 text-sm font-medium text-fg">Readiness</div>
-          {d.readiness[0].ready ? (
-            <Notice tone="ok">Ready as of {fmtDate(d.readiness[0].as_of_date)}.</Notice>
-          ) : (
-            <Notice tone="neutral" title={`Missing ${d.readiness[0].missing.length}`}>
-              {d.readiness[0].missing.map(words).join(", ")}
-            </Notice>
-          )}
-        </div>
-      ) : null}
-      {d?.offers?.length ? (
-        <div className="mt-5">
-          <div className="mb-2 text-sm font-medium text-fg">Offers</div>
-          <Rows
-            rows={d.offers.map((o) => ({
-              label: words(o.status),
-              value: o.offer_valid_until ? `open until ${fmtDate(o.offer_valid_until)}` : "—",
-            }))}
-          />
-        </div>
-      ) : null}
-      {d?.reviews && d.reviews.length > 1 ? (
-        <div className="mt-5">
-          <div className="mb-2 text-sm font-medium text-fg">Earlier reviews</div>
-          <Rows
-            rows={d.reviews.slice(1, 8).map((r) => ({
-              label: fmtDate(r.as_of_date),
-              value: <Pill tone={verdictTone(r.verdict)}>{words(r.verdict)}</Pill>,
-            }))}
-          />
-        </div>
-      ) : null}
+      )}
     </Sheet>
   );
 }

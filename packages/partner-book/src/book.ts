@@ -7,10 +7,11 @@
  *   parseBook      the profile maps; nothing is refused for being missing.
  *                  Header presence gates the whole file (`rejected` when a
  *                  required header is absent); a row is skipped only for no
- *                  loan number, no state or no readable balance and rate; a
- *                  loan number seen twice is a `duplicate_row`; the supplement
- *                  joins on the loan number, and a row without one carries a
- *                  gap rather than a refusal.
+ *                  loan number, a loan number it cannot read exactly, no
+ *                  state or no readable balance and rate; a loan number seen
+ *                  twice is a `duplicate_row`; the supplement joins on the
+ *                  loan number, read the way the tape's is, and a row
+ *                  without one carries a gap rather than a refusal.
  *   deriveRecord   one parsed row → an `ImportedLoanRecord` from
  *                  `@hm/shared/portfolio`, or a rejection naming why. The
  *                  contract is strict at every level, so what a tape carries
@@ -48,6 +49,7 @@ import {
   mapTapeRow,
   normalizeHeader,
   profileHeadersPresent,
+  readLoanNumber,
   type Fact,
   type RowException,
   type TapeProfile,
@@ -135,12 +137,20 @@ export function parseSupplement(file: ParsedFile): ParsedSupplement {
   if (idx.loan < 0) throw new RangeError("the supplement needs a servicer_loan_number column");
   const ignored_columns = file.headers.filter((h) => IGNORED_SUPPLEMENT_KEYS.includes(normKey(h)));
   const cell = (r: string[], i: number): string => (i >= 0 ? (r[i] ?? "").trim() : "");
+  // The loan number is read as the tape's is, so a workbook's stored number
+  // joins the same loan; one the reader refuses stays as written, joins
+  // nothing, and is reported as an orphan that says why.
+  const loanNumber = (written: string): string => {
+    if (!written) return written;
+    const read = readLoanNumber(written, file.kind);
+    return typeof read === "string" ? read : written;
+  };
   const rows = file.rows
     .map((r, k) => {
       const dob = cell(r, idx.dob);
       return {
         row: k + 1,
-        servicer_loan_number: cell(r, idx.loan),
+        servicer_loan_number: loanNumber(cell(r, idx.loan)),
         name: idx.name >= 0 ? cell(r, idx.name) || null : null,
         date_of_birth: /^\d{4}-\d{2}-\d{2}$/.test(dob) ? dob : null,
       };
@@ -204,7 +214,7 @@ export function parseBook(
   const seen = new Set<string>();
   tape.rows.forEach((r, k) => {
     const rowNo = k + 1;
-    const m = mapTapeRow(profile, tape.headers, r, rowNo);
+    const m = mapTapeRow(profile, tape.headers, r, rowNo, tape.kind);
     exceptions.push(...m.exceptions);
     if (m.skip) return;
     const loanNo = String(m.facts[profile.loanNumber]).trim();
@@ -231,11 +241,13 @@ export function parseBook(
   });
   for (const s of supp.rows) {
     if (!seen.has(s.servicer_loan_number)) {
+      const unread = supplement ? readLoanNumber(s.servicer_loan_number, supplement.kind) : null;
       exceptions.push({
         row: s.row,
         servicer_loan_number: s.servicer_loan_number,
         code: "supplement_orphan",
         column: "servicer_loan_number",
+        ...(unread !== null && typeof unread !== "string" ? { detail: unread.detail } : {}),
       });
     }
   }
@@ -498,6 +510,9 @@ export type BookFile = { readonly filename: string; readonly bytes: Uint8Array }
 
 export type ReadBook = {
   readonly profile: string;
+  /** Each file's name as it was handed in, verbatim: what an import came from. */
+  readonly tape_filename: string;
+  readonly supplement_filename: string | null;
   readonly tape_sha256: string;
   /** Empty when there was no supplement, so two absent supplements compare equal. */
   readonly supplement_sha256: string;
@@ -525,6 +540,8 @@ export function readBook(
   const book = parseBook(profile, parsedTape, parsedSupp);
   const base = {
     profile: book.profile,
+    tape_filename: tape.filename,
+    supplement_filename: supplement?.filename ?? null,
     tape_sha256: sha256Hex(tape.bytes),
     supplement_sha256: supplement ? sha256Hex(supplement.bytes) : "",
     rows_total: book.rows_total,

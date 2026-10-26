@@ -9672,3 +9672,140 @@ turn the model ended, as the open-model policy's do ("A Vertex stream cut
 mid-turn was scored as the model's miss"), without its retries. The tests
 run both SDK clients over a stand-in network: one streamed request at
 32,000 each, and four cut streams each ending `error`.
+
+## A tape can be taken back, and a loan number is digits
+
+**What happened (26 October 2026).** Grander's book was loaded on
+production at the tape desk in six tapes, all as of 30 April 2026. After
+five of them the desk's loan count read 1,749 where the person loading
+expected 1,867, and neither was the number of mortgages on the book.
+Measured read-only the same day:
+
+- **The workbooks stored their loan numbers as numbers.** They were written
+  by a spreadsheet writer that stores a numeric cell as a double's text,
+  `1.002027994E9`, and the vendored xlsx reader returns a numeric cell's
+  stored text as it is. The loan-number column is text in the m3 profile, so
+  five of the six imports keep every number in scientific notation. The
+  balances were unharmed: the writer prints a value under ten million
+  plainly.
+- **One of the five was the September tape again.** The same 245 loans as
+  the import of 5 October, with the same balances, in a re-exported file.
+  The only duplicate check was the two files' digests, which a re-export
+  changes, and no number matched the first copy's digits, so the 245 loans
+  were made a second time. 1,749 is 245 + 245 + 430 + 440 + 389; the 1,867
+  expected is 245 + 431 + 440 + 389 + 362, counting the row the 432-row
+  tape refused for having no term. The book holds 2,111 loans, 1,866 of
+  them distinct.
+- **The console's Partner book read another database.** It, and the Loans
+  and People pages, read the servicing app's console API, whose database
+  holds none of the book; the desk writes ours. So the loans were not
+  there.
+- **Billing.** No closed month carries a duplicate: September closed on 7
+  October with the first 245 loans, before the second copy existed. The
+  running month and the run rate do — the duplicates' $66.0 million of
+  balance is about $13,700 of the book's $94,879 a month.
+
+**Decided (26 October 2026):**
+
+- **A loan number is digits, or the row says why it is not.** The reader
+  writes a number a workbook stored out in its digits when it names a whole
+  number exactly, and refuses the row when it does not
+  (`loan_number_not_exact`); scientific notation in a CSV is refused
+  (`loan_number_scientific`), because a spreadsheet's display may already
+  have dropped digits. Anything else is the number as written.
+  `plainLoanNumber` in `@hm/partner-book` is the key two spellings of one
+  number share — notation written out, spaces and dashes gone, a number's
+  leading zeros dropped — and is never stored.
+- **A tape that would make a loan twice is refused at the load.** The
+  preview names `nearDuplicates`: the loans on the tape the book holds under
+  another spelling of the same number (`services/loan-numbers.ts`). A load
+  with any is refused, 409 `TAPE_NEAR_DUPLICATES`, nothing written, unless
+  the request says `allowNearDuplicates`. The check is in
+  `importPartnerBook`, so the partner door refuses alike. A number on the
+  book exactly as written is the same loan and an update, as before.
+- **A tape can be taken back.** The desk's remove
+  (`/console/hm/tape/servicers/:slug/tapes/:tapeId/remove`, a POST) takes
+  the count of loans it removes, typed by the person, and a reason
+  (`services/tape-removal.ts`). What goes is what only that tape knows: the
+  loans no other import observed, with their links and ledger; every
+  observation it wrote; the reviews resting on those observations or on
+  those loans; the provisional parties the loans leave with nobody, with
+  their facts; then the import row. A loan another tape also carries stays
+  and loses only this tape's observation of it. One transaction, a
+  statement per table keyed on the import or one array of ids. The order is
+  forced: a review names its observation `ON DELETE SET NULL` and is
+  append-only, so a review left standing refuses the observation's delete,
+  and an observation is `RESTRICT` from its import.
+- **Not once something rests on it.** Refused, 409 `TAPE_NOT_REMOVABLE` with
+  the reasons in words, when a loan it would delete has been claimed or
+  moved by anything but a tape, has a claim minted, has an offer, is an
+  application's `prior_loan_id`, or is on a closed statement ("September
+  2026 is closed with 12 of these loans") — a closed month is what was
+  invoiced — and when an offer rests on its observation of a loan that
+  stays. A loan only this tape carries that the tape itself reported paid
+  off, charged off or matured is not refused: the move was the tape's
+  word, and it goes with the loan. The reconciliation shows the same
+  check, from the same function, before anybody asks.
+- **Nor once it has ended a loan another tape carries.** An ended loan is
+  final in the machine, so a tape that moved a loan another tape also
+  carries to paid off, charged off or matured — `report.loans[].moved` —
+  is refused while no other tape on the book calls that loan ended: taken
+  back, it would leave the loan ended on the word of no tape there. A name
+  or date of birth any removed tape respelled on a loan that stays keeps
+  that spelling; the removal sheet says so.
+- **The confirmation is the loans only this tape carries.** The count
+  typed, and `confirmLoans`, is the reconciliation's `removes.loans`, not
+  the loans the tape created: a loan it created that a later tape also
+  carries stays.
+- **One writer to a book at a time.** A load, a removal, a renumbering, a
+  claim minted and a month closed each take a transaction-scoped advisory
+  lock on the servicer first (`services/book-lock.ts`), and read the book
+  only after. Without it a removal could decide a loan was its tape's alone
+  while a load was observing it, and the cascade took the load's
+  observation; two removals could each leave a loan the other was counting
+  on with no observation at all; and a close could bill loans a removal was
+  deleting. The near-duplicate check runs inside the load's lock.
+- **A removal is a record.** `partner_book_removals`: the import's id with
+  no key (it is gone), its as-of, digest, file name and loans made, what the
+  removal deleted, the balance it carried, the reason and the console staff
+  member by id and name. A trigger refuses UPDATE and DELETE.
+  `partner_book_imports` keeps the files' names from now on.
+- **A book's tapes add up.** `GET /console/hm/tape/servicers/:slug/tapes`
+  lists every tape oldest first — rows read, loaded and refused (each
+  refused row with its code), loans made and how many are still on the
+  book, its balance, the day its loans are billed from, the loans it made
+  that an earlier tape had made under another spelling — beside every
+  removal, and checks that the loans the tapes made, less the loans the
+  removals took, are the loans on the book.
+- **The Partner book reads ours.** `GET /console/hm/tape/servicers/:slug/loans`
+  and `/loans/:id` answer exactly what the portal answers a servicer's team
+  (`servicerBookLoans`, `servicerBookLoan`), behind the desk's gate.
+- **A statement's loans download.** The billing door's
+  `/servicers/:slug/statements/:month/loans.csv` answers a row per loan
+  billed, the tokens of every line, the charge, and a TOTAL row that is the
+  statement's own figures. A closed month comes from its row; a month
+  closed before the cycle was itemized carries a loan's tokens on its one
+  balance line.
+- **The numbers already stored are rewritten by hand.**
+  `npm run book:renumber -- <slug>` says which loan numbers are in scientific
+  notation and which of those would land on digits another loan already
+  has; `--apply` rewrites the rest to their digits in one statement. A
+  number that differs by more than notation — a dash, a leading zero — is
+  listed and left, because the servicer may write it that way on every
+  tape. A whole number stored with ".0", which the same writer makes of a
+  number below ten million, is listed and rewritten only with
+  `--point-zero`: a workbook's reader drops the ".0" now, but a CSV is read
+  as written and may say it on purpose. The observations keep what each
+  tape said.
+
+- **A tape can be taken back from a shell too.**
+  `npm run book:remove-tape -- <slug>` lists the book's tapes, what each
+  would remove and whether it can be; with a tape's id, the count, `--reason`
+  and `--by` it runs the same `removeTape`, and the removal row names the
+  person under the id `cli`.
+
+What production needs is two acts, in this order: take the re-exported
+September tape back (245 loans; no claim, offer or closed month rests on
+them), then run `book:renumber` dry and with `--apply` for Grander, which
+should find 1,621 numbers to rewrite and no collisions, leaving 1,866 loans
+on the book.

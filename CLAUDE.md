@@ -216,6 +216,20 @@ newline-delimited JSON, and draws one meter that only ever advances. The desk is
 gated by the servicing app's own staff session, checked with it
 (`services/console-staff.ts`). See `docs/decisions.md`, "The tape desk is one
 screen, and a claim is mailed from it".
+Since 26 October a book's tapes add up on the desk
+(`/console/hm/tape/servicers/:slug/tapes`, `services/tape-removal.ts`): what
+each tape made and refused, the loans it made that another tape had made
+first under another spelling of the number, and whether it can be taken
+back — one transaction that deletes what only that tape knows, refused
+once a claim, an offer or a closed month rests on it or it ended a loan
+another tape carries, and kept in `partner_book_removals`. A load, a
+removal, a renumbering, a claim and a month's close each hold the book
+first (`services/book-lock.ts`). A tape carrying loans the book holds
+under another spelling is refused at the load (`TAPE_NEAR_DUPLICATES`)
+unless the person loading says it is meant, and the console's Partner book
+reads our book through the desk rather than the servicing app's. See
+`docs/decisions.md`, "A tape can be taken back, and a loan number is
+digits".
 
 **A servicer's team has a portal inside the console, and one sign-in
 serves both (28 September 2026).** `servicing.supermortgage.com/console`

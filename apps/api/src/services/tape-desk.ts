@@ -32,6 +32,7 @@ import type { Prisma } from "@hm/db";
 import {
   M3_V1,
   readBook,
+  readLoanNumber,
   readTabular,
   type BookFile,
   type GapCounts,
@@ -46,6 +47,7 @@ import { connectors } from "./connectors.js";
 import type { Db } from "./db.js";
 import { claimUrl, hashInvitationToken } from "./invitations.js";
 import { mintLoanClaim } from "./loan-claims.js";
+import { nearDuplicatesOnBook, type NearDuplicates } from "./loan-numbers.js";
 import { reviewLoans } from "./loan-review.js";
 import type { OnProgress } from "./progress.js";
 import { toDomainLoanState } from "./loan-transition.js";
@@ -120,7 +122,13 @@ const norm = (h: string) =>
 const NUMBER_KEYS = ["servicer_loan_number", "loan_number", "loan_id", "loan"];
 const EMAIL_KEYS = ["borrower_email", "email", "e_mail", "email_address"];
 
-/** Loan number → the supplement's e-mail for it, for the rows that carry one. */
+/**
+ * Loan number → the supplement's e-mail for it, for the rows that carry one.
+ * The number is read the way the tape's is (`readLoanNumber`), so a workbook
+ * that stored it as "1.002938533E9" keys the address under the digits the
+ * tape row carries; a number the reader refuses joins no loan, here as in
+ * the book.
+ */
 export function supplementEmails(supplement: BookFile | null): Map<string, string> {
   const out = new Map<string, string>();
   if (!supplement) return out;
@@ -135,9 +143,11 @@ export function supplementEmails(supplement: BookFile | null): Map<string, strin
   const emailAt = keys.findIndex((k) => EMAIL_KEYS.includes(k));
   if (numberAt < 0 || emailAt < 0) return out;
   for (const row of parsed.rows) {
-    const number = (row[numberAt] ?? "").trim();
+    const written = (row[numberAt] ?? "").trim();
     const email = (row[emailAt] ?? "").trim();
-    if (number && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) out.set(number, email);
+    if (!written || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) continue;
+    const number = readLoanNumber(written, parsed.kind);
+    if (typeof number === "string") out.set(number, email);
   }
   return out;
 }
@@ -186,6 +196,12 @@ export interface TapePreview {
     readonly unchanged: number;
   };
   readonly claimed: number;
+  /**
+   * The loans on this tape the book holds under another spelling of the
+   * number — a re-exported tape, most likely. A load with any is refused
+   * unless the person loading says they are meant.
+   */
+  readonly nearDuplicates: NearDuplicates;
   readonly supplement: {
     readonly rows: number;
     readonly matched: number;
@@ -230,6 +246,8 @@ export interface TapeInput {
   readonly billingMonth?: string | null;
   readonly tape: BookFile;
   readonly supplement?: BookFile | null;
+  /** Load even though the preview found near duplicates. */
+  readonly allowNearDuplicates?: boolean;
 }
 
 /** The first day of the month a tape is for, or today when no month was named. */
@@ -325,6 +343,11 @@ export async function previewTape(input: TapeInput, db: Db = prisma): Promise<Ta
     : [];
   const byNumber = new Map(held.map((l) => [l.servicerLoanNumber!, l]));
   const verdictByLoan = await newestVerdicts(db, servicer?.id ?? null);
+  const nearDuplicates = await nearDuplicatesOnBook(
+    db,
+    servicer?.id ?? null,
+    book.records.map((r) => ({ row: r.row.row, number: r.row.servicer_loan_number })),
+  );
 
   const rows: PreviewRow[] = book.records.map(({ row, record }) => {
     const prior = byNumber.get(row.servicer_loan_number);
@@ -383,6 +406,7 @@ export async function previewTape(input: TapeInput, db: Db = prisma): Promise<Ta
       unchanged: rows.filter((r) => r.change === "unchanged").length,
     },
     claimed: rows.filter((r) => r.claimed).length,
+    nearDuplicates,
     supplement: input.supplement
       ? {
           rows: book.supplement.rows,
@@ -442,6 +466,7 @@ export async function loadTape(
         billedFrom,
         tape: input.tape,
         supplement: input.supplement ?? null,
+        allowNearDuplicates: input.allowNearDuplicates ?? false,
       },
       db,
       onProgress,

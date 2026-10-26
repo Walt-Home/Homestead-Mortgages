@@ -31,6 +31,8 @@
     "review:run": "tsx apps/api/src/scripts/review-loans.ts",
     "billing:close": "tsx apps/api/src/scripts/close-billing.ts",
     "book:billed-from": "tsx apps/api/src/scripts/book-billed-from.ts",
+    "book:renumber": "tsx apps/api/src/scripts/book-renumber.ts",
+    "book:remove-tape": "tsx apps/api/src/scripts/book-remove-tape.ts",
     "billing:reconcile": "tsx apps/api/src/scripts/reconcile-billing.ts",
     "billing:smoke": "tsx apps/api/src/scripts/smoke-invoicing.ts",
     "plaid:products": "node scripts/plaid-products.mjs",

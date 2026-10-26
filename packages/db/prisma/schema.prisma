@@ -1764,6 +1764,7 @@ model Servicer {
   loans          Loan[]
   credentials    PartnerCredential[]
   imports        PartnerBookImport[]
+  removals       PartnerBookRemoval[]
   users          ServicerUser[]
   statements     BillingStatement[]
   billingProfile ServicerBillingProfile?
@@ -2165,10 +2166,14 @@ model PartnerBookImport {
   asOf    DateTime @map("as_of") @db.Date
   profile String
 
-  tapeSha256       String @map("tape_sha256")
+  tapeSha256         String  @map("tape_sha256")
   /// Empty when there was no supplement, so two absent supplements are the
   /// same and the uniqueness below still holds.
-  supplementSha256 String @default("") @map("supplement_sha256")
+  supplementSha256   String  @default("") @map("supplement_sha256")
+  /// The names the files were loaded under, for a person reading the book's
+  /// tapes. Null on a row from before the columns.
+  tapeFilename       String? @map("tape_filename")
+  supplementFilename String? @map("supplement_filename")
 
   rowsTotal      Int  @map("rows_total")
   rowsLoaded     Int  @map("rows_loaded")
@@ -2186,6 +2191,46 @@ model PartnerBookImport {
   @@unique([servicerId, tapeSha256, supplementSha256], map: "partner_book_imports_same_files_once")
   @@index([servicerId, asOf], map: "partner_book_imports_servicer_as_of")
   @@map("partner_book_imports")
+}
+
+/// A tape taken back: what it was, what went with it, who said so and why.
+///
+/// The import row it describes is deleted in the same transaction that
+/// writes this one, so `importId` names it with no foreign key, and this row
+/// is the only trace of it. A record, by trigger: no UPDATE and no DELETE.
+/// The counts are what the removal deleted — the loans only this tape had
+/// observed, every observation it wrote, the reviews that rested on them and
+/// the provisional people the loans left behind — and `loansCreated` is the
+/// import's own count, so the book's tapes still add up to its loans after
+/// one is gone. See docs/decisions.md, "A tape can be taken back, and a loan
+/// number is digits".
+model PartnerBookRemoval {
+  id         String   @id @default(uuid()) @db.Uuid
+  servicerId String   @map("servicer_id") @db.Uuid
+  servicer   Servicer @relation(fields: [servicerId], references: [id], onDelete: Restrict)
+  importId   String   @unique(map: "partner_book_removals_once_per_import") @map("import_id") @db.Uuid
+
+  asOf         DateTime @map("as_of") @db.Date
+  tapeSha256   String   @map("tape_sha256")
+  tapeFilename String?  @map("tape_filename")
+  rowsTotal    Int      @map("rows_total")
+
+  loansCreated        Int    @map("loans_created")
+  loansRemoved        Int    @map("loans_removed")
+  observationsRemoved Int    @map("observations_removed")
+  reviewsRemoved      Int    @map("reviews_removed")
+  partiesRemoved      Int    @map("parties_removed")
+  /// The principal balances this tape's observations carried, summed.
+  balanceCents        BigInt @map("balance_cents")
+
+  reason        String
+  /// The console staff id that took it back, and the name the console gave.
+  removedBy     String   @map("removed_by")
+  removedByName String?  @map("removed_by_name")
+  removedAt     DateTime @default(now()) @map("removed_at")
+
+  @@index([servicerId, removedAt], map: "partner_book_removals_servicer_removed_at")
+  @@map("partner_book_removals")
 }
 
 /// What the servicer said a loan looked like on a date. Append-only, like a

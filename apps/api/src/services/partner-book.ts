@@ -54,7 +54,9 @@ import {
   type RowException,
 } from "@hm/partner-book";
 import { canonicalRecordHash, type ImportedLoanRecord } from "@hm/shared/portfolio";
+import { lockBook } from "./book-lock.js";
 import { type Db, inChunks, ownsTransaction } from "./db.js";
+import { nearDuplicateRefusal, nearDuplicatesOnBook } from "./loan-numbers.js";
 import { stageProgress, type OnProgress } from "./progress.js";
 import { moveLoanIfLegal } from "./loan-transition.js";
 import { toDomainLoanState } from "./loan-transition.js";
@@ -76,6 +78,13 @@ export interface ImportBookInput {
   readonly billedFrom?: string | null;
   readonly tape: BookFile;
   readonly supplement?: BookFile | null;
+  /**
+   * Load even though the tape carries loans the book holds under another
+   * spelling of the number. Without it such a tape is refused, because the
+   * likeliest reason is a re-export of a tape already loaded; see
+   * `loan-numbers.ts`.
+   */
+  readonly allowNearDuplicates?: boolean;
 }
 
 export type LoanChange = "created" | "updated" | "unchanged";
@@ -198,8 +207,30 @@ export async function importPartnerBook(
       .at(-1) ??
     asOfDefault;
 
-  const run = (tx: Db) =>
-    load(tx, { servicer, principalId: input.principalId, asOf, book, watchedFrom }, onProgress);
+  const files = {
+    tape: input.tape.filename,
+    supplement: input.supplement?.filename ?? null,
+  };
+  const run = async (tx: Db) => {
+    // Nobody else writes this book until the load commits, and everything
+    // below reads it as the last writer left it (`book-lock.ts`).
+    await lockBook(tx, servicer.id);
+    // A loan the book holds under another spelling of its number would be
+    // made a second time. Refused unless the person loading says it is meant.
+    if (!input.allowNearDuplicates) {
+      const near = await nearDuplicatesOnBook(
+        tx,
+        servicer.id,
+        book.records.map((r) => ({ row: r.row.row, number: r.record.sourceLoanKey })),
+      );
+      if (near.count > 0) throw nearDuplicateRefusal(near);
+    }
+    return load(
+      tx,
+      { servicer, principalId: input.principalId, asOf, book, watchedFrom, files },
+      onProgress,
+    );
+  };
   return ownsTransaction(db)
     ? prisma.$transaction(run, { maxWait: 10_000, timeout: 120_000 })
     : run(db);
@@ -214,10 +245,12 @@ async function load(
     watchedFrom: Date | null;
     asOf: string;
     book: ReturnType<typeof readBook>;
+    /** The names the files were loaded under. */
+    files: { tape: string; supplement: string | null };
   },
   onProgress?: OnProgress,
 ): Promise<ImportBookResult> {
-  const { servicer, principalId, asOf, book, watchedFrom } = args;
+  const { servicer, principalId, asOf, book, watchedFrom, files } = args;
   const asOfDate = dateOf(asOf);
 
   // Pass 1: what the servicer has sent before, by its own number.
@@ -429,6 +462,8 @@ async function load(
       profile: book.profile,
       tapeSha256: book.tape_sha256,
       supplementSha256: book.supplement_sha256,
+      tapeFilename: files.tape,
+      supplementFilename: files.supplement,
       rowsTotal: counts.rows_total,
       rowsLoaded: counts.rows_loaded,
       rowsRejected: counts.rows_rejected,
@@ -498,6 +533,8 @@ export async function listPartnerBookImports(servicerId: string, db: Db = prisma
       id: true,
       asOf: true,
       profile: true,
+      tapeFilename: true,
+      supplementFilename: true,
       rowsTotal: true,
       rowsLoaded: true,
       rowsRejected: true,

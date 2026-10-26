@@ -2062,6 +2062,11 @@ the PHP carried with D, and the consumers' segments). It passes none of the
 field. A test holds that, and the same on 600 training draws. The mean
 field score never replaces the pass.
 
+DeepSeek-V4.1-Flash's held-out baseline (thinking, 16,000 output tokens a
+turn) is 136 of 200 (68.0 %), corrected on 26 October from 133 when the three
+turns the endpoint cut were run again (docs/decisions.md, "DeepSeek's held-out
+baselines on the newest suites, and two corrected").
+
 **The grader is the servicing app's own engine.** `src/metro2/ported/` holds
 `metro2.ts` and `types.ts` from
 `apps/servicing/src/domain/credit-reporting/`, each byte for byte but for
@@ -2349,6 +2354,11 @@ floor to read the mean field score against is 0.580: every deadline right,
 the delinquencies and the cycles' ends right, and every status read off the
 date alone (breached once its deadline has passed, open before). It passes
 17 of 200, loans where nothing happened in time. A test holds both.
+
+DeepSeek-V4.1-Flash's held-out baseline (thinking, 16,000 output tokens a
+turn) is 190 of 200 (95.0 %), corrected on 26 October from 188 when the two
+turns the endpoint cut were run again (docs/decisions.md, "DeepSeek's held-out
+baselines on the newest suites, and two corrected").
 
 **The grader is the servicing app's own engine.** `src/ei/ported/windows.ts`
 is `apps/servicing/src/domain/early-intervention/windows.ts` byte for byte
@@ -2639,6 +2649,11 @@ hold the moments to their histories:
 An answer that trusts the system's charges passes every task within the note
 and none above it, with a mean score of 0.65 on those.
 
+DeepSeek-V4.1-Flash's held-out baseline (thinking, 16,000 output tokens a
+turn) is 197 of 200 (98.5 %) on the life 1.2.0 pin, beside 198 on the life
+1.1.0 pin (docs/decisions.md, "DeepSeek's held-out baselines on the newest
+suites, and two corrected").
+
 ## escrow-review
 
 escrow-review 1.1.0 is the first demo's other graded moment. It is an annual
@@ -2768,6 +2783,10 @@ filtered. Its longest held-out task is 71 tool calls in 31 turns, and its
 longest training task 73 in 33. An answer with the analysis right and no
 bill comparison passes 184 of the held-out suite's 200, and one that says
 every flag stands passes 101.
+
+DeepSeek-V4.1-Flash's held-out baseline on 1.1.0 (thinking, 16,000 output
+tokens a turn) is 194 of 200, 97.0 % (docs/decisions.md, "DeepSeek's held-out
+baselines on the newest suites, and two corrected").
 
 **Both environments draw from the calibration's typed defaults**
 (`defaultCalibration`), as the life generator's tests do. So a change to
@@ -2934,6 +2953,14 @@ the ones with nothing planted, with a mean score of 0.27. Correcting every
 flag (escrow, loss mitigation, bankruptcy, servicemember) and nothing else
 passes 70. Every check the tape and the short files settle alone (checks 1,
 2, 5 and 6), with no payment history or correspondence read, passes 80.
+
+DeepSeek-V4.1-Flash's held-out baseline on 1.1.0 (thinking) is 28 of 200
+(14.0 %) at 16,000 output tokens a turn and 95 (47.5 %) at 32,000. Every
+answer it submitted passed at both, and most misses ran out of tokens. Part
+of each run was on the Vertex policy before the stream-cut check, so both
+are lower bounds, at most 35 and 107. 1.0.0, retired, passed 65 of the 150
+tasks its run scored (docs/decisions.md, "DeepSeek's held-out baselines on
+the newest suites, and two corrected").
 
 **The proof of fairness.** The reference passes the held-out suite (seed 1,
 200 packages, pinned by hash), 300 training tasks, four spec cases (the demo
@@ -3104,6 +3131,12 @@ held-out deliveries, the clean ones. Finding only what the desk's reading
 shows (a required header it refused on, a column it raised an exception on)
 passes 39. Every stream defect found, with no record read, passes 140;
 every finding with the verdict always load passes 82.
+
+DeepSeek-V4.1-Flash's held-out baseline (thinking) is 106 of 200 (53.0 %) at
+16,000 output tokens a turn and 175 (87.5 %) at 32,000. All but one answer it
+submitted passed at each, and most misses ran out of tokens
+(docs/decisions.md, "DeepSeek's held-out baselines on the newest suites, and
+two corrected").
 
 **The proof of fairness.** The reference passes the held-out suite, 300
 training tasks and 13 spec cases, one per defect in a named form, in at most
@@ -4713,6 +4746,11 @@ in this section is the suite drawn on life 1.2.0 and contacts 1.2.0, pinned
 at `4e175948…`; the rubric and the rulebook are 1.0.0's, so the version
 holds (docs/decisions.md, "The escrow call reads the annual statement").
 
+DeepSeek-V4.1-Flash's held-out baseline (thinking, 16,000 output tokens a
+turn) is 194 of 200 (97.0 %), from a whole run on the checked Vertex policy
+(docs/decisions.md, "DeepSeek's held-out baselines on the newest suites, and
+two corrected").
+
 Generating the held-out suite takes about nine seconds on a loaded machine.
 
 ## contact-audit
@@ -5272,6 +5310,11 @@ disposition says nothing either way. On the first three of those, reporting
 every promise or every complaint fails on a false root; on every history
 raising a complaint again, so does leaving the raised-again clause out; and
 on every history with an error, the roots alone fail on their symptoms.
+
+DeepSeek-V4.1-Flash's held-out baseline (thinking, 16,000 output tokens a
+turn) is 160 of 200 (80.0 %); 37 of its 40 misses ran out of tokens
+(docs/decisions.md, "DeepSeek's held-out baselines on the newest suites, and
+two corrected").
 
 Not in 1.0.0:
 

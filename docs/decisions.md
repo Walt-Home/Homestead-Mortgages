@@ -9412,3 +9412,149 @@ error's quarter of contact-audit's suite are closed: the blanket ones by the
 rework, the structural ones by the second review, the one that took a
 majority of an arm by the third, and the ones that took one again, reading
 the window's extent, by the fourth.
+
+## DeepSeek's held-out baselines on the newest suites, and two corrected
+
+**Measured 26 October 2026,** DeepSeek-V4.1-Flash on Vertex with thinking
+on, on each suite's held-out tasks (seed 1, 200), at the policy's standard
+16,000 output tokens a turn unless a budget is named. Each pass, interval
+and cost is `env:compare` over the run's file under `runs/<suite>/`: a
+task's newest scored episode counts, and a turn that never ran is not
+scored. The outcomes are read by metadata alone (outcome, pass, turns, tool calls,
+usage, error, times). Held-out transcripts and answers are not read, so why
+a task was missed is not known.
+
+| Suite                   | Passed  | Rate   | 95% interval | Cost each | Submitted, passed | Submitted, failed | `max_tokens` | `no_submission` | Other              |
+| ----------------------- | ------- | ------ | ------------ | --------- | ----------------- | ----------------- | ------------ | --------------- | ------------------ |
+| catchup-posting 1.0.0   | 197/200 | 98.5 % | 95.7–99.5    | 0.6¢      | 197               | 3                 | 0            | 0               | 0                  |
+| escrow-review 1.1.0     | 194/200 | 97.0 % | 93.6–98.6    | 1.7¢      | 194               | 6                 | 0            | 0               | 0                  |
+| call-qa 1.0.0           | 194/200 | 97.0 % | 93.6–98.6    | 1.1¢      | 194               | 3                 | 3            | 0               | 0                  |
+| contact-audit 1.0.0     | 160/200 | 80.0 % | 73.9–85.0    | 7.6¢      | 160               | 2                 | 37           | 0               | 1 refusal          |
+| tape-intake 1.0.0       | 106/200 | 53.0 % | 46.1–59.8    | 9.5¢      | 106               | 1                 | 92           | 0               | 1 `max_tool_calls` |
+| boarding-triage 1.1.0   | 28/200  | 14.0 % | 9.9–19.5     | 3.3¢      | 28                | 0                 | 165          | 7               | 0                  |
+| ei-clocks 1.0.0         | 190/200 | 95.0 % | 91.0–97.3    | 2.0¢      | 190               | 8                 | 2            | 0               | 0                  |
+| metro2-furnishing 1.0.0 | 136/200 | 68.0 % | 61.2–74.1    | 1.7¢      | 136               | 64                | 0            | 0               | 0                  |
+
+The files are `heldout-vertex-deepseek-v4.1-flash-2026-10-26.jsonl` in each
+suite's folder, but for call-qa's, which is `…-2026-10-26-whole.jsonl`, and
+the two corrected, which are their earlier files completed in place
+(`ei-clocks/…-2026-10-23.jsonl`, `metro2-furnishing/…-2026-10-22.jsonl`).
+
+- **catchup-posting 1.0.0** is on the life 1.2.0 pin, `9291c1f2…`: 197 of
+  200, beside 198 of 200 (99.0 %, 96.4 to 99.7, 0.6¢) on the life 1.1.0
+  pin, `3ff8eccf…`, on 23 October. The two suites are different loans under
+  the same task ids, so they are not paired; the one task between them is
+  inside both intervals. The 23 October figure stands as what that pin
+  measured ("Life 1.2.0" said the baseline would be rerun).
+- **escrow-review 1.1.0** is the rerun "DeepSeek's held-out baselines on
+  catchup-posting and escrow-review" promised: 194 of 200, where 1.0.0's 188
+  measured a suite with 15 answers known to be wrong. That one stands as
+  what 1.0.0 measured. An answer with the analysis right and no bill
+  comparison passes 184 of this suite (docs/environments.md), so the score
+  is ten tasks above it.
+- **call-qa 1.0.0**'s baseline is a whole run on the checked policy, started
+  after the stream-cut check: 194 of 200. 13 of its episodes, on 13 tasks,
+  ended as errors when Vertex sent no whole turn in four tries, and ran
+  again by `--resume`; none ended `no_submission`. The first run, completed
+  by `--resume` after the check (`…-2026-10-26.jsonl`), is kept as a check:
+  189 of 200 (94.5 %, 90.4 to 96.9, 1.1¢). Paired, 9 tasks pass only in the whole run and 4 only in the
+  first (McNemar exact p = 0.27). The first run's 8 `no_submission`
+  episodes all ran on the older policy and ended after a tool call, the
+  kind that can hide a cut on a later turn, and the whole run passed all
+  eight. On the other 192 tasks the first run passed 189 and the whole run
+  186: 4 only the first (3 of them out of tokens in the whole run) and 1
+  only the whole. So the gap between the two is those eight, which hidden
+  cuts would explain and metadata cannot confirm, and the rest is noise.
+- **contact-audit 1.0.0**, at `23ec82a1…`, has its first baseline: 160 of
+  the 200 passed, of 162 answers submitted; 37 episodes ran out of output
+  tokens and 1 refused. Reporting nothing passes 50, the clean
+  windows.
+- **tape-intake 1.0.0 and boarding-triage 1.1.0** are below, beside their
+  runs at 32,000 tokens.
+
+**The token budget.** A turn that spends its budget mid-turn ends
+`max_tokens` and fails (docs/environments.md, the `vertex` policy).
+boarding-triage and tape-intake ran again at 32,000, and the policy id
+names that budget (`…:thinking:max-tokens-32000`):
+
+| Suite                 | 16,000                        | 32,000                         | Only at 16,000 | Only at 32,000 | McNemar exact p |
+| --------------------- | ----------------------------- | ------------------------------ | -------------- | -------------- | --------------- |
+| boarding-triage 1.1.0 | 28 (14.0 %, 9.9–19.5), 3.3¢   | 95 (47.5 %, 40.7–54.4), 6.9¢   | 6              | 73             | 1.0 × 10⁻¹⁵     |
+| tape-intake 1.0.0     | 106 (53.0 %, 46.1–59.8), 9.5¢ | 175 (87.5 %, 82.2–91.4), 13.4¢ | 4              | 73             | 1.9 × 10⁻¹⁷     |
+
+At 32,000, boarding-triage's 95 passes are every answer submitted, with 93
+out of tokens and 12 `no_submission`; tape-intake's 175 are 176 submitted
+less one that failed, with 23 out of tokens and 1 at the tool-call limit.
+(`env:compare` prints both p values as 0.0000; they are computed here to
+more places.)
+
+Nearly every submitted answer passed at either budget: 28 of 28 and 95 of
+95 on boarding-triage, 106 of 107 and 175 of 176 on tape-intake. What moved
+was how many answers were submitted. Of the 73 tasks each suite passed only
+at 32,000, 71 on boarding-triage and 72 on tape-intake ran out of tokens at
+16,000. So the 16,000 score mostly measures the budget: there boarding-triage
+scores below the floor that corrects every flag and nothing else (70), and
+tape-intake below the one that finds every stream defect and reads no record
+(140). At 32,000 boarding-triage still ran out on 93 tasks, so that score is
+partly the budget too. contact-audit, run at 16,000 alone, has the same
+shape: 37 of its 40 misses, 18.5 % of the suite, ran out of tokens.
+
+**What budget each environment should run at is left open.** A score
+carries its budget in the policy id, and scores at different budgets are
+not comparable.
+
+**A lower bound where the older policy ran.** Part of the boarding-triage and
+tape-intake runs ran on the policy before the stream-cut check (`3368e5a`,
+committed at 12:43 Eastern). The four runs were stopped before it and
+resumed after it: no episode in them started between 12:40 and 12:45. An
+episode from before that was cut on a later turn reads as `no_submission`
+after a tool call, which metadata cannot tell from a model that stopped
+("A Vertex stream cut mid-turn was scored as the model's miss"):
+
+- boarding-triage 1.1.0 at 16,000: 59 of the 200 scored episodes started
+  before the check, and 7 of them ended `no_submission` after a tool call,
+  every `no_submission` in the file. The score is 28, and at most 35.
+- At 32,000: 38 started before, and 12 such, again every `no_submission` in
+  the file. The score is 95, and at most 107.
+- tape-intake 1.0.0: 95 episodes at 16,000 and 14 at 32,000 started before,
+  and none ended `no_submission`, so neither score is touched.
+
+catchup-posting and escrow-review ran wholly before the check, and none of
+their episodes ended `no_submission`. contact-audit and call-qa's whole run
+started after it.
+
+**Two corrected.** "A Vertex stream cut mid-turn was scored as the model's
+miss" promised these. Each file's cut turns ran again on 26 October with the
+checked policy, by `--resume` into the same file, and every one passed:
+
+- **ei-clocks 1.0.0:** 190 of 200 (95.0 %, 91.0 to 97.3), 2.0¢ an episode,
+  where 188 of 200 counted its 2 cut turns as misses. The ten misses are 8
+  submitted answers that failed and 2 that ran out of tokens.
+- **metro2-furnishing 1.0.0:** 136 of 200 (68.0 %, 61.2 to 74.1), 1.7¢,
+  where 133 counted 3. Every one of its 64 misses is a submitted answer
+  that failed. It is still inside the 50 to 80 % band.
+
+The figures in "DeepSeek's held-out baseline on ei-clocks" and "DeepSeek's
+held-out baseline on the seven newest environments" stand as what was
+recorded then, and those entries are not edited.
+
+**boarding-triage 1.0.0, retired.** Its 23 October run
+(`…-2026-10-23.jsonl`, at 16,000) scored 150 of 200 tasks before the gcloud
+credentials expired. The other 50 ended in transport errors and were not
+run again, because 1.0.0 was retired when 1.1.0 was pinned
+("boarding-triage 1.1.0 draws the first ten, and grades a root apart from
+its symptoms"). Of the 150, 65 passed (43.3 %, 35.7 to 51.3), at 3.1¢:
+every one of the 65 submitted answers passed, 71 ran out of tokens, and 14
+ended `no_submission` after a tool call on the older policy, so 65 is a
+lower bound and the most is 79. That is why the runs above were made at
+two budgets. It stands as what those 150 showed, and is not a baseline.
+
+**The day's spend** was $90.53 at the Vertex list price `env:compare`
+prices with: the priced usage of the newest episode of every task in the
+files that ran on 26 October, the nine new runs and the five reruns in the
+two corrected, 1,805 episodes. tape-intake's two runs were $45.73,
+boarding-triage's $20.39, contact-audit $15.23 and the rest $9.18. Reruns
+add $0.03, all of it the errored and superseded episodes of call-qa's first
+run, for $90.56; a turn that never ran cost nothing. An episode in flight
+when a run was stopped wrote no record, so what it spent is in no file and
+not in these sums.

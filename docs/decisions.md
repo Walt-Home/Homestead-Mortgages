@@ -9636,14 +9636,15 @@ turn"). Every other environment stays at the policies' 16,000.
 baseline on 1.0.0 at 16,000 ("DeepSeek's held-out baselines on the newest
 suites, and two corrected") passed 160 of 200 (80.0 %, 73.9 to 85.0): 160
 of the 162 answers it submitted passed, and 37 of its 40 misses ran out of
-tokens. That entry left contact-audit at the default because it had no run
-at 32,000; one was started the same day.
+tokens. The decision on the other two left contact-audit at the default
+because it had no run at 32,000; one was started the same day.
 
 **What changed.** `outputBudget: 32000` on contact-audit's `Environment`
-(`src/contact-audit/index.ts`), and nothing else. No fingerprint, rulebook,
-tool, version or held-out pin moved. A run with no flag is recorded at
-`…:max-tokens-32000`, and resuming the 16,000 file takes
-`--max-tokens 16000`. A Gym built from it labels the 16,000 score
+(`src/contact-audit/index.ts`); the tests that list the environments at
+32,000 and the CLI's note on `--max-tokens` name it beside the other two. No
+fingerprint, rulebook, tool, version or held-out pin moved. A run with no
+flag is recorded at `…:max-tokens-32000`, and resuming the 16,000 file
+takes `--max-tokens 16000`. A Gym built from it labels the 16,000 score
 "DeepSeek, 16k budget".
 
 **The baseline.** The run at 32,000 is recorded in its own entry when it

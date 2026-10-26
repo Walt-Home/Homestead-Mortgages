@@ -29,20 +29,36 @@
  *
  * The bundle is loaded once, in a context holding only the browser globals
  * it uses, before any run is read: a bundle that needs Node fails here.
+ *
+ * A checkout with no `runs/` (a fresh clone, CI, the API image) builds the
+ * same page and bundle, and says that it read no runs. Two flags:
+ *
+ * - `--site-only`: the page and the bundle and nothing else; `runs/` is not
+ *   read and neither JSON file is written. The API image builds the Gym it
+ *   serves inside the ops console this way (`apps/api/src/routes/console-gym.ts`),
+ *   beside the held-out counts committed at `playground/snapshot/scores.json`.
+ * - `--out <dir>`: write there instead of `playground/dist/`.
  */
 
 import { build } from "esbuild";
 import { webcrypto } from "node:crypto";
-import { mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { parseArgs } from "node:util";
 import vm from "node:vm";
 import { gzipSync } from "node:zlib";
 
 const pkg = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const packages = resolve(pkg, "..");
-const out = join(pkg, "playground", "dist");
+const { values: args } = parseArgs({
+  options: { out: { type: "string" }, "site-only": { type: "boolean", default: false } },
+});
+const out = args.out ? resolve(args.out) : join(pkg, "playground", "dist");
+const siteOnly = args["site-only"];
 const kb = (n) => `${(n / 1024).toFixed(1)} KB`;
+/** A path as the log prints it: relative to this package when it is inside it. */
+const shown = (p) => (relative(pkg, p).startsWith("..") ? p : relative(pkg, p));
 
 /* ── the bundle ─────────────────────────────────────────────────────────── */
 
@@ -126,7 +142,7 @@ if (forbidden.length > 0) {
 }
 const bundle = readFileSync(bundlePath);
 console.log(
-  `${relative(pkg, bundlePath)}: ${kb(bundle.length)} (${kb(gzipSync(bundle).length)} gzipped), ${inputs.length} modules`,
+  `${shown(bundlePath)}: ${kb(bundle.length)} (${kb(gzipSync(bundle).length)} gzipped), ${inputs.length} modules`,
 );
 
 /** The bundle as a page loads it: the browser globals it reaches for, and nothing of Node's. */
@@ -144,6 +160,27 @@ if (!HM?.environments?.length || typeof HM.drawsHeldoutStream !== "function")
 // The page labels a run by whether it ran at its environment's own budget, so every environment must say it.
 if (HM.environments.some((e) => !(Number.isInteger(e.outputBudget) && e.outputBudget > 0)))
   throw new Error("environments.js gave an environment no output budget");
+
+/* ── the page ───────────────────────────────────────────────────────────── */
+
+// The page beside the files it loads, so dist/ is the whole site. The
+// source is written for the Artifact host, which wraps it in a document with
+// a charset and a viewport; served from disk it gets the same wrapping here,
+// or every middle dot and ≤ reads as mojibake.
+const SKELETON =
+  '<!doctype html>\n<html lang="en">\n<head>\n<meta charset="utf-8">\n' +
+  '<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">\n' +
+  "</head>\n<body>\n";
+writeFileSync(
+  join(out, "index.html"),
+  SKELETON + readFileSync(join(pkg, "playground", "index.html"), "utf8") + "\n</body>\n</html>\n",
+);
+console.log(`${shown(join(out, "index.html"))}: copied`);
+
+if (siteOnly) {
+  console.log("--site-only: runs/ not read, and no runs.json or scores.json written");
+  process.exit(0);
+}
 
 /* ── the runs ───────────────────────────────────────────────────────────── */
 
@@ -271,7 +308,11 @@ let unreadable = 0;
 const skipped = { heldout: 0, spec: 0, stream: 0, reference: 0, other: 0 };
 /** env → policy → { version, byTask: task id → record } */
 const kept = new Map();
-for (const file of jsonlFiles(join(pkg, "runs")).sort()) {
+// A checkout with no runs/ builds the same page, and its two files say they hold nothing.
+const runsDir = join(pkg, "runs");
+if (!existsSync(runsDir))
+  console.log("no runs/ directory: runs.json and scores.json are written with nothing in them");
+for (const file of jsonlFiles(runsDir).sort()) {
   for (const line of readFileSync(file, "utf8").split("\n")) {
     if (!line.trim()) continue;
     let r;
@@ -351,7 +392,7 @@ for (const r of records) {
   counts.set(k, (counts.get(k) ?? 0) + 1);
 }
 console.log(
-  `${relative(pkg, runsPath)}: ${kb(Buffer.byteLength(text))}, ${records.length} episodes of ${read} read (left out: ${skipped.heldout} held-out, ${skipped.spec} spec, ${skipped.stream} on a held-out stream, ${skipped.reference} reference, ${skipped.other} other, ${unreadable} unreadable lines${dropped ? `, ${dropped} over the cap` : ""})`,
+  `${shown(runsPath)}: ${kb(Buffer.byteLength(text))}, ${records.length} episodes of ${read} read (left out: ${skipped.heldout} held-out, ${skipped.spec} spec, ${skipped.stream} on a held-out stream, ${skipped.reference} reference, ${skipped.other} other, ${unreadable} unreadable lines${dropped ? `, ${dropped} over the cap` : ""})`,
 );
 for (const [k, n] of counts) console.log(`  ${k}: ${n}`);
 
@@ -389,22 +430,8 @@ const scoresText = JSON.stringify({
 if (/heldout\/|"rendered"|"transcript"/.test(scoresText))
   throw new Error("scores.json would carry a held-out task id or text");
 writeFileSync(join(out, "scores.json"), scoresText);
-console.log(`${relative(pkg, join(out, "scores.json"))}: ${scores.length} suites`);
+console.log(`${shown(join(out, "scores.json"))}: ${scores.length} suites`);
 for (const x of scores)
   console.log(
     `  ${x.env} ${x.version}  ${x.policy}: ${x.passed} of ${x.scored} scored${x.unscored ? `, ${x.unscored} unscored` : ""}`,
   );
-
-// The page beside the two files it loads, so dist/ is the whole site. The
-// source is written for the Artifact host, which wraps it in a document with
-// a charset and a viewport; served from disk it gets the same wrapping here,
-// or every middle dot and ≤ reads as mojibake.
-const SKELETON =
-  '<!doctype html>\n<html lang="en">\n<head>\n<meta charset="utf-8">\n' +
-  '<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">\n' +
-  "</head>\n<body>\n";
-writeFileSync(
-  join(out, "index.html"),
-  SKELETON + readFileSync(join(pkg, "playground", "index.html"), "utf8") + "\n</body>\n</html>\n",
-);
-console.log(`${relative(pkg, join(out, "index.html"))}: copied`);

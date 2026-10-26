@@ -304,26 +304,57 @@ describe("the playground", () => {
     },
   );
 
+  /** Held-out scores as counts: no task id, prompt or transcript, and no field but the counts'. */
+  const countsOnly = (text: string) => {
+    expect(text).not.toMatch(/\/heldout\/|\/train\/|"rendered"|"transcript"|"fields"|"id"/);
+    const { scores } = JSON.parse(text) as { scores: Record<string, unknown>[] };
+    for (const x of scores) {
+      expect(Object.keys(x).sort()).toEqual(
+        [
+          "env",
+          "last_finished_at",
+          "passed",
+          "policy",
+          "scored",
+          "unscored",
+          "usage",
+          "version",
+        ].sort(),
+      );
+      for (const k of ["env", "version", "policy"]) expect(typeof x[k]).toBe("string");
+      for (const k of ["scored", "passed", "unscored"]) expect(Number.isInteger(x[k])).toBe(true);
+      expect(x.passed as number).toBeLessThanOrEqual(x.scored as number);
+      const usage = x.usage as Record<string, unknown>;
+      expect(Object.keys(usage).sort()).toEqual(
+        [
+          "cache_creation_input_tokens",
+          "cache_read_input_tokens",
+          "input_tokens",
+          "output_tokens",
+        ].sort(),
+      );
+      for (const v of Object.values(usage)) expect(Number.isInteger(v)).toBe(true);
+      expect(x.last_finished_at === null || typeof x.last_finished_at === "string").toBe(true);
+    }
+    return scores;
+  };
+
   const SCORES = here("../../playground/dist/scores.json");
   it.skipIf(!existsSync(SCORES))(
     "ships held-out scores as counts, with no task, prompt or transcript",
     () => {
-      const text = readFileSync(SCORES, "utf8");
-      expect(text).not.toMatch(/\/heldout\/|\/train\/|"rendered"|"transcript"|"fields"|"id"/);
-      const { scores } = JSON.parse(text) as { scores: Record<string, unknown>[] };
-      for (const x of scores)
-        expect(Object.keys(x).sort()).toEqual(
-          [
-            "env",
-            "last_finished_at",
-            "passed",
-            "policy",
-            "scored",
-            "unscored",
-            "usage",
-            "version",
-          ].sort(),
-        );
+      countsOnly(readFileSync(SCORES, "utf8"));
     },
   );
+
+  // What the ops console serves beside the page (`npm run env:gym-snapshot`), committed.
+  it("commits held-out scores as counts and nothing else, for environments the bundle knows", () => {
+    const text = readFileSync(here("../../playground/snapshot/scores.json"), "utf8");
+    const doc = JSON.parse(text) as Record<string, unknown>;
+    expect(Object.keys(doc).sort()).toEqual(["about", "built_at", "scores"]);
+    const scores = countsOnly(text);
+    expect(scores.length).toBeGreaterThan(0);
+    const keys = new Set(environments.map((e) => e.key));
+    for (const x of scores) expect(keys, String(x.env)).toContain(x.env);
+  });
 });

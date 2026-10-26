@@ -1086,6 +1086,15 @@ details.plain > summary + * { margin-top: 8px; }
   function failRuns(err) {
     RUNS = { status: "failed", records: [], builtAt: null, error: err && err.message ? err.message : String(err) };
   }
+  /*
+   * A build with no runs.json beside it: the copy served inside the ops console carries no model transcripts,
+   * because those are not committed to the repository it is built from. The page says where they are instead.
+   */
+  var RUNS_PAGE = "https://claude.ai/artifact/LKEDiyPJyoQ4UwijqwpNw6";
+  function runsElsewhere(lead) {
+    return h("span", null, lead + "They are on ",
+      h("a", { href: RUNS_PAGE, target: "_blank", rel: "noopener noreferrer" }, "the Gym's claude.ai page"), ".");
+  }
   function renderRuns() {
     renderOverview();
     renderTabs();
@@ -1096,6 +1105,11 @@ details.plain > summary + * { margin-top: 8px; }
       foot.textContent = "Recorded runs: " + plural(RUNS.records.length, "episode") + " on training tasks" +
         (RUNS.builtAt ? ", gathered " + utc(RUNS.builtAt) : "") +
         ": for each environment and model, the newest version it was run on and the newest run of each task. Held-out, spec and reference episodes are never in that file.";
+    } else if (RUNS.status === "absent") {
+      clear(foot).append(runsElsewhere("This build carries no recorded attempts by a model on training tasks. "));
+      clear($("overview-note")).append(
+        "A held-out score is how a model did on the 200 held-out tasks, which this page never shows. ",
+        runsElsewhere("This build carries no recorded attempts on training tasks. "));
     } else {
       foot.textContent = "The recorded runs could not be loaded (" + RUNS.error + "). Everything else on this page works without them.";
     }
@@ -1140,9 +1154,15 @@ details.plain > summary + * { margin-top: 8px; }
 
   function loadRuns() {
     fetch("runs.json").then(function (res) {
+      /* No such file: this build carries no recorded attempts, which is a build and not a failure. */
+      if (res.status === 404) return null;
       if (!res.ok) throw new Error("runs.json answered " + res.status);
       return res.json();
     }).then(function (data) {
+      if (data === null) {
+        RUNS = { status: "absent", records: [], builtAt: null, error: null };
+        return;
+      }
       if (!isObj(data) || !Array.isArray(data.records)) throw new Error("runs.json holds no list of records");
       RUNS = {
         status: "ready",
@@ -1180,7 +1200,8 @@ details.plain > summary + * { margin-top: 8px; }
   function readsEl(env) {
     var wrap = h("div", { class: "env-reads" });
     if (RUNS.status === "loading") { wrap.append(h("span", { class: "muted" }, "Loading training reads")); return wrap; }
-    if (RUNS.status === "failed") return null;
+    /* Absent, the overview's own note says once where the training reads are. */
+    if (RUNS.status === "failed" || RUNS.status === "absent") return null;
     var reads = readsOf(recordsFor(env.key));
     if (!reads.length) { wrap.append(h("span", { class: "muted" }, "No model runs on training tasks yet")); return wrap; }
     wrap.append(h("span", { class: "reads-label" }, "Training reads"));
@@ -1977,6 +1998,12 @@ details.plain > summary + * { margin-top: 8px; }
     var env = cur(), s = st();
     var body = clear($("att-body"));
     if (RUNS.status === "loading") { body.append(h("p", { class: "hint" }, "Loading the recorded runs.")); return; }
+    if (RUNS.status === "absent") {
+      body.append(h("div", { class: "msg msg-note", id: "att-absent" },
+        h("strong", null, "This build carries no recorded attempts."),
+        runsElsewhere("")));
+      return;
+    }
     if (RUNS.status === "failed") {
       body.append(h("div", { class: "msg msg-error" }, h("strong", null, "The recorded runs did not load"), h("span", null, RUNS.error + ". The page expects runs.json beside it.")));
       return;

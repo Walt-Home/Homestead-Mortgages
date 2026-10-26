@@ -1,0 +1,576 @@
+{
+  "built_at": "2026-10-26T21:13:49.541Z",
+  "about": "Held-out scores: for each environment, version and model, how many held-out tasks the newest scored episode of each passed, and the tokens spent. No task, prompt or transcript is in this file.",
+  "scores": [
+    {
+      "env": "arm-adjustment",
+      "version": "1.0.0",
+      "policy": "vertex:deepseek-ai/deepseek-v4.1-flash-maas:thinking",
+      "scored": 200,
+      "passed": 200,
+      "unscored": 0,
+      "usage": {
+        "input_tokens": 5874854,
+        "cache_read_input_tokens": 1388544,
+        "cache_creation_input_tokens": 0,
+        "output_tokens": 741329
+      },
+      "last_finished_at": "2026-10-22T15:10:28.204Z"
+    },
+    {
+      "env": "aus-decision",
+      "version": "1.0.0",
+      "policy": "vertex:deepseek-ai/deepseek-v4.1-flash-maas:thinking",
+      "scored": 200,
+      "passed": 192,
+      "unscored": 0,
+      "usage": {
+        "input_tokens": 3229419,
+        "cache_read_input_tokens": 3531008,
+        "cache_creation_input_tokens": 0,
+        "output_tokens": 1069917
+      },
+      "last_finished_at": "2026-10-22T15:43:37.610Z"
+    },
+    {
+      "env": "boarding-triage",
+      "version": "1.0.0",
+      "policy": "vertex:deepseek-ai/deepseek-v4.1-flash-maas:thinking",
+      "scored": 150,
+      "passed": 65,
+      "unscored": 50,
+      "usage": {
+        "input_tokens": 5739191,
+        "cache_read_input_tokens": 2635264,
+        "cache_creation_input_tokens": 0,
+        "output_tokens": 2376827
+      },
+      "last_finished_at": "2026-10-24T03:03:22.804Z"
+    },
+    {
+      "env": "boarding-triage",
+      "version": "1.1.0",
+      "policy": "vertex:deepseek-ai/deepseek-v4.1-flash-maas:thinking",
+      "scored": 200,
+      "passed": 28,
+      "unscored": 0,
+      "usage": {
+        "input_tokens": 4994172,
+        "cache_read_input_tokens": 6351104,
+        "cache_creation_input_tokens": 0,
+        "output_tokens": 4093180
+      },
+      "last_finished_at": "2026-10-26T18:03:43.178Z"
+    },
+    {
+      "env": "boarding-triage",
+      "version": "1.1.0",
+      "policy": "vertex:deepseek-ai/deepseek-v4.1-flash-maas:thinking:max-tokens-32000",
+      "scored": 200,
+      "passed": 95,
+      "unscored": 0,
+      "usage": {
+        "input_tokens": 9590676,
+        "cache_read_input_tokens": 15205376,
+        "cache_creation_input_tokens": 0,
+        "output_tokens": 8715210
+      },
+      "last_finished_at": "2026-10-26T19:49:48.007Z"
+    },
+    {
+      "env": "call-qa",
+      "version": "1.0.0",
+      "policy": "vertex:deepseek-ai/deepseek-v4.1-flash-maas:thinking",
+      "scored": 200,
+      "passed": 194,
+      "unscored": 0,
+      "usage": {
+        "input_tokens": 2703178,
+        "cache_read_input_tokens": 1643520,
+        "cache_creation_input_tokens": 0,
+        "output_tokens": 1167406
+      },
+      "last_finished_at": "2026-10-26T17:38:59.434Z"
+    },
+    {
+      "env": "catchup-posting",
+      "version": "1.0.0",
+      "policy": "vertex:deepseek-ai/deepseek-v4.1-flash-maas:thinking",
+      "scored": 200,
+      "passed": 197,
+      "unscored": 0,
+      "usage": {
+        "input_tokens": 1675126,
+        "cache_read_input_tokens": 3379200,
+        "cache_creation_input_tokens": 0,
+        "output_tokens": 484391
+      },
+      "last_finished_at": "2026-10-26T15:31:59.228Z"
+    },
+    {
+      "env": "contact-audit",
+      "version": "1.0.0",
+      "policy": "vertex:deepseek-ai/deepseek-v4.1-flash-maas:thinking",
+      "scored": 200,
+      "passed": 160,
+      "unscored": 0,
+      "usage": {
+        "input_tokens": 35973175,
+        "cache_read_input_tokens": 3476992,
+        "cache_creation_input_tokens": 0,
+        "output_tokens": 3610524
+      },
+      "last_finished_at": "2026-10-26T18:43:35.494Z"
+    },
+    {
+      "env": "ei-clocks",
+      "version": "1.0.0",
+      "policy": "vertex:deepseek-ai/deepseek-v4.1-flash-maas:thinking",
+      "scored": 200,
+      "passed": 190,
+      "unscored": 0,
+      "usage": {
+        "input_tokens": 3996779,
+        "cache_read_input_tokens": 1326592,
+        "cache_creation_input_tokens": 0,
+        "output_tokens": 2373210
+      },
+      "last_finished_at": "2026-10-26T16:46:58.400Z"
+    },
+    {
+      "env": "escrow-analysis",
+      "version": "1.0.0",
+      "policy": "vertex:deepseek-ai/deepseek-v4.1-flash-maas:thinking",
+      "scored": 200,
+      "passed": 191,
+      "unscored": 0,
+      "usage": {
+        "input_tokens": 5785946,
+        "cache_read_input_tokens": 1240576,
+        "cache_creation_input_tokens": 0,
+        "output_tokens": 1100338
+      },
+      "last_finished_at": "2026-10-21T20:20:28.805Z"
+    },
+    {
+      "env": "escrow-history",
+      "version": "1.0.0",
+      "policy": "vertex:deepseek-ai/deepseek-v4.1-flash-maas:thinking",
+      "scored": 200,
+      "passed": 188,
+      "unscored": 0,
+      "usage": {
+        "input_tokens": 7544472,
+        "cache_read_input_tokens": 1209088,
+        "cache_creation_input_tokens": 0,
+        "output_tokens": 1423530
+      },
+      "last_finished_at": "2026-10-21T20:34:44.539Z"
+    },
+    {
+      "env": "escrow-policy",
+      "version": "1.0.0",
+      "policy": "vertex:deepseek-ai/deepseek-v4.1-flash-maas:thinking",
+      "scored": 200,
+      "passed": 190,
+      "unscored": 0,
+      "usage": {
+        "input_tokens": 2589792,
+        "cache_read_input_tokens": 3916032,
+        "cache_creation_input_tokens": 0,
+        "output_tokens": 1310442
+      },
+      "last_finished_at": "2026-10-21T21:28:03.148Z"
+    },
+    {
+      "env": "escrow-review",
+      "version": "1.0.0",
+      "policy": "vertex:deepseek-ai/deepseek-v4.1-flash-maas:thinking",
+      "scored": 200,
+      "passed": 188,
+      "unscored": 0,
+      "usage": {
+        "input_tokens": 7560277,
+        "cache_read_input_tokens": 968960,
+        "cache_creation_input_tokens": 0,
+        "output_tokens": 1093298
+      },
+      "last_finished_at": "2026-10-23T18:07:27.935Z"
+    },
+    {
+      "env": "escrow-review",
+      "version": "1.1.0",
+      "policy": "vertex:deepseek-ai/deepseek-v4.1-flash-maas:thinking",
+      "scored": 200,
+      "passed": 194,
+      "unscored": 0,
+      "usage": {
+        "input_tokens": 6882141,
+        "cache_read_input_tokens": 1530112,
+        "cache_creation_input_tokens": 0,
+        "output_tokens": 1126873
+      },
+      "last_finished_at": "2026-10-26T15:45:54.313Z"
+    },
+    {
+      "env": "flexmod-terms",
+      "version": "1.2.0",
+      "policy": "vertex:deepseek-ai/deepseek-v4.1-flash-maas:thinking",
+      "scored": 200,
+      "passed": 196,
+      "unscored": 0,
+      "usage": {
+        "input_tokens": 5519591,
+        "cache_read_input_tokens": 2318848,
+        "cache_creation_input_tokens": 0,
+        "output_tokens": 929679
+      },
+      "last_finished_at": "2026-10-22T01:41:01.553Z"
+    },
+    {
+      "env": "flexmod-terms",
+      "version": "1.1.0",
+      "policy": "vertex:deepseek-ai/deepseek-v4.1-flash-maas:thinking",
+      "scored": 200,
+      "passed": 192,
+      "unscored": 0,
+      "usage": {
+        "input_tokens": 5692196,
+        "cache_read_input_tokens": 2146816,
+        "cache_creation_input_tokens": 0,
+        "output_tokens": 923301
+      },
+      "last_finished_at": "2026-10-21T20:19:54.596Z"
+    },
+    {
+      "env": "lossmit-retention",
+      "version": "1.0.0",
+      "policy": "vertex:deepseek-ai/deepseek-v4.1-flash-maas:thinking",
+      "scored": 200,
+      "passed": 190,
+      "unscored": 0,
+      "usage": {
+        "input_tokens": 4379450,
+        "cache_read_input_tokens": 1128448,
+        "cache_creation_input_tokens": 0,
+        "output_tokens": 615956
+      },
+      "last_finished_at": "2026-10-22T15:09:21.213Z"
+    },
+    {
+      "env": "metro2-furnishing",
+      "version": "1.0.0",
+      "policy": "vertex:deepseek-ai/deepseek-v4.1-flash-maas:thinking",
+      "scored": 200,
+      "passed": 136,
+      "unscored": 0,
+      "usage": {
+        "input_tokens": 3802431,
+        "cache_read_input_tokens": 1790464,
+        "cache_creation_input_tokens": 0,
+        "output_tokens": 1853616
+      },
+      "last_finished_at": "2026-10-26T16:47:10.285Z"
+    },
+    {
+      "env": "payments-posting",
+      "version": "1.1.0",
+      "policy": "vertex:deepseek-ai/deepseek-v4.1-flash-maas:thinking",
+      "scored": 200,
+      "passed": 197,
+      "unscored": 0,
+      "usage": {
+        "input_tokens": 4611063,
+        "cache_read_input_tokens": 997376,
+        "cache_creation_input_tokens": 0,
+        "output_tokens": 1162935
+      },
+      "last_finished_at": "2026-10-22T01:42:38.549Z"
+    },
+    {
+      "env": "payments-posting",
+      "version": "1.0.0",
+      "policy": "vertex:deepseek-ai/deepseek-v4.1-flash-maas:thinking",
+      "scored": 200,
+      "passed": 197,
+      "unscored": 0,
+      "usage": {
+        "input_tokens": 4848853,
+        "cache_read_input_tokens": 752640,
+        "cache_creation_input_tokens": 0,
+        "output_tokens": 1157778
+      },
+      "last_finished_at": "2026-10-21T20:24:51.603Z"
+    },
+    {
+      "env": "payoff-statement",
+      "version": "1.0.0",
+      "policy": "vertex:deepseek-ai/deepseek-v4.1-flash-maas:thinking",
+      "scored": 200,
+      "passed": 191,
+      "unscored": 0,
+      "usage": {
+        "input_tokens": 2996097,
+        "cache_read_input_tokens": 3198720,
+        "cache_creation_input_tokens": 0,
+        "output_tokens": 923918
+      },
+      "last_finished_at": "2026-10-22T15:28:34.885Z"
+    },
+    {
+      "env": "pmi-termination",
+      "version": "1.1.0",
+      "policy": "vertex:deepseek-ai/deepseek-v4.1-flash-maas:thinking",
+      "scored": 200,
+      "passed": 197,
+      "unscored": 0,
+      "usage": {
+        "input_tokens": 10413331,
+        "cache_read_input_tokens": 4361216,
+        "cache_creation_input_tokens": 0,
+        "output_tokens": 1332277
+      },
+      "last_finished_at": "2026-10-22T18:08:54.364Z"
+    },
+    {
+      "env": "pmi-termination",
+      "version": "1.0.0",
+      "policy": "vertex:deepseek-ai/deepseek-v4.1-flash-maas:thinking",
+      "scored": 200,
+      "passed": 196,
+      "unscored": 0,
+      "usage": {
+        "input_tokens": 10929654,
+        "cache_read_input_tokens": 3928576,
+        "cache_creation_input_tokens": 0,
+        "output_tokens": 1344419
+      },
+      "last_finished_at": "2026-10-22T15:26:52.083Z"
+    },
+    {
+      "env": "qualifying-income",
+      "version": "1.0.0",
+      "policy": "vertex:deepseek-ai/deepseek-v4.1-flash-maas:thinking",
+      "scored": 200,
+      "passed": 199,
+      "unscored": 0,
+      "usage": {
+        "input_tokens": 2226435,
+        "cache_read_input_tokens": 317696,
+        "cache_creation_input_tokens": 0,
+        "output_tokens": 432853
+      },
+      "last_finished_at": "2026-10-22T14:51:08.262Z"
+    },
+    {
+      "env": "refi-hard-policy",
+      "version": "1.1.0+policy.1.3.0",
+      "policy": "vertex:deepseek-ai/deepseek-v4.1-flash-maas:thinking",
+      "scored": 200,
+      "passed": 185,
+      "unscored": 0,
+      "usage": {
+        "input_tokens": 6821702,
+        "cache_read_input_tokens": 7961600,
+        "cache_creation_input_tokens": 0,
+        "output_tokens": 2046067
+      },
+      "last_finished_at": "2026-10-21T22:00:20.995Z"
+    },
+    {
+      "env": "refi-hard",
+      "version": "1.1.0",
+      "policy": "vertex:deepseek-ai/deepseek-v4.1-flash-maas:thinking",
+      "scored": 200,
+      "passed": 184,
+      "unscored": 0,
+      "usage": {
+        "input_tokens": 6835183,
+        "cache_read_input_tokens": 6738944,
+        "cache_creation_input_tokens": 0,
+        "output_tokens": 1298954
+      },
+      "last_finished_at": "2026-10-21T21:58:20.418Z"
+    },
+    {
+      "env": "refi-policy",
+      "version": "1.3.0",
+      "policy": "vertex:deepseek-ai/deepseek-v4.1-flash-maas:thinking",
+      "scored": 200,
+      "passed": 190,
+      "unscored": 0,
+      "usage": {
+        "input_tokens": 5379815,
+        "cache_read_input_tokens": 5644032,
+        "cache_creation_input_tokens": 0,
+        "output_tokens": 1701206
+      },
+      "last_finished_at": "2026-10-21T22:01:35.501Z"
+    },
+    {
+      "env": "refi-review",
+      "version": "1.0.0",
+      "policy": "anthropic:claude-opus-5-5:high",
+      "scored": 200,
+      "passed": 199,
+      "unscored": 0,
+      "usage": {
+        "input_tokens": 4114,
+        "cache_read_input_tokens": 14922731,
+        "cache_creation_input_tokens": 654522,
+        "output_tokens": 414014
+      },
+      "last_finished_at": "2026-10-20T16:20:34.133Z"
+    },
+    {
+      "env": "refi-review",
+      "version": "1.0.0",
+      "policy": "vertex:deepseek-ai/deepseek-v4.1-flash-maas:thinking",
+      "scored": 200,
+      "passed": 193,
+      "unscored": 0,
+      "usage": {
+        "input_tokens": 6581373,
+        "cache_read_input_tokens": 2446336,
+        "cache_creation_input_tokens": 0,
+        "output_tokens": 781502
+      },
+      "last_finished_at": "2026-10-21T20:13:15.036Z"
+    },
+    {
+      "env": "refi-tape",
+      "version": "1.1.0",
+      "policy": "vertex:deepseek-ai/deepseek-v4.1-flash-maas:thinking",
+      "scored": 200,
+      "passed": 198,
+      "unscored": 0,
+      "usage": {
+        "input_tokens": 5352813,
+        "cache_read_input_tokens": 4899328,
+        "cache_creation_input_tokens": 0,
+        "output_tokens": 1045870
+      },
+      "last_finished_at": "2026-10-21T21:35:19.922Z"
+    },
+    {
+      "env": "regz-apr",
+      "version": "1.1.0",
+      "policy": "vertex:deepseek-ai/deepseek-v4.1-flash-maas:thinking",
+      "scored": 200,
+      "passed": 171,
+      "unscored": 0,
+      "usage": {
+        "input_tokens": 3731879,
+        "cache_read_input_tokens": 3347968,
+        "cache_creation_input_tokens": 0,
+        "output_tokens": 727655
+      },
+      "last_finished_at": "2026-10-21T21:21:47.922Z"
+    },
+    {
+      "env": "regz-apr",
+      "version": "1.2.0",
+      "policy": "vertex:deepseek-ai/deepseek-v4.1-flash-maas:thinking",
+      "scored": 200,
+      "passed": 170,
+      "unscored": 0,
+      "usage": {
+        "input_tokens": 1830419,
+        "cache_read_input_tokens": 5109504,
+        "cache_creation_input_tokens": 0,
+        "output_tokens": 694293
+      },
+      "last_finished_at": "2026-10-22T21:40:25.353Z"
+    },
+    {
+      "env": "regz-policy",
+      "version": "1.1.0",
+      "policy": "vertex:deepseek-ai/deepseek-v4.1-flash-maas:thinking",
+      "scored": 200,
+      "passed": 197,
+      "unscored": 0,
+      "usage": {
+        "input_tokens": 1285629,
+        "cache_read_input_tokens": 1904896,
+        "cache_creation_input_tokens": 0,
+        "output_tokens": 504945
+      },
+      "last_finished_at": "2026-10-21T21:06:37.737Z"
+    },
+    {
+      "env": "regz-policy",
+      "version": "1.2.0",
+      "policy": "vertex:deepseek-ai/deepseek-v4.1-flash-maas:thinking",
+      "scored": 200,
+      "passed": 197,
+      "unscored": 0,
+      "usage": {
+        "input_tokens": 660156,
+        "cache_read_input_tokens": 2666752,
+        "cache_creation_input_tokens": 0,
+        "output_tokens": 549476
+      },
+      "last_finished_at": "2026-10-22T21:32:03.931Z"
+    },
+    {
+      "env": "regz-price-tests",
+      "version": "1.1.0",
+      "policy": "vertex:deepseek-ai/deepseek-v4.1-flash-maas:thinking",
+      "scored": 200,
+      "passed": 196,
+      "unscored": 0,
+      "usage": {
+        "input_tokens": 1850073,
+        "cache_read_input_tokens": 1444608,
+        "cache_creation_input_tokens": 0,
+        "output_tokens": 457459
+      },
+      "last_finished_at": "2026-10-21T20:46:56.840Z"
+    },
+    {
+      "env": "regz-price-tests",
+      "version": "1.2.0",
+      "policy": "vertex:deepseek-ai/deepseek-v4.1-flash-maas:thinking",
+      "scored": 200,
+      "passed": 198,
+      "unscored": 0,
+      "usage": {
+        "input_tokens": 1511118,
+        "cache_read_input_tokens": 1737984,
+        "cache_creation_input_tokens": 0,
+        "output_tokens": 472397
+      },
+      "last_finished_at": "2026-10-22T21:39:42.067Z"
+    },
+    {
+      "env": "tape-intake",
+      "version": "1.0.0",
+      "policy": "vertex:deepseek-ai/deepseek-v4.1-flash-maas:thinking",
+      "scored": 200,
+      "passed": 106,
+      "unscored": 0,
+      "usage": {
+        "input_tokens": 39527619,
+        "cache_read_input_tokens": 5835264,
+        "cache_creation_input_tokens": 0,
+        "output_tokens": 5769112
+      },
+      "last_finished_at": "2026-10-26T18:54:50.841Z"
+    },
+    {
+      "env": "tape-intake",
+      "version": "1.0.0",
+      "policy": "vertex:deepseek-ai/deepseek-v4.1-flash-maas:thinking:max-tokens-32000",
+      "scored": 200,
+      "passed": 175,
+      "unscored": 0,
+      "usage": {
+        "input_tokens": 56707210,
+        "cache_read_input_tokens": 8304896,
+        "cache_creation_input_tokens": 0,
+        "output_tokens": 7929627
+      },
+      "last_finished_at": "2026-10-26T19:31:23.648Z"
+    }
+  ]
+}

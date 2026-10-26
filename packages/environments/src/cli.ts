@@ -49,7 +49,7 @@ import { AnthropicPolicy, DEFAULT_MODEL, type Effort } from "./anthropic.js";
 import { DEFAULT_VERTEX_MODEL, DEFAULT_VERTEX_PROJECT, VertexOpenModelPolicy } from "./vertex.js";
 import { vertexClaudeClient } from "./anthropic-vertex.js";
 import { DEFAULT_LIMITS, runEpisode, type Policy } from "./episode.js";
-import { RECORD_VERSION, RunRecorder, sha256 } from "./record.js";
+import { RECORD_VERSION, RunRecorder, recordedTasks, sha256 } from "./record.js";
 import type { Environment } from "./episode.js";
 import { trainIndexes } from "./heldout-guard.js";
 import {
@@ -785,8 +785,9 @@ function policyOf(reference: () => Policy): Policy {
 /**
  * `--resume --out FILE`: the suite less the tasks FILE already records with
  * an episode that ran (on this version), so a stopped run picks up where it
- * left off and an episode that ended in a transport error is run again. Each
- * episode is still a line of its own; a reader takes the newest per task.
+ * left off, and an episode that ended in a transport error, or whose turn
+ * never ran (`neverRan` in record.ts), is run again. Each episode is still a
+ * line of its own; a reader takes the newest scored episode per task.
  */
 function unrecorded<T extends TaskCoordinates>(
   tasks: readonly T[],
@@ -795,18 +796,12 @@ function unrecorded<T extends TaskCoordinates>(
 ): T[] {
   if (values.out === undefined) throw new Error("--resume needs --out, the file to resume");
   if (!existsSync(out)) return [...tasks];
-  const done = new Set<string>();
-  for (const line of readFileSync(out, "utf8").split("\n")) {
-    if (!line.trim()) continue;
-    const r = JSON.parse(line) as {
-      environment?: { version?: string };
-      task: { id: string };
-      result: { outcome: string };
-    };
-    if (r.environment?.version === version && r.result.outcome !== "error") done.add(r.task.id);
-  }
-  const left = tasks.filter((t) => !done.has(t.id));
-  console.log(`resuming ${out}: ${tasks.length - left.length} of ${tasks.length} already recorded`);
+  const { ran, again } = recordedTasks(readFileSync(out, "utf8"), version);
+  const left = tasks.filter((t) => !ran.has(t.id));
+  const rerun = left.filter((t) => again.has(t.id)).length;
+  console.log(
+    `resuming ${out}: ${tasks.length - left.length} of ${tasks.length} already recorded, ${rerun} of the rest run again after a transport error or a turn that never ran`,
+  );
   return left;
 }
 

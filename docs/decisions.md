@@ -7235,7 +7235,9 @@ passed 188 of the 200 held-out tasks of ei-clocks 1.0.0 (94.0 %, 95 % interval
 answer the task turns on: 109 of 117 with a breached clock, 48 of 50 with a
 notice owed, 31 of 33 with every clock clear. Four of the twelve misses are
 not answers: two ran out of output tokens and two ended with no submission,
-all on loans with many windows open at once. The other eight each miss
+all on loans with many windows open at once. The two with no submission were
+turns the endpoint cut, not the model's stop ("A Vertex stream cut mid-turn
+was scored as the model's miss"). The other eight each miss
 one to four windows' legs, the written-notice leg more often than the live
 one. Held-out transcripts are not read, so why is not known. The reference passes all 200. Like most of the older
 environments, the score sits above the 50 to 80 % band where a score
@@ -8900,3 +8902,53 @@ section drew an empty statement table, which the old check passed.
   which the life generator does not keep.
 - The baselines: no model has run on call-qa, and the escrow call is
   graded only through it.
+
+## A Vertex stream cut mid-turn was scored as the model's miss
+
+**Found 26 October 2026.** The Vertex policy took whatever stream came back
+as the turn. The endpoint can end a stream mid-turn as a clean HTTP 200,
+with no `finish_reason`, no usage and no `[DONE]`, and the policy read that
+as a model that stopped without an answer: `no_submission`, one turn, no
+tool calls, not one token. The endpoint can also write a line of plain text
+into the stream, which the parser threw on, ending the episode as an error.
+A turn is now taken only when it arrives whole. Anything else is retried
+like a dropped connection, and if it persists the episode ends as an error
+that `--resume` runs again. docs/environments.md, the `vertex` policy, says
+what was probed and what each case does.
+
+**Which recorded baselines it touched**, read by metadata alone (outcome,
+turns, tool calls, usage, error, times) over the newest episode of every
+task in every `runs/*/heldout-vertex-*.jsonl`:
+
+- **ei-clocks 1.0.0, 23 October: 2 of 200.** They are the two that "ended
+  with no submission" among that baseline's twelve misses ("DeepSeek's
+  held-out baseline on ei-clocks"), one turn each, of 426 and 630 seconds.
+- **metro2-furnishing 1.0.0, 22 October: 3 of 200**, among its 67 misses
+  ("DeepSeek's held-out baseline on the seven newest environments"), one
+  turn each, of 308 to 451 seconds.
+- **call-qa 1.0.0, 26 October: 138 of 200, and 1 error.** The first pass
+  recorded 104 cut turns and 44 errors from text lines in the stream (33
+  starting `upstream c`, 11 starting `inference`). Two `--resume` passes,
+  which ran errors again but not cut turns, made 34 more cut turns and left
+  the one error.
+
+No other recorded baseline has one: no episode in any other file, newest
+or not, ended outside an error with no tool call and no token. The two
+boarding-triage runs and the tape-intake run under way on 26 October use the
+policy before this check, and are read again when they finish.
+
+**What metadata cannot show** is a cut on a later turn. That episode has
+tokens and tool calls, so it reads like a model that stopped, and only its
+transcript tells the two apart. Held-out transcripts are not read. Episodes
+that ended `no_submission` after a tool call are therefore scored as they
+stand: 8 in call-qa, 14 in boarding-triage 1.0.0's 23 October run, and 4
+and 5 so far in the two boarding-triage 1.1.0 runs under way. No other
+baseline has any.
+
+**The scores are corrected after the reruns.** `--resume --out` on each of
+the three files runs the cut tasks again with the checked policy, and
+`env:compare` and the Gym no longer score a turn that never ran. Until
+then, ei-clocks' 188 of 200 is 188 of 198 scored, and metro2-furnishing's
+133 of 200 is 133 of 197. The call-qa pass is not a baseline. Its 8 later
+`no_submission` episodes make a whole rerun into a new file the cleaner
+reading.

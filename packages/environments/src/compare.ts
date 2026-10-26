@@ -7,14 +7,17 @@
  * paired by task, each side's rate carries a Wilson 95 % interval, and the
  * tasks the two disagree on are put to McNemar's exact test.
  *
- * An episode that ended in a transport error (`outcome: "error"`) is not the
- * model's answer and is not scored: a task's newest scored episode counts,
- * and a task with none on either side is left out of the pairing and named.
+ * An episode that ended in a transport error (`outcome: "error"`), or whose
+ * turn never ran (`neverRan` in record.ts: no tool called, no token spent),
+ * is not the model's answer and is not scored: a task's newest scored episode
+ * counts, and a task with none on either side is left out of the pairing and
+ * named.
  * A refusal, a missing submission or a spent budget is the model's, and is
  * scored as a miss.
  */
 
 import { readFileSync } from "node:fs";
+import { neverRan } from "./record.js";
 
 /** An ARM change has no verdict; the notice its grade says goes stands in for one. */
 export function noticeOf(fields: readonly { readonly field: string; readonly expected: string }[]) {
@@ -34,6 +37,7 @@ export interface EpisodeLine {
   readonly result: {
     readonly outcome: string;
     readonly finished_at: string;
+    readonly tool_calls?: number;
     readonly grade: {
       readonly pass: boolean;
       readonly fields: readonly {
@@ -83,7 +87,7 @@ export function costOf(policyId: string, u: EpisodeLine["result"]["usage"]): num
   );
 }
 
-/** Each task's newest scored episode across the given lines; tasks that only errored are listed apart. */
+/** Each task's newest scored episode across the given lines; tasks that only errored or never ran are listed apart. */
 export function scoreSide(lines: readonly EpisodeLine[]): {
   readonly byTask: ReadonlyMap<string, Scored>;
   readonly unscored: readonly string[];
@@ -93,7 +97,7 @@ export function scoreSide(lines: readonly EpisodeLine[]): {
   const seen = new Set<string>();
   for (const l of lines) {
     seen.add(l.task.id);
-    if (l.result.outcome === "error") continue;
+    if (l.result.outcome === "error" || neverRan(l.result)) continue;
     const prev = newest.get(l.task.id);
     if (!prev || prev.result.finished_at < l.result.finished_at) newest.set(l.task.id, l);
   }

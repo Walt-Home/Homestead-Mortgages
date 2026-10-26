@@ -236,8 +236,15 @@ const slim = (r) => ({
  * count; its task id is a key while counting and never leaves this script,
  * and its prompt and transcript are never read. The newest scored episode of
  * each task counts, as env:compare counts it; an episode that ended in a
- * transport error is not scored.
+ * transport error, or whose turn never ran, is not scored.
  */
+/** `neverRan` in src/record.ts: no tool called and not one token spent, in an outcome that is not an error. */
+const neverRan = (res) =>
+  res.outcome !== "error" &&
+  res.tool_calls === 0 &&
+  ["input_tokens", "cache_read_input_tokens", "cache_creation_input_tokens", "output_tokens"].every(
+    (k) => (res.usage?.[k] ?? 0) === 0,
+  );
 /** env|version|policy → task id → { at, pass, usage } (newest scored), plus the errored ids */
 const heldout = new Map();
 const tally = (r) => {
@@ -246,7 +253,7 @@ const tally = (r) => {
   const g = heldout.get(key) ?? { byTask: new Map(), errored: new Set() };
   heldout.set(key, g);
   const id = r.task.id;
-  if (r.result.outcome === "error" || !r.result.grade) {
+  if (r.result.outcome === "error" || neverRan(r.result) || !r.result.grade) {
     g.errored.add(id);
     return;
   }

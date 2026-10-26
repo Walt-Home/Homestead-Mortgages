@@ -4656,9 +4656,12 @@ reading its transcripts tunes toward them.
 - per-verdict counts.
 
 It also puts the tasks the two disagree on to McNemar's exact test. An
-episode that ended in a transport error is not scored, the newest scored
-episode for each task counts, and a task not scored on both sides is left
-out by name. Phase 2's gate is read from it.
+episode that ended in a transport error, or whose turn never ran (no tool
+called and not one token spent, `neverRan` in `src/record.ts`), is not
+scored. The newest scored episode for each task counts, and a task not
+scored on both sides is left out by name. `--resume --out FILE` runs exactly
+those two kinds again, and the Gym's held-out counts skip them the same way.
+Phase 2's gate is read from it.
 
 The default is the reference policy on the held-out suite. A model run
 spends real money, and it is never the default.
@@ -4703,6 +4706,42 @@ There are three model policies, and none falls back to another model:
     Vertex refused the next request whole (400, "Expected a valid JSON
     object"), which ended 2 of about 4,000 episodes by 22 October; the
     environment answers the call with an error, and the episode goes on.
+  - A turn is taken only when its stream arrives whole: a `finish_reason`,
+    then the usage chunk or `[DONE]`. Anything else is retried whole, with
+    the waits a dropped connection gets. After the last try the episode
+    ends `error` and says what came, and `--resume` runs it again. What the
+    endpoint sent, probed on call-qa training tasks on 26 October:
+    - **A stream cut mid-turn.** An HTTP 200, `text/event-stream`, that
+      stops as a clean end of the body: no error, no `finish_reason`, no
+      usage, no `[DONE]`. The call-qa streams in flight were cut together,
+      on the same second and at the same chunk count, and a cut can fall
+      inside a tool call's arguments. All of the first 15 call-qa first turns sent as
+      the policy sends them were cut, one, two, four and eight at a time.
+      Then 24 sent at once all came whole, and 40 of 48 sent at once were
+      cut. Before this check a cut first turn read as a model that stopped
+      with no answer: `no_submission`, one turn, no tool calls, no tokens.
+    - **A line of plain text in the stream**, before the turn: a `data:`
+      line reading "inference error: ServiceUnavailable - failed to find
+      endpoint candidates for serving the request", then a whole turn from
+      its first chunk. The parser threw on it and ended the episode
+      (`Unexpected token 'i', "inference "… is not valid JSON`), and a
+      line starting `upstream c` did the same. Such a line before anything
+      of the turn has arrived is now a notice, and the whole turn after it
+      is taken. After the turn has begun, it is a cut.
+    - **Not seen, and retried the same way:** an error object in the stream
+      (it ended the episode at once), an empty 200, a 200 whose body is not
+      a stream, a `finish_reason` followed by neither usage nor `[DONE]`,
+      and a turn with no content, reasoning, tool call or usage.
+
+    The cuts do not follow concurrency or prompt size. A call-qa first turn
+    sent alone was cut, eight escrow-review first turns sent beside eight
+    cut call-qa ones all came whole, and call-qa's prompts are no longer
+    than boarding-triage's. They follow how the prompt opens: four call-qa
+    turns with a varying line put before the rulebook, sent beside four that
+    were cut, all came whole. That suggests the endpoint sends prompts that
+    open alike to the same server, but it is an inference, and the policy
+    does not vary its prompts. Eight call-qa training episodes through the
+    checked policy all passed, seven of them after one retry.
 
 ## What keeps it honest
 

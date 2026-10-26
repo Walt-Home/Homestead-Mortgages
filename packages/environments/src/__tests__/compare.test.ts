@@ -10,13 +10,21 @@ import { compare, costOf, mcnemarExact, scoreSide, wilson, type EpisodeLine } fr
 const line = (
   id: string,
   pass: boolean,
-  o: { outcome?: string; at?: string; verdict?: string; policy?: string } = {},
+  o: {
+    outcome?: string;
+    at?: string;
+    verdict?: string;
+    policy?: string;
+    tool_calls?: number;
+    tokens?: number;
+  } = {},
 ): EpisodeLine => ({
   task: { id },
   policy: { id: o.policy ?? "vertex:deepseek-ai/deepseek-v4.1-flash-maas:thinking" },
   result: {
     outcome: o.outcome ?? "submitted",
     finished_at: o.at ?? "2026-10-20T00:00:00Z",
+    tool_calls: o.tool_calls ?? 4,
     grade: {
       pass,
       fields: [
@@ -25,7 +33,7 @@ const line = (
       ],
     },
     usage: {
-      input_tokens: 1_000_000,
+      input_tokens: o.tokens ?? 1_000_000,
       cache_read_input_tokens: 0,
       cache_creation_input_tokens: 0,
       output_tokens: 0,
@@ -87,6 +95,20 @@ describe("the pairing", () => {
     ]);
     expect([...s.byTask.values()].map((x) => x.pass)).toEqual([false, false]);
     expect(s.unscored).toEqual([]);
+  });
+
+  it("does not score an episode whose turn never ran, even as the newest", () => {
+    const never = { outcome: "no_submission", tool_calls: 0, tokens: 0 } as const;
+    const s = scoreSide([
+      line("t1", true, { at: "2026-10-20T01:00:00Z" }),
+      line("t1", false, { ...never, at: "2026-10-20T02:00:00Z" }),
+      line("t2", false, never),
+      line("t3", false, { outcome: "no_submission", tool_calls: 0 }),
+    ]);
+    expect(s.byTask.get("t1")?.pass).toBe(true);
+    expect(s.unscored).toEqual(["t2"]);
+    // A model that read its task and stopped spent tokens: its miss.
+    expect(s.byTask.get("t3")?.pass).toBe(false);
   });
 
   it("names the tasks both sides missed on the same field, as wording to check", () => {

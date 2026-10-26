@@ -20,6 +20,15 @@
  * Streamed, the headers come at once and the tokens keep the line alive. A
  * request that still drops is retried whole, which is safe because nothing
  * is appended to the history until a turn has arrived complete.
+ *
+ * "Complete" is checked, not assumed. The endpoint can end a stream mid-turn
+ * as a clean HTTP 200: no error, no finish_reason, no usage, no [DONE], and
+ * the streams in flight with it cut on the same second. Read as a turn, that
+ * was a model that stopped without an answer (`no_submission`, one turn, no
+ * tokens). It can also write a line of plain text into the stream, such as
+ * "inference error: ServiceUnavailable - failed to find endpoint candidates
+ * for serving the request". So a turn is taken only when its stream ends
+ * whole, and anything else is retried like a dropped connection.
  */
 
 import { execFile } from "node:child_process";
@@ -132,21 +141,67 @@ interface Chunk {
   }[];
 }
 
-/** A streamed completion put back together as the one response it stands for. */
+/**
+ * A response that is not a whole turn, so not the model's answer: retried
+ * like a dropped connection, and the episode's error if it persists.
+ */
+class IncompleteTurn extends Error {}
+
+const quoted = (text: string): string =>
+  JSON.stringify(text.length > 200 ? `${text.slice(0, 200)}…` : text);
+
+/**
+ * A streamed completion put back together as the one response it stands for,
+ * or an `IncompleteTurn` when the stream does not hold one whole turn:
+ *
+ * - no finish_reason: the stream was cut, whatever it carried before the cut
+ *   (a cut can fall inside a tool call's arguments);
+ * - a finish_reason and then neither the usage chunk nor [DONE]: cut after
+ *   the finish;
+ * - no content, reasoning, tool call or usage at all;
+ * - an error object in the stream, or a line that is not JSON once the turn
+ *   has begun.
+ *
+ * A line that is not JSON before anything of the turn has arrived is a notice
+ * from the endpoint, not a turn: "inference error: ServiceUnavailable - failed
+ * to find endpoint candidates for serving the request" was followed, in the
+ * same response, by a whole turn from its first chunk. That turn is taken, and
+ * the notice is kept for the error should no whole turn follow it.
+ */
 async function assemble(res: FetchResponse): Promise<WireResponse> {
   let content = "";
   let reasoning = "";
   let finish: string | null = null;
   let usage: WireResponse["usage"];
+  let done = false;
+  let chunks = 0;
+  let notice: string | null = null;
   const calls: { id: string; name: string; arguments: string }[] = [];
+  const begun = () => content !== "" || reasoning !== "" || calls.length > 0;
   for await (const raw of lines(res)) {
     const line = raw.trim();
-    if (!line.startsWith("data:")) continue;
+    if (!line) continue;
+    if (!line.startsWith("data:")) {
+      // An SSE field or comment is not the turn; any other text is a notice.
+      if (!/^(:|id:|retry:|event:)/.test(line)) notice ??= line;
+      continue;
+    }
     const data = line.slice(5).trim();
-    if (data === "[DONE]") break;
-    const chunk = JSON.parse(data) as Chunk;
+    if (data === "[DONE]") {
+      done = true;
+      break;
+    }
+    let chunk: Chunk;
+    try {
+      chunk = JSON.parse(data) as Chunk;
+    } catch {
+      if (begun()) throw new IncompleteTurn(`a line that is not JSON mid-turn: ${quoted(data)}`);
+      notice ??= data;
+      continue;
+    }
     if (chunk.error)
-      throw new Error(`Vertex streamed an error: ${JSON.stringify(chunk.error).slice(0, 500)}`);
+      throw new IncompleteTurn(`an error in the stream: ${quoted(JSON.stringify(chunk.error))}`);
+    chunks += 1;
     if (chunk.usage?.prompt_tokens !== undefined) usage = chunk.usage;
     for (const choice of chunk.choices ?? []) {
       const d = choice.delta ?? {};
@@ -161,6 +216,17 @@ async function assemble(res: FetchResponse): Promise<WireResponse> {
       if (choice.finish_reason) finish = choice.finish_reason;
     }
   }
+  const after = notice === null ? "" : ` after ${quoted(notice)}`;
+  if (finish === null)
+    throw new IncompleteTurn(
+      `the stream ended with no finish_reason (${chunks} chunks, ${reasoning.length} characters of reasoning, ${content.length} of content, ${calls.filter(Boolean).length} tool calls)${after}`,
+    );
+  if (usage === undefined && !done)
+    throw new IncompleteTurn(
+      `the stream ended after its finish_reason with no usage and no [DONE]${after}`,
+    );
+  if (!begun() && usage === undefined)
+    throw new IncompleteTurn(`an empty turn: no content, reasoning, tool call or usage${after}`);
   return {
     choices: [
       {
@@ -236,7 +302,10 @@ export interface VertexPolicyOptions {
   readonly maxTokens?: number;
   readonly accessToken?: AccessToken;
   readonly fetch?: Fetch;
-  /** Waits between retries of a 429, a 5xx or a dropped connection; a test sets these to zero. */
+  /**
+   * Waits between retries of a 429, a 5xx, a dropped connection or a turn
+   * that did not arrive whole; a test sets these to zero.
+   */
   readonly retryDelaysMs?: readonly number[];
 }
 
@@ -293,13 +362,21 @@ export class VertexOpenModelPolicy implements Policy {
           throw new Error(`Vertex answered ${res.status}: ${text.slice(0, 500)}`);
         }
       } catch (e) {
-        const code = causeCode(e);
-        if (!code || !NETWORK_CODES.has(code)) throw e;
-        if (wait === undefined) {
-          // fetch says only "fetch failed"; the cause is the useful part.
-          throw new Error(
-            `Vertex request failed after ${Math.round((Date.now() - asked) / 1000)} s, ${attempt + 1} tries: ${code}`,
-          );
+        const seconds = Math.round((Date.now() - asked) / 1000);
+        if (e instanceof IncompleteTurn) {
+          if (wait === undefined)
+            throw new Error(
+              `Vertex sent no whole turn in ${attempt + 1} tries, the last after ${seconds} s: ${e.message}`,
+            );
+        } else {
+          const code = causeCode(e);
+          if (!code || !NETWORK_CODES.has(code)) throw e;
+          if (wait === undefined) {
+            // fetch says only "fetch failed"; the cause is the useful part.
+            throw new Error(
+              `Vertex request failed after ${seconds} s, ${attempt + 1} tries: ${code}`,
+            );
+          }
         }
       }
       await new Promise((r) => setTimeout(r, wait));

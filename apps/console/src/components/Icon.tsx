@@ -34,7 +34,8 @@ export type IconName =
   | "eye"
   | "filter"
   | "plus"
-  | "receipt";
+  | "receipt"
+  | "dumbbell";
 
 const PATHS: Record<IconName, string> = {
   inbox:
@@ -70,6 +71,7 @@ const PATHS: Record<IconName, string> = {
   filter: "M4 5h16l-6 7v5l-4 2v-7z",
   plus: "M12 5v14M5 12h14",
   receipt: "M6 3h12v18l-3-2-3 2-3-2-3 2zM9 8h6M9 12h6M9 16h4",
+  dumbbell: "M6 6v12M3 9v6M18 6v12M21 9v6M6 12h12",
 };
 
 export function Icon({

@@ -11,31 +11,11 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import clsx from "clsx";
-import { Icon, type IconName } from "./Icon.js";
+import { Icon } from "./Icon.js";
 import { Count, IconButton } from "./ui.js";
 import { rolesWord, useAuth } from "../lib/auth.js";
-import { KIND_WORDS, QUEUE_KINDS, useHome, type QueueKind } from "../lib/home.js";
-
-interface NavItem {
-  to: string;
-  label: string;
-  icon: IconName;
-  count?: number | null;
-  countTone?: "neutral" | "danger" | "warn";
-  end?: boolean;
-}
-interface NavGroup {
-  label: string;
-  items: NavItem[];
-}
-
-const KIND_ICON: Record<QueueKind, IconName> = {
-  escalation: "alert",
-  portal_task: "inbox",
-  held_notice: "pause",
-  dead_letter: "mail-off",
-  breached_timer: "clock",
-};
+import { useHome, type QueueKind } from "../lib/home.js";
+import { isPage, navGroups, type NavGroup, type NavItem } from "../lib/nav.js";
 
 export function Wordmark({ className }: { className?: string }) {
   return (
@@ -46,68 +26,39 @@ export function Wordmark({ className }: { className?: string }) {
   );
 }
 
-/** The console has one role, so every section is every admin's; the sections are the nav. */
 function useNav(): NavGroup[] {
   const home = useHome();
   const byKind = home.data?.my_queue?.by_kind;
   const clocks = home.data?.clocks?.counts;
-  const kindCount = (k: QueueKind) =>
-    k === "breached_timer" ? (clocks?.breached ?? byKind?.[k] ?? null) : (byKind?.[k] ?? null);
-  const groups: NavGroup[] = [
-    {
-      label: "Work",
-      items: [
-        {
-          to: "/",
-          label: "Queue",
-          icon: "home",
-          end: true,
-          count: home.data?.my_queue?.count ?? null,
-        },
-        ...QUEUE_KINDS.map<NavItem>((k) => ({
-          to: `/work/${k}`,
-          label: KIND_WORDS[k],
-          icon: KIND_ICON[k],
-          count: kindCount(k),
-          countTone: k === "breached_timer" || k === "escalation" ? "danger" : "neutral",
-        })),
-        { to: "/work-items", label: "Work items", icon: "sliders" },
-      ],
-    },
-    {
-      label: "Records",
-      items: [
-        { to: "/loans", label: "Loans", icon: "home" },
-        { to: "/people", label: "People", icon: "users" },
-        { to: "/partner-book", label: "Partner book", icon: "book" },
-        { to: "/servicers", label: "Servicers", icon: "badge" },
-      ],
-    },
-    {
-      label: "Oversight",
-      items: [
-        { to: "/oversight/compliance", label: "Compliance", icon: "shield" },
-        { to: "/oversight/controls", label: "Controls", icon: "sliders" },
-        { to: "/oversight/ai", label: "AI", icon: "sparkles" },
-      ],
-    },
-    {
-      label: "Billing",
-      items: [{ to: "/billing", label: "Billing", icon: "receipt" }],
-    },
-    {
-      label: "Staff",
-      items: [
-        { to: "/staff", label: "Staff", icon: "badge" },
-        {
-          to: "/staff/access-review",
-          label: "Access review",
-          icon: "key",
-        },
-      ],
-    },
-  ];
-  return groups;
+  return navGroups({
+    queue: home.data?.my_queue?.count ?? null,
+    kind: (k: QueueKind) =>
+      k === "breached_timer" ? (clocks?.breached ?? byKind?.[k] ?? null) : (byKind?.[k] ?? null),
+  });
+}
+
+const itemClass = (labels: boolean, isActive: boolean) =>
+  clsx(
+    "flex h-8 items-center gap-2.5 rounded-md px-2.5 text-base transition-colors",
+    labels ? "" : "justify-center px-0",
+    isActive ? "bg-surface-3 font-medium text-fg" : "text-fg-2 hover:bg-surface-2 hover:text-fg",
+  );
+
+function ItemBody({ item, labels }: { item: NavItem; labels: boolean }) {
+  return (
+    <>
+      <Icon name={item.icon} size={18} className="shrink-0" />
+      {labels ? (
+        <>
+          <span className="truncate">{item.label}</span>
+          <Count
+            n={item.count ?? undefined}
+            tone={item.count && item.countTone === "danger" ? "danger" : "neutral"}
+          />
+        </>
+      ) : null}
+    </>
+  );
 }
 
 function NavList({ groups, labels }: { groups: NavGroup[]; labels: boolean }) {
@@ -123,35 +74,31 @@ function NavList({ groups, labels }: { groups: NavGroup[]; labels: boolean }) {
             <div className="mx-2 my-2 border-t border-line first:hidden" />
           )}
           <ul className="space-y-0.5">
-            {g.items.map((i) => (
-              <li key={i.to}>
-                <NavLink
-                  to={i.to}
-                  end={i.end}
-                  title={labels ? undefined : i.label}
-                  className={({ isActive }) =>
-                    clsx(
-                      "flex h-8 items-center gap-2.5 rounded-md px-2.5 text-base transition-colors",
-                      labels ? "" : "justify-center px-0",
-                      isActive
-                        ? "bg-surface-3 font-medium text-fg"
-                        : "text-fg-2 hover:bg-surface-2 hover:text-fg",
-                    )
-                  }
-                >
-                  <Icon name={i.icon} size={18} className="shrink-0" />
-                  {labels ? (
-                    <>
-                      <span className="truncate">{i.label}</span>
-                      <Count
-                        n={i.count ?? undefined}
-                        tone={i.count && i.countTone === "danger" ? "danger" : "neutral"}
-                      />
-                    </>
-                  ) : null}
-                </NavLink>
-              </li>
-            ))}
+            {g.items.map((i) =>
+              isPage(i) ? (
+                // A page beside the console, outside its router: a plain link, loaded whole.
+                <li key={i.href}>
+                  <a
+                    href={i.href}
+                    title={labels ? undefined : i.label}
+                    className={itemClass(labels, false)}
+                  >
+                    <ItemBody item={i} labels={labels} />
+                  </a>
+                </li>
+              ) : (
+                <li key={i.to}>
+                  <NavLink
+                    to={i.to}
+                    end={i.end}
+                    title={labels ? undefined : i.label}
+                    className={({ isActive }) => itemClass(labels, isActive)}
+                  >
+                    <ItemBody item={i} labels={labels} />
+                  </NavLink>
+                </li>
+              ),
+            )}
           </ul>
         </div>
       ))}

@@ -111,14 +111,24 @@ async function* lines(res: FetchResponse): AsyncGenerator<string> {
   const reader = res.body.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-    for (let i = buffer.indexOf("\n"); i >= 0; i = buffer.indexOf("\n")) {
-      yield buffer.slice(0, i);
-      buffer = buffer.slice(i + 1);
+  let ended = false;
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) {
+        ended = true;
+        break;
+      }
+      buffer += decoder.decode(value, { stream: true });
+      for (let i = buffer.indexOf("\n"); i >= 0; i = buffer.indexOf("\n")) {
+        yield buffer.slice(0, i);
+        buffer = buffer.slice(i + 1);
+      }
     }
+  } finally {
+    // A stream given up before its end (an error in it, a line that is not
+    // JSON mid-turn) is let go, not left holding its connection unread.
+    if (!ended) await reader.cancel().catch(() => undefined);
   }
   buffer += decoder.decode();
   if (buffer) yield buffer;
@@ -150,6 +160,16 @@ class IncompleteTurn extends Error {}
 const quoted = (text: string): string =>
   JSON.stringify(text.length > 200 ? `${text.slice(0, 200)}…` : text);
 
+/** A data line's chunk, or null when it is not a JSON object: a line of plain text, or a bare value. */
+const chunkOf = (data: string): Chunk | null => {
+  try {
+    const v = JSON.parse(data) as unknown;
+    return typeof v === "object" && v !== null && !Array.isArray(v) ? (v as Chunk) : null;
+  } catch {
+    return null;
+  }
+};
+
 /**
  * A streamed completion put back together as the one response it stands for,
  * or an `IncompleteTurn` when the stream does not hold one whole turn:
@@ -159,14 +179,15 @@ const quoted = (text: string): string =>
  * - a finish_reason and then neither the usage chunk nor [DONE]: cut after
  *   the finish;
  * - no content, reasoning, tool call or usage at all;
- * - an error object in the stream, or a line that is not JSON once the turn
- *   has begun.
+ * - an error object in the stream, or a line that is not a JSON object once
+ *   the turn has begun.
  *
- * A line that is not JSON before anything of the turn has arrived is a notice
- * from the endpoint, not a turn: "inference error: ServiceUnavailable - failed
- * to find endpoint candidates for serving the request" was followed, in the
- * same response, by a whole turn from its first chunk. That turn is taken, and
- * the notice is kept for the error should no whole turn follow it.
+ * A line that is not a JSON object before anything of the turn has arrived
+ * is a notice from the endpoint, not a turn: "inference error:
+ * ServiceUnavailable - failed to find endpoint candidates for serving the
+ * request" was followed, in the same response, by a whole turn from its first
+ * chunk. That turn is taken, and the notice is kept for the error should no
+ * whole turn follow it.
  */
 async function assemble(res: FetchResponse): Promise<WireResponse> {
   let content = "";
@@ -191,11 +212,10 @@ async function assemble(res: FetchResponse): Promise<WireResponse> {
       done = true;
       break;
     }
-    let chunk: Chunk;
-    try {
-      chunk = JSON.parse(data) as Chunk;
-    } catch {
-      if (begun()) throw new IncompleteTurn(`a line that is not JSON mid-turn: ${quoted(data)}`);
+    const chunk = chunkOf(data);
+    if (chunk === null) {
+      if (begun())
+        throw new IncompleteTurn(`a line that is not a JSON object mid-turn: ${quoted(data)}`);
       notice ??= data;
       continue;
     }

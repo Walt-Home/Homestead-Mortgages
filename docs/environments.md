@@ -4728,10 +4728,15 @@ There are three model policies, and none falls back to another model:
       line starting `upstream c` did the same. Such a line before anything
       of the turn has arrived is now a notice, and the whole turn after it
       is taken. After the turn has begun, it is a cut.
-    - **Not seen, and retried the same way:** an error object in the stream
-      (it ended the episode at once), an empty 200, a 200 whose body is not
-      a stream, a `finish_reason` followed by neither usage nor `[DONE]`,
-      and a turn with no content, reasoning, tool call or usage.
+    - **An error in the stream**, not sent in the probe but recorded seven
+      times in the baselines of 21 to 23 October: "Prediction for model …
+      failed with error: Model server early terminated the request
+      (truncated headers)". It ended the episode at once. It is now retried
+      the same way, and the rest of the body is let go unread.
+    - **Not seen, and retried the same way:** an empty 200, a 200 whose
+      body is not a stream, a `finish_reason` followed by neither usage nor
+      `[DONE]`, and a turn with no content, reasoning, tool call or usage. A
+      `data:` line that is JSON but not an object is read as a line of text.
 
     The cuts do not follow concurrency or prompt size. A call-qa first turn
     sent alone was cut, eight escrow-review first turns sent beside eight

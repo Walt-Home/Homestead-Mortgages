@@ -28,10 +28,12 @@ type Reply =
  * An endpoint that answers from a script and keeps every request: an HTTP
  * error, a stream of chunks as Vertex sends them, a 200 whose body is given
  * byte for byte (whole, or read off the wire in pieces), or a dropped
- * connection.
+ * connection. It counts the bodies read off the wire that were let go
+ * before their end.
  */
 function fakeVertex(replies: Reply[]) {
   const sent: Sent[] = [];
+  let cancelled = 0;
   const fetch = async (url: string, init: { headers: Record<string, string>; body: string }) => {
     sent.push({ url, headers: init.headers, body: JSON.parse(init.body) as Sent["body"] });
     const r = replies.shift();
@@ -49,6 +51,9 @@ function fakeVertex(replies: Reply[]) {
           if (next) c.enqueue(next);
           else c.close();
         },
+        cancel() {
+          cancelled += 1;
+        },
       });
       return { ok: true, status: 200, body, text: async () => r.pieces.join("") };
     }
@@ -57,7 +62,7 @@ function fakeVertex(replies: Reply[]) {
     );
     return { ok: true, status: 200, text: async () => sse };
   };
-  return { fetch, sent };
+  return { fetch, sent, cancelled: () => cancelled };
 }
 
 const USAGE = {
@@ -451,11 +456,39 @@ describe("the Vertex open-model policy", () => {
   });
 
   it("retries an error the stream carries, where it once ended the episode", async () => {
-    const { fetch, sent } = fakeVertex([
+    // As recorded seven times on 21 to 23 October, mid-turn, with more of the
+    // body still to come; and as an object.
+    const body = sse([
+      { choices: [{ delta: { reasoning_content: "First the per diem." } }] },
+      {
+        error:
+          "Prediction for model 2754718631253245952 failed with error: Model server early terminated the request (truncated headers).",
+      },
+    ]);
+    const { fetch, sent, cancelled } = fakeVertex([
+      { pieces: [body, sse([{ choices: [{ delta: { content: "unread" } }] }])] },
       { stream: [{ error: { code: 503, message: "The model is overloaded." } }] },
       SUBMIT_WATCHING,
     ]);
     expect((await runEpisode(refiReview, workedExample, policy(fetch))).outcome).toBe("submitted");
+    expect(sent).toHaveLength(3);
+    // The body given up mid-stream was let go, not left unread on its connection.
+    expect(cancelled()).toBe(1);
+  });
+
+  it("reads a data line that is JSON but not an object as text: a notice before the turn, a cut within it", async () => {
+    const midTurn = sse([
+      { choices: [{ delta: { reasoning_content: "First the per diem." } }] },
+      "null",
+      { choices: [{ delta: {}, finish_reason: "tool_calls" }] },
+      "[DONE]",
+    ]);
+    const { fetch, sent } = fakeVertex([
+      { raw: midTurn },
+      { raw: sse(["503"]) + whole(SUBMIT_WATCHING) },
+    ]);
+    const r = await runEpisode(refiReview, workedExample, policy(fetch));
+    expect(r.outcome).toBe("submitted");
     expect(sent).toHaveLength(2);
   });
 

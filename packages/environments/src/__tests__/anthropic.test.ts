@@ -235,6 +235,28 @@ describe("every Claude turn streams", () => {
   );
 
   it.each(CLIENTS)(
+    "counts the input and cache tokens from message_start when message_delta carries only the output through $provider",
+    async ({ provider, over }) => {
+      const events = eventsOf(messageOf(SUBMIT, "claude-opus-5-5")).map((e) =>
+        e.type === "message_delta" ? { ...e, usage: { output_tokens: 5 } } : e,
+      );
+      const { fetch } = scriptedFetch(() => streamResponse(sse(events)));
+      const r = await runEpisode(
+        refiReview,
+        workedExample,
+        new AnthropicPolicy({ client: over(fetch), provider }),
+      );
+      expect(r).toMatchObject({ outcome: "submitted", error: null });
+      expect(r.usage).toEqual({
+        input_tokens: 10,
+        cache_read_input_tokens: 100,
+        cache_creation_input_tokens: 0,
+        output_tokens: 5,
+      });
+    },
+  );
+
+  it.each(CLIENTS)(
     "takes a stream through $provider that ends before its message_stop as a transport error, not the model's miss",
     async ({ provider, over }) => {
       const whole = eventsOf(messageOf(SUBMIT, "claude-opus-5-5"));

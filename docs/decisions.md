@@ -9566,3 +9566,58 @@ that ended in errors and were run again, for $90.56. Each sum is the usage
 the records carry: a turn that never ran recorded none, and an episode in
 flight when a run was stopped wrote no record, so what either spent at
 Vertex, if anything, is not in these sums.
+
+## boarding-triage and tape-intake run at 32,000 tokens a turn
+
+**Decided 26 October 2026.** boarding-triage and tape-intake run at an
+output budget of 32,000 tokens a turn, reasoning included, by default. Every
+other environment stays at the policies' 16,000.
+
+**Why.** The day's held-out baselines ("DeepSeek's held-out baselines on the
+newest suites, and two corrected") showed both suites failing mostly by
+spending 16,000 tokens before answering. Nearly every answer DeepSeek
+submitted passed, at either budget: 28 of 28 and 95 of 95 on
+boarding-triage, 106 of 107 and 175 of 176 on tape-intake. What the budget
+moved was how many answers were submitted. boarding-triage passed 28 of 200
+at 16,000 and 95 at 32,000; tape-intake 106 and 175. At 16,000
+boarding-triage scored below the floor that corrects every flag and nothing
+else (70), and tape-intake below the one that finds every stream defect and
+reads no record (140). A score at that budget measures how much a model
+writes before it answers more than how it reviews a package or a tape.
+
+**What changed in code.** The budget was a policy setting: each model
+policy defaulted to 16,000, and `--max-tokens` reached the Vertex policy
+alone. It is the environment's now.
+
+- `Environment` (`src/episode.ts`) has an optional `outputBudget`, the
+  output tokens a policy may write in one turn when the environment needs
+  more than `DEFAULT_OUTPUT_BUDGET` (16,000). boarding-triage and
+  tape-intake set it to 32,000.
+- `outputBudgetFor` (`src/episode.ts`, tested) picks the budget a model
+  policy runs at: the run's `--max-tokens` if it asked, else the
+  environment's `outputBudget`, else the policy's own default. `src/cli.ts`
+  hands it to all three model policies, so `--max-tokens` works for
+  `anthropic` and `anthropic-vertex` too.
+- The Claude policies' id names a budget other than 16,000 the way the
+  Vertex policy's does (`anthropic:claude-opus-5-5:high:max-tokens-32000`),
+  so every record says its budget. An id at 16,000 is unchanged, and so is
+  pricing, which reads an id by its prefix. A run on boarding-triage with no
+  flag is recorded at `…:max-tokens-32000`.
+- The budget is in no fingerprint. The tasks and the grading are unchanged,
+  and no environment's version, rulebook, tools or held-out pin moved; every
+  pin test passes as it did.
+- The Gym bundle gives each environment its `outputBudget`, and the page
+  labels a held-out score at that budget by the model alone ("DeepSeek"),
+  first, and one at another budget by its budget ("DeepSeek, 16k budget" on
+  boarding-triage, "DeepSeek, 32k budget" elsewhere).
+
+**The headline baselines.** The 32,000 runs recorded on 26 October are now
+each environment's headline baseline: boarding-triage 1.1.0, 95 of 200
+(47.5 %, 40.7 to 54.4, a lower bound, at most 107, because part of the run
+was on the policy before the stream-cut check); tape-intake 1.0.0, 175 of
+200 (87.5 %, 82.2 to 91.4). The 16,000 runs, 28 and 106 of 200, are kept as
+what the smaller budget measured. boarding-triage still ran out of tokens
+on 93 tasks at 32,000, so its score is partly the budget too; a larger
+budget is a later decision, made on a run, not assumed here. contact-audit,
+whose 37 of 40 misses at 16,000 ran out of tokens, has no run at 32,000
+and stays at the default.

@@ -31,11 +31,12 @@
  *   npm run env:refi -w @hm/environments -- --env call-qa --policy reference
  *   npm run env:refi -w @hm/environments -- --env contact-audit --policy reference
  *   npm run env:refi -w @hm/environments -- --env tape-intake --policy reference
- *   npm run env:refi -w @hm/environments -- --env boarding-triage --policy vertex --max-tokens 32000
+ *   npm run env:refi -w @hm/environments -- --env boarding-triage --policy vertex --max-tokens 16000
  *
- * `--max-tokens` is a Vertex episode's output budget per turn, reasoning
- * included (16,000 unless asked); a run at another budget says so in its
- * policy id.
+ * `--max-tokens` is a model episode's output budget per turn, reasoning
+ * included, for every model policy. Unasked, it is the environment's own
+ * (`outputBudget`: 32,000 on boarding-triage and tape-intake), else the
+ * policies' 16,000; a run at any budget but 16,000 says so in its policy id.
  *
  * The default is the held-out suite, the one every reported score is
  * measured on. A model run spends real money: it is never the default, and
@@ -49,7 +50,13 @@ import Anthropic from "@anthropic-ai/sdk";
 import { AnthropicPolicy, DEFAULT_MODEL, type Effort } from "./anthropic.js";
 import { DEFAULT_VERTEX_MODEL, DEFAULT_VERTEX_PROJECT, VertexOpenModelPolicy } from "./vertex.js";
 import { vertexClaudeClient } from "./anthropic-vertex.js";
-import { DEFAULT_LIMITS, runEpisode, type Policy } from "./episode.js";
+import {
+  DEFAULT_LIMITS,
+  outputBudgetFor,
+  parseMaxTokens,
+  runEpisode,
+  type Policy,
+} from "./episode.js";
 import { RECORD_VERSION, RunRecorder, recordedTasks, sha256 } from "./record.js";
 import type { Environment } from "./episode.js";
 import { trainIndexes } from "./heldout-guard.js";
@@ -773,8 +780,11 @@ function suite<T extends TaskCoordinates, A>(bench: Bench<T, A>): T[] {
   return bench.suite(split, seed, n);
 }
 
-function policyOf(reference: () => Policy): Policy {
+function policyOf(reference: () => Policy, env: { readonly outputBudget?: number }): Policy {
   if (values.policy === "reference") return reference();
+  // The run's --max-tokens, else the environment's own budget, else the policy's default.
+  const maxTokens = outputBudgetFor(parseMaxTokens(values["max-tokens"]), env);
+  const budget = maxTokens === undefined ? {} : { maxTokens };
   if (values.policy === "anthropic") {
     // An eval key of its own name, so it never turns on the API's refi
     // analyst, which starts calling Claude whenever ANTHROPIC_API_KEY is set
@@ -784,6 +794,7 @@ function policyOf(reference: () => Policy): Policy {
       ...(evalKey ? { client: new Anthropic({ apiKey: evalKey }) } : {}),
       model: values.model ?? DEFAULT_MODEL,
       effort: values.effort as Effort,
+      ...budget,
     });
   }
   if (values.policy === "anthropic-vertex") {
@@ -792,17 +803,15 @@ function policyOf(reference: () => Policy): Policy {
       model: values.model ?? DEFAULT_MODEL,
       effort: values.effort as Effort,
       provider: "anthropic-vertex",
+      ...budget,
     });
   }
   if (values.policy === "vertex") {
-    const maxTokens = values["max-tokens"] === undefined ? undefined : Number(values["max-tokens"]);
-    if (maxTokens !== undefined && !(Number.isInteger(maxTokens) && maxTokens > 0))
-      throw new Error(`--max-tokens must be a positive whole number`);
     return new VertexOpenModelPolicy({
       model: values.model ?? DEFAULT_VERTEX_MODEL,
       project: values.project,
       thinking: values.thinking !== "off",
-      ...(maxTokens === undefined ? {} : { maxTokens }),
+      ...budget,
     });
   }
   throw new Error(`--policy must be reference, anthropic, anthropic-vertex or vertex`);
@@ -833,7 +842,7 @@ function unrecorded<T extends TaskCoordinates>(
 
 async function run<T extends TaskCoordinates, A>(bench: Bench<T, A>): Promise<void> {
   const env = bench.env;
-  const policy = policyOf(bench.reference);
+  const policy = policyOf(bench.reference, env);
   const runId = `${new Date().toISOString().replace(/[:.]/g, "-")}-${randomUUID().slice(0, 8)}`;
   const out = values.out ?? `runs/${env.name}/${runId}.jsonl`;
   const tasks = values.resume ? unrecorded(suite(bench), out, env.version) : suite(bench);

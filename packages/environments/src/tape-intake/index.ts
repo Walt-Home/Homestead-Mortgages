@@ -31,6 +31,10 @@ export const tapeIntake: Environment<TapeIntakeTask, IntakeAnswer> = {
   execute: executeIntakeTool,
   parseAnswer: parseIntakeSubmission,
   grade: (task, answer) => gradeIntakeAgainst(task.expected, answer),
+  // Decided 26 October 2026: DeepSeek's held-out run passed 106 of 200 at
+  // 16,000 tokens and 175 at 32,000, nearly every answer it submitted
+  // passing; at 16,000 it mostly spent the budget before it answered.
+  outputBudget: 32000,
 };
 
 export const INTAKE_FINGERPRINT = {

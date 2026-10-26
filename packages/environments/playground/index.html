@@ -916,13 +916,20 @@ details.plain > summary + * { margin-top: 8px; }
     for (var i = 0; i < POLICIES.length; i++) if (String(id).indexOf(POLICIES[i].prefix) === 0) return POLICIES[i];
     return null;
   }
-  /* A run at another output budget than the default names it in its id (`…:max-tokens-32000`). */
-  function policyName(id, short) {
+  /* A policy id names any output budget but the policies' default (`…:max-tokens-32000`). A run at its
+     environment's own budget reads plainly; a run at another budget names it. */
+  var DEFAULT_BUDGET = H.outputBudget || 16000;
+  function budgetOf(id) {
+    var cap = String(id).match(/:max-tokens-(\d+)$/);
+    return cap ? Number(cap[1]) : DEFAULT_BUDGET;
+  }
+  function ownBudget(env) { return env && env.outputBudget ? env.outputBudget : DEFAULT_BUDGET; }
+  function policyName(id, short, env) {
     var p = policyOf(id);
     if (!p) return String(id);
     var rest = String(id).slice(p.prefix.length);
-    var cap = rest.match(/:max-tokens-(\d+)$/);
-    var budget = cap ? Math.round(Number(cap[1]) / 1000) + "k budget" : "";
+    var n = budgetOf(id);
+    var budget = n === ownBudget(env) ? "" : Math.round(n / 1000) + "k budget";
     if (short) return p.short + (budget ? ", " + budget : "");
     var mode = rest.replace(/:max-tokens-\d+$/, "").replace(/^:/, "");
     var label = mode === "thinking" ? "thinking" : mode === "high" ? "high effort" : mode;
@@ -1117,7 +1124,11 @@ details.plain > summary + * { margin-top: 8px; }
     if (!env) return all;
     var current = {};
     all.forEach(function (x) { if (x.version === env.version) current[x.policy] = true; });
-    return all.filter(function (x) { return x.version === env.version || !current[x.policy]; });
+    var own = ownBudget(env);
+    var kept = all.filter(function (x) { return x.version === env.version || !current[x.policy]; });
+    /* The environment's own budget first: that is its headline score; a run at another budget follows it. */
+    return kept.filter(function (x) { return budgetOf(x.policy) === own; })
+      .concat(kept.filter(function (x) { return budgetOf(x.policy) !== own; }));
   }
   /** Wilson's 95% interval on a pass rate, in percent. */
   function wilson(k, n) {
@@ -1157,7 +1168,7 @@ details.plain > summary + * { margin-top: 8px; }
     wrap.append(h("span", { class: "reads-label" }, "Held-out score"));
     var older = {};
     list.forEach(function (x) {
-      wrap.append(h("span", null, policyName(x.policy, true) + " ", h("b", null, pct(x.passed, x.scored)),
+      wrap.append(h("span", null, policyName(x.policy, true, env) + " ", h("b", null, pct(x.passed, x.scored)),
         " (" + x.passed + " of " + x.scored + (x.scored < 200 ? ", so far" : "") + ")"));
       if (x.version !== env.version) older[x.version] = true;
     });
@@ -1176,7 +1187,7 @@ details.plain > summary + * { margin-top: 8px; }
     var older = {};
     reads.forEach(function (g) {
       var finished = g.n - g.stopped;
-      wrap.append(h("span", null, policyName(g.policy, true) + " ", h("b", null, String(g.passed)), " of " + finished + " passed" +
+      wrap.append(h("span", null, policyName(g.policy, true, env) + " ", h("b", null, String(g.passed)), " of " + finished + " passed" +
         (g.stopped ? ", " + g.stopped + " stopped" : "")));
       g.versions.forEach(function (v) { if (v !== env.version) older[v] = true; });
     });
@@ -1232,7 +1243,7 @@ details.plain > summary + * { margin-top: 8px; }
     if (!list.length) return "";
     return " Held-out score, on tasks this page never shows: " + list.map(function (x) {
       var ci = wilson(x.passed, x.scored);
-      return policyName(x.policy) + " passed " + x.passed + " of " + x.scored + " (" + pct(x.passed, x.scored) +
+      return policyName(x.policy, false, env) + " passed " + x.passed + " of " + x.scored + " (" + pct(x.passed, x.scored) +
         ", 95% interval " + ci[0].toFixed(1) + " to " + ci[1].toFixed(1) + "%" +
         (x.version !== env.version ? ", on version " + x.version : "") + (x.scored < 200 ? ", run still going" : "") + ")";
     }).join("; ") + ". A run moves a few points either way from one run to the next.";
@@ -1467,7 +1478,7 @@ details.plain > summary + * { margin-top: 8px; }
     p.hidden = false;
     p.append(h("span", null, "Models have tried this exact task:"));
     recs.forEach(function (r) {
-      p.append(h("span", null, policyName(r.policy, true) + " ", resultMark(r)));
+      p.append(h("span", null, policyName(r.policy, true, cur()) + " ", resultMark(r)));
     });
     p.append(h("button", { type: "button", class: "link-btn", id: "tried-open", onclick: function () {
       s.attOpen = RUNS.records.indexOf(recs[0]);
@@ -1979,7 +1990,7 @@ details.plain > summary + * { margin-top: 8px; }
     var summary = h("div", { class: "att-summary" });
     reads.forEach(function (g) {
       var finished = g.n - g.stopped;
-      var line = [h("b", null, policyName(g.policy)), ": ", h("b", null, String(g.passed)), " of " + finished + " training tasks passed"];
+      var line = [h("b", null, policyName(g.policy, false, env)), ": ", h("b", null, String(g.passed)), " of " + finished + " training tasks passed"];
       if (g.stopped) line.push(", and " + g.stopped + " stopped on an error before submitting");
       if (g.priced) line.push(". About " + usd(g.cost / g.priced) + " a finished episode at list price");
       line.push(".");
@@ -1996,7 +2007,7 @@ details.plain > summary + * { margin-top: 8px; }
     }
 
     var polSel = h("select", { id: "att-policy" }, h("option", { value: "all" }, "Every model"),
-      reads.map(function (g) { return h("option", { value: g.policy }, policyName(g.policy)); }));
+      reads.map(function (g) { return h("option", { value: g.policy }, policyName(g.policy, false, env)); }));
     polSel.value = s.attPolicy;
     polSel.addEventListener("change", function () { s.attPolicy = polSel.value; renderAttempts(); });
     var resSel = h("select", { id: "att-result" },
@@ -2025,10 +2036,10 @@ details.plain > summary + * { margin-top: 8px; }
       var c = costOf(r.policy, r.result.usage);
       tbody.append(h("tr", { "aria-current": s.attOpen === gi ? "true" : null },
         h("td", null, h("button", { type: "button", class: "link-btn", id: "att-open-" + gi,
-          "aria-label": "Read " + policyName(r.policy, true) + " on seed " + r.task.suite_seed + ", index " + r.task.index,
+          "aria-label": "Read " + policyName(r.policy, true, env) + " on seed " + r.task.suite_seed + ", index " + r.task.index,
           onclick: function () { s.attOpen = gi; renderAttempts(); scrollIntoViewSoft($("att-detail")); } },
           "Seed " + r.task.suite_seed + ", index " + r.task.index)),
-        h("td", null, policyName(r.policy, true)),
+        h("td", null, policyName(r.policy, true, env)),
         h("td", null, resultMark(r)),
         h("td", { class: "mono num" }, stopped(r) ? "—" : (Math.round(r.result.score * 1000) / 1000).toString()),
         h("td", { class: "mono num" }, String(r.result.turns)),
@@ -2057,7 +2068,7 @@ details.plain > summary + * { margin-top: 8px; }
     var s = st();
     var c = costOf(r.policy, r.result.usage);
     box.append(h("div", { class: "att-detail-head" },
-      h("h4", null, policyName(r.policy) + " on seed " + r.task.suite_seed + ", index " + r.task.index),
+      h("h4", null, policyName(r.policy, false, env) + " on seed " + r.task.suite_seed + ", index " + r.task.index),
       h("button", { type: "button", class: "link-btn", id: "att-close", onclick: function () { s.attOpen = null; renderAttempts(); } }, "Close")));
     var u = r.result.usage || {};
     box.append(h("div", { class: "facts" },

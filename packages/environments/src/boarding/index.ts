@@ -30,6 +30,10 @@ export const boardingTriage: Environment<BoardingTask, TriageAnswer> = {
   execute: executeBoardingTool,
   parseAnswer: parseTriageSubmission,
   grade: gradeTriage,
+  // Decided 26 October 2026: DeepSeek's held-out run passed 28 of 200 at
+  // 16,000 tokens and 95 at 32,000, nearly every answer it submitted passing;
+  // at 16,000 it mostly spent the budget before it answered.
+  outputBudget: 32000,
 };
 
 export const BOARDING_FINGERPRINT = {

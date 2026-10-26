@@ -118,4 +118,29 @@ describe("the Claude policy", () => {
     expect(r).toMatchObject({ outcome: "refusal", grade: { pass: false } });
     expect(sent[0]).not.toHaveProperty("fallbacks");
   });
+
+  it("names a budget other than the default in its id, as the Vertex policy does, and sends it", async () => {
+    const { client: idle } = fakeClient([]);
+    expect(new AnthropicPolicy({ client: idle }).id).toBe("anthropic:claude-opus-5-5:high");
+    expect(new AnthropicPolicy({ client: idle, maxTokens: 16000 }).id).toBe(
+      "anthropic:claude-opus-5-5:high",
+    );
+    expect(
+      new AnthropicPolicy({ client: idle, provider: "anthropic-vertex", effort: "max" }).id,
+    ).toBe("anthropic-vertex:claude-opus-5-5:max");
+    expect(
+      new AnthropicPolicy({ client: idle, provider: "anthropic-vertex", maxTokens: 32000 }).id,
+    ).toBe("anthropic-vertex:claude-opus-5-5:high:max-tokens-32000");
+
+    const { client, sent } = fakeClient([{ stop_reason: "end_turn", content: [] }]);
+    const wide = new AnthropicPolicy({ client, maxTokens: 32000 });
+    expect(wide.id).toBe("anthropic:claude-opus-5-5:high:max-tokens-32000");
+    await runEpisode(refiReview, workedExample, wide);
+    expect(sent[0]).toMatchObject({ max_tokens: 32000 });
+    const { client: narrow, sent: sentNarrow } = fakeClient([
+      { stop_reason: "end_turn", content: [] },
+    ]);
+    await runEpisode(refiReview, workedExample, new AnthropicPolicy({ client: narrow }));
+    expect(sentNarrow[0]).toMatchObject({ max_tokens: 16000 });
+  });
 });

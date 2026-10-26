@@ -61,7 +61,11 @@ export interface PolicySession {
 }
 
 export interface Policy {
-  /** What the record calls it: `reference`, or `anthropic:<model>:<effort>`. */
+  /**
+   * What the record calls it: `reference`, or `anthropic:<model>:<effort>`,
+   * with `:max-tokens-N` after a model policy's id when its output budget is
+   * not `DEFAULT_OUTPUT_BUDGET`.
+   */
   readonly id: string;
   start(episode: EpisodeStart): PolicySession;
 }
@@ -99,6 +103,15 @@ export interface Environment<T, A> {
   execute(name: string, input: unknown, task: T): string;
   parseAnswer(input: unknown): Parsed<A>;
   grade(task: T, answer: A | null): Grade;
+  /**
+   * The output tokens a model policy may write in one turn, reasoning
+   * included, when the environment needs more than the policies' default of
+   * `DEFAULT_OUTPUT_BUDGET`. Unset, a policy runs at its own default. It is
+   * how a policy is run, not what the task is or how it is graded, so it is
+   * in no fingerprint; a run at any budget says it in its policy id, and
+   * `--max-tokens` on the CLI overrides it (`outputBudgetFor`).
+   */
+  readonly outputBudget?: number;
 }
 
 export type Outcome =
@@ -143,6 +156,34 @@ export interface EpisodeLimits {
   readonly maxTurns: number;
   readonly maxToolCalls: number;
 }
+/**
+ * The model policies' output budget per turn, reasoning included, when
+ * neither the environment nor the run asks for another. A policy's id names
+ * any other budget (`:max-tokens-N`), so an id without one ran at this.
+ */
+export const DEFAULT_OUTPUT_BUDGET = 16000;
+
+/**
+ * The output budget a model policy runs an episode at: the run's own
+ * (`--max-tokens`) if it asked, else the environment's `outputBudget`, else
+ * undefined, which leaves the policy at its own default.
+ */
+export function outputBudgetFor(
+  asked: number | undefined,
+  env: { readonly outputBudget?: number },
+): number | undefined {
+  return asked ?? env.outputBudget;
+}
+
+/** `--max-tokens` as written: absent is undefined, anything but a positive whole number is refused. */
+export function parseMaxTokens(raw: string | undefined): number | undefined {
+  if (raw === undefined) return undefined;
+  const n = Number(raw);
+  if (!(raw.trim() !== "" && Number.isInteger(n) && n > 0))
+    throw new Error(`--max-tokens must be a positive whole number`);
+  return n;
+}
+
 /** A full review is about forty tool calls; a model that makes one per turn needs room for all of them. */
 export const DEFAULT_LIMITS: EpisodeLimits = { maxTurns: 80, maxToolCalls: 160 };
 

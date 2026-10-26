@@ -33,6 +33,7 @@
 
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+import { DEFAULT_OUTPUT_BUDGET } from "./episode.js";
 import type {
   EpisodeStart,
   Observation,
@@ -342,7 +343,7 @@ export class VertexOpenModelPolicy implements Policy {
       model: opts.model ?? DEFAULT_VERTEX_MODEL,
       project: opts.project ?? DEFAULT_VERTEX_PROJECT,
       thinking: opts.thinking ?? true,
-      maxTokens: opts.maxTokens ?? 16000,
+      maxTokens: opts.maxTokens ?? DEFAULT_OUTPUT_BUDGET,
       accessToken: opts.accessToken ?? gcloudAccessToken(),
       fetch: opts.fetch ?? (globalThis.fetch as unknown as Fetch),
       retryDelaysMs: opts.retryDelaysMs ?? [2_000, 8_000, 30_000],
@@ -350,7 +351,7 @@ export class VertexOpenModelPolicy implements Policy {
     // A cap other than the default is in the id, so a run record says which
     // budget its episodes had; pricing reads the id by its prefix.
     this.id = `vertex:${this.opts.model}:${this.opts.thinking ? "thinking" : "no-thinking"}${
-      this.opts.maxTokens === 16000 ? "" : `:max-tokens-${this.opts.maxTokens}`
+      this.opts.maxTokens === DEFAULT_OUTPUT_BUDGET ? "" : `:max-tokens-${this.opts.maxTokens}`
     }`;
     this.url = `https://aiplatform.googleapis.com/v1/projects/${this.opts.project}/locations/global/endpoints/openapi/chat/completions`;
   }

@@ -13,6 +13,7 @@
  */
 
 import Anthropic from "@anthropic-ai/sdk";
+import { DEFAULT_OUTPUT_BUDGET } from "./episode.js";
 import type {
   EpisodeStart,
   Observation,
@@ -30,6 +31,7 @@ export interface AnthropicPolicyOptions {
   readonly client?: Pick<Anthropic, "messages">;
   readonly model?: string;
   readonly effort?: Effort;
+  /** Output tokens per turn, thinking included; `DEFAULT_OUTPUT_BUDGET` unless asked. */
   readonly maxTokens?: number;
   /** Where the model is served, for the record's policy id: `anthropic` (the API) or `anthropic-vertex`. */
   readonly provider?: string;
@@ -55,8 +57,13 @@ export class AnthropicPolicy implements Policy {
     this.client = opts.client ?? new Anthropic();
     this.model = opts.model ?? DEFAULT_MODEL;
     this.effort = opts.effort ?? "high";
-    this.maxTokens = opts.maxTokens ?? 16000;
-    this.id = `${opts.provider ?? "anthropic"}:${this.model}:${this.effort}`;
+    this.maxTokens = opts.maxTokens ?? DEFAULT_OUTPUT_BUDGET;
+    // A budget other than the default is in the id, as the Vertex policy's
+    // is, so a run record says which budget its episodes had; pricing reads
+    // the id by its prefix.
+    this.id = `${opts.provider ?? "anthropic"}:${this.model}:${this.effort}${
+      this.maxTokens === DEFAULT_OUTPUT_BUDGET ? "" : `:max-tokens-${this.maxTokens}`
+    }`;
   }
 
   start(episode: EpisodeStart): PolicySession {

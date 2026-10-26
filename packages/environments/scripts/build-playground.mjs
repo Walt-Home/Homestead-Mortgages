@@ -141,6 +141,9 @@ vm.runInContext(bundle.toString("utf8"), page, { filename: "environments.js" });
 const HM = page.HMEnvironments;
 if (!HM?.environments?.length || typeof HM.drawsHeldoutStream !== "function")
   throw new Error("environments.js did not set HMEnvironments in a browser-like context");
+// The page labels a run by whether it ran at its environment's own budget, so every environment must say it.
+if (HM.environments.some((e) => !(Number.isInteger(e.outputBudget) && e.outputBudget > 0)))
+  throw new Error("environments.js gave an environment no output budget");
 
 /* ── the runs ───────────────────────────────────────────────────────────── */
 

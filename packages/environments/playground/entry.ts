@@ -24,6 +24,7 @@
 
 import {
   DEFAULT_LIMITS,
+  DEFAULT_OUTPUT_BUDGET,
   runEpisode,
   type Environment,
   type Grade,
@@ -294,6 +295,12 @@ export interface PlaygroundEnvironment {
   readonly side: Side;
   readonly summary: string;
   readonly version: string;
+  /**
+   * The output tokens a model may write in one turn, reasoning included, when a run does not ask for another:
+   * the environment's own `outputBudget`, or the policies' default. A run at another budget names it in its
+   * policy id (`…:max-tokens-N`).
+   */
+  readonly outputBudget: number;
   /** The system prompt: the rulebook, or the policy. */
   readonly rulebook: string;
   /** Every tool the model is given, the submit tool among them. */
@@ -432,6 +439,7 @@ function playground<T extends Coordinates, A>(d: Definition<T, A>): PlaygroundEn
     side: d.side,
     summary: d.summary,
     version: env.version,
+    outputBudget: env.outputBudget ?? DEFAULT_OUTPUT_BUDGET,
     rulebook: env.system,
     tools: plain<ToolSpec[]>(env.tools),
     submitTool: env.submitTool,
@@ -999,6 +1007,8 @@ export interface Playground {
   readonly splits: readonly ("train" | "spec")[];
   /** The episode loop's budget, the one every run is held to. */
   readonly limits: { readonly maxTurns: number; readonly maxToolCalls: number };
+  /** The policies' output budget per turn, which an environment's `outputBudget` raises; a policy id without `:max-tokens-N` ran at it. */
+  readonly outputBudget: number;
   readonly environments: readonly PlaygroundEnvironment[];
   get(key: string): PlaygroundEnvironment;
   /** Whether a task id, of any version, draws from a stream a held-out task draws from; the build reads it. */
@@ -1008,6 +1018,7 @@ export interface Playground {
 export const HMEnvironments: Playground = Object.freeze({
   splits: Object.freeze(["train", "spec"] as const),
   limits: Object.freeze({ ...DEFAULT_LIMITS }),
+  outputBudget: DEFAULT_OUTPUT_BUDGET,
   environments: ENVIRONMENTS,
   drawsHeldoutStream,
   get(key: string): PlaygroundEnvironment {

@@ -42,6 +42,7 @@ interface PlaygroundEnvironment {
   readonly side: string;
   readonly summary: string;
   readonly version: string;
+  readonly outputBudget: number;
   readonly rulebook: string;
   readonly tools: readonly { name: string }[];
   readonly submitTool: string;
@@ -141,6 +142,14 @@ describe("the playground", () => {
       expect(e.tools.map((t) => t.name)).toContain(e.submitTool);
       expect(isPlain(e.tools)).toBe(true);
     }
+  });
+
+  it("says each environment's output budget, which the page labels its runs by", () => {
+    const budgets = Object.fromEntries(environments.map((e) => [e.key, e.outputBudget]));
+    expect(budgets["boarding-triage"]).toBe(32000);
+    expect(budgets["tape-intake"]).toBe(32000);
+    for (const [key, budget] of Object.entries(budgets))
+      if (key !== "boarding-triage" && key !== "tape-intake") expect(budget, key).toBe(16000);
   });
 
   it("solves three train tasks per environment with the reference, through the episode loop", async () => {

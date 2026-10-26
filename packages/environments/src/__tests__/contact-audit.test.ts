@@ -122,6 +122,7 @@ const rootOf = (t: ContactAuditTask, id: "S-01" | "S-02") =>
   t.labels.find((l) => l.root_cause && l.defect_id === id)!.contact!;
 
 describe("staff errors in the contact center", () => {
+  // The first test to read the held-out suite draws it, a minute or more on a loaded machine.
   it("leaves a clean center as it was: an override that names no contact draws the clean history", () => {
     for (const t of heldTasks().slice(0, 12)) {
       const src = t.source!;
@@ -140,7 +141,7 @@ describe("staff errors in the contact center", () => {
       expect(none.defective.loans).toEqual(center.loans);
       expect(none.labels).toEqual([]);
     }
-  }, 120_000);
+  }, 600_000);
 
   it("S-01: the promise said and noted and never recorded, and what the contact center's rules make of that", () => {
     for (const t of ofPlan("S-01").slice(0, 12)) {

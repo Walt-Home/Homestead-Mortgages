@@ -971,7 +971,7 @@ export function deriveLoan(life: LoanLife, ctx: DeriveContext): DerivedLoan {
     // (S-01's): either call is dispositioned exactly as it would have been without the complaint or the promise, by the
     // same draw, a hardship call transferred or referred to loss mitigation as any other hardship call is. So its row
     // is one a clean history holds for a call of its reason. The unlogged complaint's issue stays open, so the
-    // follow-ups below are drawn for it as for an escalated call.
+    // follow-ups below are drawn for it as for an escalated call, and filed as for a call of its row.
     const resolution: Resolution = !live
       ? "unresolved"
       : promise
@@ -1273,16 +1273,21 @@ export function deriveLoan(life: LoanLife, ctx: DeriveContext): DerivedLoan {
   const followUp = (x: Draft, key: string) => {
     if (x.direction !== "inbound" || x.mode !== "call" || x.outcome !== "conversation" || !x.reason)
       return;
+    const openRow = ["pending_documents", "unresolved", "escalated", "callback_scheduled"].includes(
+      x.resolution,
+    );
     // A complaint voiced and not logged on a call that took no promise (S-02's root; never on a clean history) leaves
-    // its issue open as the escalation it would have been. A pinned borrower calls again about a closed matter too.
-    const open =
-      ["pending_documents", "unresolved", "escalated", "callback_scheduled"].includes(
-        x.resolution,
-      ) ||
-      (x.complaint_voiced &&
-        !x.complaint_logged &&
-        x.promise === null &&
-        draftKey(x) === ctx.staff?.unlogged_complaint);
+    // its issue open as the escalation it would have been, so the follow-up drawn for it is the clean history's, by the
+    // same draws. Where its row is closed, nothing in the log holds the issue open, so the follow-up is filed as one
+    // after a closed call is: under the issue its own day gives its reason.
+    const byTwin =
+      !openRow &&
+      x.complaint_voiced &&
+      !x.complaint_logged &&
+      x.promise === null &&
+      draftKey(x) === ctx.staff?.unlogged_complaint;
+    const open = openRow || byTwin;
+    // A pinned borrower calls again about a closed matter too.
     const closed = ctx.pins?.closed_follow_up;
     if (!open && closed === undefined) return;
     const r = rngFor(key);
@@ -1292,7 +1297,7 @@ export function deriveLoan(life: LoanLife, ctx: DeriveContext): DerivedLoan {
       if (go)
         push(
           inbound(rngFor(`${key}/call`), addDays(x.on, lag), x.reason, {
-            issue: x.issue,
+            ...(byTwin ? {} : { issue: x.issue }),
             followUp: true,
           }),
         );

@@ -79,7 +79,7 @@ export const AUDIT_HISTORY_MONTHS = 30;
  * call), irritated, with a grievance voiced on 35 % of the inbound calls an agent handles whatever the call
  * is about (an outbound call carries none), so a call of any reason is as likely as any other to carry one
  * and, as often, not; who calls nine times as often as the calibration's borrower in the same status, and
- * calls again 3 to 60 days later about two in five of the matters an agent closed, as S-02's borrower calls
+ * calls again 3 to 60 days later about seven in ten of the matters an agent closed, as S-02's borrower calls
  * again about a complaint nobody logged; and who pays within three weeks of a conversation without having
  * promised to on it 85 % of the time. docs/environments.md gives what the pins make of a window.
  */
@@ -88,7 +88,7 @@ export const AUDIT_PINS: ProfilePins = {
   style: "irritated",
   complaint_chance: 0.35,
   call_multiplier: 9,
-  closed_follow_up: 0.4,
+  closed_follow_up: 0.7,
   kept_promise_share: 0.15,
 };
 /**

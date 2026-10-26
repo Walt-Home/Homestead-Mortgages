@@ -24,17 +24,20 @@
  *         (C-04's error at the call: the row's flag, the agent's
  *         acknowledgment, the note), and nobody escalates it: the call is
  *         dispositioned as its reason would have it without the complaint, by
- *         the same draw, its issue left open as an escalation's is. So the
- *         complaint system opens no case (complaints.ts), nothing acknowledges
- *         it, nobody answers it in writing, and nobody tells the borrower how
- *         to put it in writing, so no written request follows it as one may
- *         follow a logged complaint; nothing having come of it, the borrower
- *         calls about it again 3 to 60 days later, a call filed under an issue
- *         of its own because no case links it to the first, and that call is
- *         not logged either. Beside the complaint it is drawn as any call of
- *         its reason that reaches an agent is: who calls, how it is
- *         dispositioned, a promise taken on it, a follow-up and the letters
- *         after it.
+ *         the same draw, its issue left open as an escalation's is (a
+ *         follow-up on it is drawn as the clean history's and, where the row
+ *         is closed, filed as one after a closed call is, under the issue its
+ *         own day gives its reason, since nothing in the log holds the issue
+ *         open). So the complaint system opens no case (complaints.ts),
+ *         nothing acknowledges it, nobody answers it in writing, and nobody
+ *         tells the borrower how to put it in writing, so no written request
+ *         follows it as one may follow a logged complaint; nothing having
+ *         come of it, the borrower calls about it again 3 to 60 days later, a
+ *         call filed under an issue of its own because no case links it to
+ *         the first, and that call is not logged either. Beside the complaint
+ *         it is drawn as any call of its reason that reaches an agent is: who
+ *         calls, how it is dispositioned, a promise taken on it, a follow-up
+ *         and the letters after it.
  *
  * The twin is derived again with the error made (`StaffOverride`,
  * derive.ts): every draw is the clean history's, and the error changes only

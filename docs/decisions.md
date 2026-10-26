@@ -9179,31 +9179,51 @@ note says the date; before it, a random pick among the conversations a kept
 promise could be found 35 % of the kept arm's roots, and the ranker 26 of 50
 on a fresh held-out draw. Now on the held-out suite the fourth review's
 policies pass at most 9 of the S-02 windows (6 of an arm's 25) and 3 of the
-S-01 ones; out of sample, on four fresh suites of 400, no structural policy
-passes more than 18 of 100 S-02 windows or 11 of an arm's 50, nor 9 of the
-kept arm's 50.
+S-01 ones; out of sample, on four fresh suites of 400, none of them passes
+more than 18 of 100 S-02 windows or 11 of an arm's 50, nor 9 of the kept
+arm's 50.
+
+**The fifth review found no tell.** Its policies read the redraw itself (a
+candidate is as likely as its share of the pairs the window holds, and the
+zone gives most candidates the largest), what follows the call raising a
+complaint again (a call of its own at the pin's chance, which a look-alike's
+call again about the matter never has and the borrower's calling makes common
+by chance), a window whose recorded promises fit no logged complaint (a sign
+of S-01 that says nothing of the call or the date), the comment log's counts
+and users, and the payments around a call; and it fitted logistic rankers on
+about seventy features of a candidate. The window and the anchors are drawn
+before the plan is made, and the root's row is a clean row's, so nothing
+tells an S-02 window from a clean one: the most any of them found was 15 of
+the 50 S-02 windows held out (10 of an arm's 25), 22 of 75 in training (12 of
+an arm's 38), and out of sample 26 of 100 (15 of an arm's 50), and abstaining
+where unsure, 51 and 78 windows in all against bounds of 58 and 87. An S-01
+root's date stays the note's: on the right call, a date guessed from the
+payment is right about one time in eight. Nothing changed. Its ten
+hand-written policies and its smallest ranker, written out, are a fifth
+table, which the test holds.
 
 **The floors now.** Each cheap policy chooses its roots. The first table's
 are given every symptom the rules give them, so a floor is the roots' alone;
 the second table's read only the logs' structure, V1 to V8 among them; the
-third holds the third review's and the rework's own after it, and the fourth
-the fourth review's and the rework's own after that. On the held-out suite
-submitting nothing passes the 50 clean windows (mean 0.546), and no policy
-in the four tables passes more than 50. Of the ones that pass an error's
-window the most is 49 (47 clean and 2 S-02), and by reason 48, the only pair
-for a payoff request; V1 passes 1, V2 and V2' 39, V3 24, V4 35, V5 1, V6
-and V7 none, and V8 8 and 7. On the training suite (seed 11, 300 windows, 75
-clean) none passes more than 75, and of those that pass an error's window
-the most is 74 (67 clean and 7 S-02). None passes a majority of any error's
-windows or of either promise arm within one: on the held-out suite the most
-is 16 S-01 windows (the promise note nearest the window's middle, which
-reads the notes; 8 of the kept arm's 25) and 3 structurally, 9 S-02 windows
-and 7 of an arm's 25; on the training suite 24 of 75 S-01 windows (the same
-note; 17 of the kept arm's 38) and 4 structurally, 17 of 75 S-02 windows,
-and 12 of an arm's 38. The third review's searches of filter combinations,
-run again, pass at most 51 and 75 for S-01, 52 and 77 for S-02. The tables
-are in docs/environments.md, and a test holds every row and the bounds on
-both suites, every structural policy by reason too.
+third holds the third review's and the rework's own after it, the fourth the
+fourth review's and the rework's own after that, and the fifth the fifth
+review's. On the held-out suite submitting nothing passes the 50 clean
+windows (mean 0.546), and no policy in the five tables passes more than 50.
+Of the ones that pass an error's window the most is 49 (47 clean and 2 S-02),
+and by reason 48, the only pair for a payoff request; V1 passes 1, V2 and V2'
+39, V3 24, V4 35, V5 1, V6 and V7 none, and V8 8 and 7. On the training suite
+(seed 11, 300 windows, 75 clean) the most is 77 (75 clean, one S-02 window
+and one both), then 74 (67 clean and 7 S-02). None passes a majority of any
+error's windows or of either promise arm within one: on the held-out suite
+the most is 16 S-01 windows (the promise note nearest the window's middle,
+which reads the notes; 8 of the kept arm's 25) and 3 structurally, 12 S-02
+windows and 7 of an arm's 25; on the training suite 24 of 75 S-01 windows
+(the same note; 17 of the kept arm's 38) and 4 structurally, 17 of 75 S-02
+windows, and 12 of an arm's 38. The third review's searches of filter
+combinations, run again, pass at most 51 and 75 for S-01, 52 and 77 for S-02,
+and the fifth review's larger rankers, beyond the tables, 15 and 22 S-02
+windows. The tables are in docs/environments.md, and a test holds every row
+and the bounds on both suites, every structural policy by reason too.
 
 **The complaint log is a view, so no clean center moved.** Spec 4.5 puts
 complaints in a case-management system beside the contact log, acknowledged

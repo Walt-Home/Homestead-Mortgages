@@ -1456,6 +1456,283 @@ const FOURTH_REVIEW: Record<string, (t: ContactAuditTask) => AuditFinding[]> = {
   "N3 S-01: NB01's choice, its promise dated a week past the payment": (t) =>
     best(keptLike(t), (p) => nb01(t, p)).flatMap((p) => s01Late(t, p, 7)),
 };
+/*
+ * The fifth review's (H1 to H9, and LF, a logistic it fitted written out). The anchors are drawn again from every pair
+ * the window holds, so a candidate is as likely as the share of those pairs it is in: by arm, its promise partners over
+ * every logged complaint's and its own. Beside that they read the call raising a complaint again and what follows it,
+ * dispositions, issues, notes' counts and users, and the payments around a call. LF's weights were fitted on clean and
+ * S-02 windows of four fresh suites (train seeds 12 and 13, held-out seeds 2 and 3, 400 each), rounded, and the
+ * smallest dropped.
+ */
+/** Settled promises the log holds that a draw could have anchored, and whether each was kept: the arm it would be. */
+const settledAnchors = (t: ContactAuditTask) =>
+  t.contacts.flatMap((p) => {
+    if (!p.promise_id || p.mode !== "call" || p.outcome !== "conversation" || !p.agent) return [];
+    if (p.purpose === "promise_to_pay" || p.complaint_logged) return [];
+    const q = t.promises.find((x) => x.contact === p.id);
+    return q && q.status !== "pending"
+      ? [{ row: p, on: p.on, pay_by: q.pay_by, kept: q.status === "kept" }]
+      : [];
+  });
+/** Whether the window holds a pair as the redraw does: from ten days in (or the loan's first contact) to its end. */
+function holdsPair(t: ContactAuditTask, pOn: string, payBy: string, cOn: string): boolean {
+  if (Math.abs(dayOf(pOn) - dayOf(cOn)) > 120) return false;
+  const first = Math.min(dayOf(pOn), dayOf(cOn));
+  const last = Math.max(dayOf(payBy) + 7, dayOf(cOn) + 61);
+  return first >= dayOf(t.window.from) + (firstContact(t) ? 0 : 10) && last <= dayOf(t.window.to);
+}
+const partnersOf = (t: ContactAuditTask, c: Row, kept: boolean) =>
+  settledAnchors(t).filter(
+    (p) => p.kept === kept && p.row !== c && holdsPair(t, p.on, p.pay_by, c.on),
+  ).length;
+/** The share of the redraw's pairs that are c's, were c the complaint anchor: by arm, its partners over everyone's. */
+function pairShare(t: ContactAuditTask, c: Row): number {
+  let share = 0;
+  for (const kept of [true, false]) {
+    const n = partnersOf(t, c, kept);
+    const others = complaintAnchors(t).reduce((s, x) => s + partnersOf(t, x, kept), 0);
+    if (n) share += n / (others + n);
+  }
+  return share;
+}
+/** Calls an agent handled for x's reason 3 to 61 days after it, logged or not. */
+const followedFor = (t: ContactAuditTask, x: Row) =>
+  t.contacts.filter(
+    (y) =>
+      handledInbound(y) &&
+      y.reason === x.reason &&
+      after(y, x) &&
+      daysFrom(x, y) >= 3 &&
+      daysFrom(x, y) <= 61,
+  );
+const handledFor = (t: ContactAuditTask, c: Row) =>
+  t.contacts.filter((x) => handledInbound(x) && x.reason === c.reason).length;
+const notesOn = (t: ContactAuditTask, c: Row) => t.notes.filter((n) => n.contact === c.id);
+const iso = (day: number) => new Date(day * 86_400_000).toISOString().slice(0, 10);
+/** No settled promise of the kind the log holds fits a logged complaint: the window lacks that arm's pair. */
+const noPairOf = (t: ContactAuditTask, kept: boolean) =>
+  !complaintAnchors(t).some((c) => partnersOf(t, c, kept) > 0);
+/** The log's kept promises: the commonest days between the payment that kept one and its date, three when none. */
+function commonSlack(t: ContactAuditTask): number {
+  const n = new Map<number, number>();
+  for (const p of t.promises.filter((x) => x.status === "kept")) {
+    const pay = t.payments.filter((x) => x.on > p.made_on && x.on <= p.pay_by).pop();
+    const k = pay ? dayOf(p.pay_by) - dayOf(pay.on) : null;
+    if (k !== null) n.set(k, (n.get(k) ?? 0) + 1);
+  }
+  return [...n].sort((a, b) => b[1] - a[1] || a[0] - b[0])[0]?.[0] ?? 3;
+}
+/** H6's call: of V2's kind, one payment within 21 days after it and none in the 21 before, the most partners. */
+const h6Call = (t: ContactAuditTask) => {
+  const partners = (c: Row) => {
+    const by = iso(dayOf(nextPayment(t, c).pay_by) + 3);
+    return complaintAnchors(t).filter((x) => x.id !== c.id && holdsPair(t, c.on, by, x.on)).length;
+  };
+  return best(
+    keptLike(t).filter((c) => {
+      const d = dayOf(c.on);
+      const paid = (from: number, to: number) =>
+        t.payments.filter((x) => dayOf(x.on) - d >= from && dayOf(x.on) - d <= to).length;
+      return paid(1, 21) === 1 && paid(-21, 0) === 0 && partners(c) > 0;
+    }),
+    partners,
+  );
+};
+/** LF, written out: a logistic over a candidate's structure, fitted on clean and S-02 windows. */
+const LF = {
+  share: 0.62,
+  laterFollowed: { 0: -0.43, 1: 0.15 } as Record<number, number>,
+  laterTookPromise: -0.28,
+  laterOnItsIssue: -0.2,
+  later: { 1: -0.18, 2: -0.12, 3: -0.13, 4: 0.16 } as Record<number, number>,
+  chain: 0.12,
+  loggedAfter: -0.3,
+  /** By how many calls an agent handled for its reason in the window. */
+  handled: (n: number) =>
+    n <= 2
+      ? -0.33
+      : n === 3
+        ? 0.27
+        : n === 5
+          ? 0.3
+          : n <= 7
+            ? 0
+            : n <= 9
+              ? -0.1
+              : n <= 12
+                ? -0.16
+                : -0.25,
+  reason: {
+    credit_reporting: 0.11,
+    escrow_analysis: 0.05,
+    hardship: -0.3,
+    insurance: 0.09,
+    late_fee: -0.21,
+    make_payment: -0.07,
+    online_access: -0.06,
+    payment_arrangement: -0.25,
+    payment_change: 0.17,
+    payment_received: -0.08,
+    payoff_request: 0.1,
+    statement_copy: 0.09,
+  } as Record<string, number>,
+  with: { borrower: -0.24, co_borrower: -0.14, housing_counselor: 0.11 } as Record<string, number>,
+};
+function lf(t: ContactAuditTask, c: Row): number {
+  const later = againShaped(t, c);
+  const a = later[0]!;
+  return (
+    LF.share * Math.log(pairShare(t, c) + 0.01) +
+    (LF.laterFollowed[Math.min(againShaped(t, a).length, 3)] ?? 0) +
+    (a.promise_id ? LF.laterTookPromise : 0) +
+    (a.issue === c.issue ? LF.laterOnItsIssue : 0) +
+    (LF.later[Math.min(later.length, 4)] ?? 0) +
+    (later.some((x) => againShaped(t, x).length > 0) ? LF.chain : 0) +
+    (t.contacts.some(
+      (x) =>
+        x.complaint_logged &&
+        x.reason === c.reason &&
+        after(x, c) &&
+        daysFrom(c, x) >= 3 &&
+        daysFrom(c, x) <= 61,
+    )
+      ? LF.loggedAfter
+      : 0) +
+    LF.handled(handledFor(t, c)) +
+    (LF.reason[c.reason ?? ""] ?? 0) +
+    (LF.with[c.with] ?? 0)
+  );
+}
+const FIFTH_REVIEW: Record<string, (t: ContactAuditTask) => AuditFinding[]> = {
+  "H1 S-02: the candidate the redrawn pair most likely lands on, the first of the likeliest": (t) =>
+    s02Of(t)(best([...cand02(t)].reverse(), (c) => pairShare(t, c))),
+  "H2 S-02: its later call followed for its reason 3 to 61 days on, logged or not, the reason three to six calls, the likeliest pair":
+    (t) =>
+      s02Of(t)(
+        best(
+          [
+            ...cand02(t).filter(
+              (c) =>
+                handledFor(t, c) >= 3 &&
+                handledFor(t, c) <= 6 &&
+                followedFor(t, againShaped(t, c)[0]!).length > 0,
+            ),
+          ].reverse(),
+          (c) => pairShare(t, c),
+        ),
+      ),
+  "H3 S-02: a closed call off the arrangement and hardship reasons, its later call closed, with the borrower and no promise, the last":
+    (t) => {
+      const closed = ["resolved", "information_provided"];
+      return s02Of(t)(
+        cand02(t)
+          .filter((c) => {
+            const a = againShaped(t, c)[0]!;
+            return (
+              c.reason !== "payment_arrangement" &&
+              c.reason !== "hardship" &&
+              closed.includes(c.resolution) &&
+              closed.includes(a.resolution) &&
+              a.with === "borrower" &&
+              !a.promise_id
+            );
+          })
+          .slice(-1),
+      );
+    },
+  "H4 S-02: one note on it and one on its later call, an agent's each, and a call after that: the only one":
+    (t) =>
+      s02Of(t)(
+        onlyOne(
+          cand02(t).filter((c) => {
+            const a = againShaped(t, c)[0]!;
+            const [nc, na] = [notesOn(t, c), notesOn(t, a)];
+            return (
+              nc.length === 1 &&
+              na.length === 1 &&
+              nc[0]!.user !== "SYSTEM" &&
+              na[0]!.user !== "SYSTEM" &&
+              followedFor(t, a).length > 0
+            );
+          }),
+        ),
+      ),
+  "H5 S-02: nothing on its issue 3 to 15 days on, its later call the first on an issue of a later month, the reason with the fewest calls, three or more":
+    (t) =>
+      s02Of(t)(
+        best(
+          [
+            ...cand02(t).filter((c) => {
+              const a = againShaped(t, c)[0]!;
+              return (
+                !t.contacts.some(
+                  (x) =>
+                    x.issue === c.issue &&
+                    x.direction === "inbound" &&
+                    after(x, c) &&
+                    daysFrom(c, x) >= 3 &&
+                    daysFrom(c, x) <= 15,
+                ) &&
+                !t.contacts.some((x) => x.issue === a.issue && after(a, x)) &&
+                a.on.slice(0, 7) > c.on.slice(0, 7) &&
+                handledFor(t, c) >= 3
+              );
+            }),
+          ].reverse(),
+          (c) => -handledFor(t, c),
+        ),
+      ),
+  "H6 S-01: where no kept promise the log holds fits a logged complaint, the conversation of V2''s kind one payment follows within 21 days and none preceded, the most partners, dated the log's commonest slack":
+    (t) => (noPairOf(t, true) ? h6Call(t).flatMap((c) => s01Late(t, c, commonSlack(t))) : []),
+  "H6' the same call in every window, dated three days past the payment": (t) =>
+    h6Call(t).flatMap((c) => s01Late(t, c, 3)),
+  "H7 both: where no promise the log holds fits a logged complaint, H6's call and LF's candidate": (
+    t,
+  ) =>
+    noPairOf(t, true) && noPairOf(t, false)
+      ? [
+          ...h6Call(t).flatMap((c) => s01Late(t, c, commonSlack(t))),
+          ...s02Of(t)(best(cand02(t), (c) => lf(t, c))),
+        ]
+      : [],
+  "H8 S-02: a reason's first call, in the zone, of three or four for it each 3 to 61 days after the one before, the only such reason":
+    (t) =>
+      s02Of(t)(
+        onlyOne(
+          [...new Set(cand02(t).map((c) => c.reason))].flatMap((r) => {
+            const hs = t.contacts.filter((x) => handledInbound(x) && x.reason === r);
+            const chained = hs.every(
+              (x, i) => i === 0 || (daysFrom(hs[i - 1]!, x) >= 3 && daysFrom(hs[i - 1]!, x) <= 61),
+            );
+            return hs.length >= 3 &&
+              hs.length <= 4 &&
+              chained &&
+              unlogged(hs[0]!) &&
+              inZone(t, hs[0]!)
+              ? [hs[0]!]
+              : [];
+          }),
+        ),
+      ),
+  "H9 S-02: a payment in the week before it and none in the three weeks after, the likeliest pair, the first":
+    (t) =>
+      s02Of(t)(
+        best(
+          [
+            ...cand02(t).filter((c) => {
+              const d = dayOf(c.on);
+              return (
+                t.payments.some((x) => d - dayOf(x.on) >= 0 && d - dayOf(x.on) <= 7) &&
+                !t.payments.some((x) => dayOf(x.on) > d && dayOf(x.on) - d <= 21)
+              );
+            }),
+          ].reverse(),
+          (c) => pairShare(t, c),
+        ),
+      ),
+  "LF S-02, written out: the pair's share, the later call and what follows it, the reason, its count, the caller":
+    (t) => s02Of(t)(best(cand02(t), (c) => lf(t, c))),
+};
 /**
  * The bounds a cheap policy is held to on a suite: no more than four points of its windows past the clean ones, and
  * never a majority of any error plan's windows, nor of either promise arm's within a plan.
@@ -1929,6 +2206,35 @@ describe("contact-audit", () => {
         [25, 24, 1, 0, 0],
       "N3 S-01: NB01's choice, its promise dated a week past the payment": [22, 19, 3, 0, 0],
     });
+    // The fifth review's.
+    expect(
+      Object.fromEntries(
+        Object.entries(FIFTH_REVIEW).map(([name, p]) => [name, floorOf(tasks, p)]),
+      ),
+    ).toEqual({
+      "H1 S-02: the candidate the redrawn pair most likely lands on, the first of the likeliest": [
+        4, 0, 0, 4, 0,
+      ],
+      "H2 S-02: its later call followed for its reason 3 to 61 days on, logged or not, the reason three to six calls, the likeliest pair":
+        [32, 23, 0, 9, 0],
+      "H3 S-02: a closed call off the arrangement and hardship reasons, its later call closed, with the borrower and no promise, the last":
+        [16, 11, 0, 5, 0],
+      "H4 S-02: one note on it and one on its later call, an agent's each, and a call after that: the only one":
+        [44, 43, 0, 1, 0],
+      "H5 S-02: nothing on its issue 3 to 15 days on, its later call the first on an issue of a later month, the reason with the fewest calls, three or more":
+        [7, 2, 0, 5, 0],
+      "H6 S-01: where no kept promise the log holds fits a logged complaint, the conversation of V2''s kind one payment follows within 21 days and none preceded, the most partners, dated the log's commonest slack":
+        [43, 43, 0, 0, 0],
+      "H6' the same call in every window, dated three days past the payment": [28, 28, 0, 0, 0],
+      "H7 both: where no promise the log holds fits a logged complaint, H6's call and LF's candidate":
+        [50, 50, 0, 0, 0],
+      "H8 S-02: a reason's first call, in the zone, of three or four for it each 3 to 61 days after the one before, the only such reason":
+        [40, 39, 0, 1, 0],
+      "H9 S-02: a payment in the week before it and none in the three weeks after, the likeliest pair, the first":
+        [22, 19, 0, 3, 0],
+      "LF S-02, written out: the pair's share, the later call and what follows it, the reason, its count, the caller":
+        [12, 0, 0, 12, 0],
+    });
     // Every one of them, by reason too, on the held-out suite and on a training suite: at most four points past the
     // clean windows, and never a majority of any error's windows, nor of either promise arm's within one.
     for (const suite of [tasks, train()]) {
@@ -1940,6 +2246,7 @@ describe("contact-audit", () => {
         ...BY_REASON,
         ...THIRD_REVIEW,
         ...FOURTH_REVIEW,
+        ...FIFTH_REVIEW,
       }))
         holdsTheBounds(suite, name, p);
     }

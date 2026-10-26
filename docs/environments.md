@@ -5163,30 +5163,92 @@ fresh held-out draw (seed 3).
 | N2: S-01, G8's choice, its promise dated the log's median days between a kept promise's date and its payment                                                     |     25 |    24 |    1 |    0 |    0 | 0.350 |       29 |
 | N3: S-01, NB01's choice, its promise dated a week past the payment                                                                                               |     22 |    19 |    3 |    0 |    0 | 0.295 |       24 |
 
+A fifth review the same day read the redraw itself, and what the tables still
+did not: the share of a window's pairs a candidate is in, the call raising a
+complaint again and what follows it, which call comes first on an issue, the
+comment log's counts and users, and the payments around a call. It wrote ten
+policies on them (H1 to H9, and H6') and fitted logistic rankers on those and
+about seventy other features of a candidate, the smallest written out (LF).
+They are the fifth table's. None found a tell:
+
+- **the redraw.** Given the window, a candidate is as likely as the share
+  of the window's pairs it is in, by arm its promise partners over every
+  logged complaint's and its own. The pairs a window holds are held to the
+  zone, so most candidates share the largest: the root's is the largest in
+  41 of the 50 held-out S-02 windows, tied there with eight or nine others
+  on average, and H1 finds 4 roots;
+- **what follows the call raising a complaint again.** It is followed for its
+  reason, at the pin's chance, by a call of its own, which a look-alike's
+  call again about its matter, a follow-up itself, never is. The borrower
+  calls fourteen times as often, so a later call for the reason comes by
+  chance about as often (H2, H4, H8);
+- **the window with no pair of a kind.** Where no settled promise the log
+  holds fits a logged complaint, the window's promise anchor was not recorded
+  or was of the other arm: on the held-out suite no kept promise fits one in
+  33 of the 50 S-01 and both windows on the kept arm and in 1 of the 50 clean
+  and S-02 ones, but in 32 of the 100 clean and S-02 windows on the broken
+  arm. It says S-01 is likelier, not which call, and never the date, which
+  the borrower names up to a week past the payment's; dated by the log's
+  commonest slack, or three days past the payment, the call finds no kept
+  promise held out and at most 2 of an arm's 38 in training (H6, H6', H7);
+- **the rankers.** LF, fitted on the 800 clean and S-02 windows of four fresh
+  suites of 400 (train seeds 12 and 13, held-out seeds 2 and 3) and written
+  out with 32 weights, passes 12 S-02 windows held out (6 and 6 by arm) and
+  17 of 75 in training (10 and 7). The same logistic over all 281 indicator
+  features passes 14 (10 and 4) and 19 (10 and 9); with the reason, its count
+  and the later call's crossed, 15 (8 and 7) and 22 (11 and 11); a
+  conditional logit fitted on the S-02 windows, alone or with the both
+  windows, at most 12 (10 and 2) and 21 (12 and 9). Fitted on three of the
+  fresh suites and scored on the fourth, the 281-feature logistic passes 15
+  to 26 of 100 S-02 windows, at most 15 of an arm's 50. Naming its candidate
+  only where its fitted chance clears a threshold, the one chosen on the
+  fitting suites or any from 0.3 to 0.6, a logistic passes at most 51 held
+  out and 78 in training: the window and the anchors are drawn before the
+  plan is made, and the root's row is a clean row's, so a window with an S-02
+  root reads as a clean one does.
+
+| Policy                                                                                                                                                                                                         | Passes | Clean | S-01 | S-02 | Both |  Mean | Training |
+| -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -----: | ----: | ---: | ---: | ---: | ----: | -------: |
+| H1: S-02, the candidate the redrawn pair most likely lands on                                                                                                                                                  |      4 |     0 |    0 |    4 |    0 | 0.040 |       11 |
+| H2: its later call followed for its reason 3 to 61 days on, logged or not, the reason three to six calls, the likeliest pair                                                                                   |     32 |    23 |    0 |    9 |    0 | 0.266 |       37 |
+| H3: a closed call off the arrangement and hardship reasons, its later call closed, with the borrower and no promise, the last                                                                                  |     16 |    11 |    0 |    5 |    0 | 0.136 |       24 |
+| H4: one note on it and one on its later call, an agent's each, and a call after that, the only one                                                                                                             |     44 |    43 |    0 |    1 |    0 | 0.506 |       68 |
+| H5: nothing on its issue 3 to 15 days on, its later call the first on an issue of a later month, the reason with the fewest calls, three or more                                                               |      7 |     2 |    0 |    5 |    0 | 0.098 |       19 |
+| H6: S-01, where no kept promise the log holds fits a logged complaint, the conversation of V2''s kind one payment follows within 21 days and none preceded, the most partners, dated the log's commonest slack |     43 |    43 |    0 |    0 |    0 | 0.472 |       62 |
+| H6': the same call in every window, dated three days past the payment                                                                                                                                          |     28 |    28 |    0 |    0 |    0 | 0.362 |       35 |
+| H7: both, where no promise the log holds fits a logged complaint, H6's call and LF's candidate                                                                                                                 |     50 |    50 |    0 |    0 |    0 | 0.525 |       77 |
+| H8: a reason's first call, in the zone, of three or four for it, each 3 to 61 days after the one before, the only such reason                                                                                  |     40 |    39 |    0 |    1 |    0 | 0.406 |       62 |
+| H9: a payment in the week before it and none in the three weeks after, the likeliest pair                                                                                                                      |     22 |    19 |    0 |    3 |    0 | 0.263 |       46 |
+| LF: S-02, a logistic written out: the pair's share, the later call and what follows it, the reason, its count, the caller                                                                                      |     12 |     0 |    0 |   12 |    0 | 0.095 |       18 |
+
 The clean share is 50 of 200, and 75 of 300 on the training suite. On the
-held-out suite no structural policy in the four tables passes more than 50:
+held-out suite no structural policy in the five tables passes more than 50:
 of the ones that pass an error's window the most there is 49, A10 (47 clean
 and 2 S-02), and 48 by reason, the only unlogged pair for a payoff request
-(46 and 2). On the training suite none passes more than 75; of the ones that
-pass an error's window the most is 74, M4 (67 and 7), and by reason 72, the
-online-access pair (71 and 1). None passes a majority of any error's
-windows, nor of either promise arm's within one: on the held-out suite the
-most is 16 S-01 windows (the promise note nearest the window's middle, which
-reads the notes; 8 of the kept arm's 25) and 3 structurally, and 9 S-02
-windows (G2 and M6), 7 of an arm's 25 (M6); on the training suite 24 of 75
-S-01 windows (the same note; 17 of the kept arm's 38) and 4 structurally
-(N3), and 17 of 75 S-02 windows (N1), 12 of an arm's 38. Out of sample, on
-four fresh suites of 400 (train seeds 12 and 13, held-out seeds 2 and 3, the
-rankers fitted on the first two), no structural policy in the tables passes
-more than 18 of the 100 S-02 windows (Z2 and Z3, held-out seed 2) or 11 of
-an arm's 50 (G1), nor 9 of the kept arm's 50 (N3). A test holds every row of
-the four tables, and holds each policy, every one of the structural ones by
-reason too (a reason's first unlogged call, and its only pair), under those
-bounds on both suites: at most four points past the clean windows, and less
-than half of any error's windows and of either arm's. The rule itself,
-clause by clause, passes all 200, so each row of the first table is what
-leaving a clause out costs: the raised-again clause alone costs the 100
-windows with an S-02 root, every one of which holds a call raising it again.
+(46 and 2). On the training suite the most is 77, H7 (75 clean, one S-02
+window and one both), then 74, M4 (67 and 7), and by reason 72, the
+online-access pair (71 and 1). None passes a majority of any error's windows,
+nor of either promise arm's within one: on the held-out suite the most is 16
+S-01 windows (the promise note nearest the window's middle, which reads the
+notes; 8 of the kept arm's 25) and 3 structurally, and 12 S-02 windows (LF),
+7 of an arm's 25 (M6); on the training suite 24 of 75 S-01 windows (the same
+note; 17 of the kept arm's 38) and 4 structurally (N3), and 17 of 75 S-02
+windows (N1 and LF), 12 of an arm's 38 (N1). Out of sample, on four fresh
+suites of 400 (train seeds 12 and 13, held-out seeds 2 and 3; NB and NB01
+fitted on the first two, and LF, fitted on all four, left out), no structural
+policy in the tables passes more than 20 of the 100 S-02 windows (H2,
+held-out seed 3) or 12 of an arm's 50 (H2), nor 9 of the kept arm's 50 (N3).
+Beyond the tables, the fifth review's larger rankers pass at most 15 of the
+50 S-02 windows held out and 10 of an arm's 25, 22 of 75 in training and 12
+of an arm's 38, and out of sample 26 of 100 and 15 of an arm's 50. A test
+holds every row of the five tables, and holds each policy, every one of the
+structural ones by reason too (a reason's first unlogged call, and its only
+pair), under those bounds on both suites: at most four points past the clean
+windows, and less than half of any error's windows and of either arm's. The
+rule itself, clause by clause, passes all 200, so each row of the first table
+is what leaving a clause out costs: the raised-again clause alone costs the
+100 windows with an S-02 root, every one of which holds a call raising it
+again.
 
 **The proof of fairness.** The reference passes the held-out suite, 300
 training tasks (seed 11) and fifteen hand-built histories in at most three

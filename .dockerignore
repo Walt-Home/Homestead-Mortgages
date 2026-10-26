@@ -18,5 +18,9 @@
 infra/.terraform
 # Model transcripts from the environments' runs. Never in an image: the Gym the
 # API serves carries no recorded attempts (docs/decisions.md, "The Gym is in
-# the ops console, without its recorded attempts").
-packages/environments/runs
+# the ops console, without its recorded attempts"). `**/` so a checkout's
+# worktrees, each with a runs/ of its own, are kept out too.
+**/packages/environments/runs
+# Claude Code's local state, worktrees among it: whole checkouts, nothing an
+# image reads.
+.claude

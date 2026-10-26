@@ -104,7 +104,10 @@ export function consoleGymRouter(gate: ConsoleStaffGateOptions, files: GymFiles)
       const at = req.originalUrl.indexOf("?");
       const path = at < 0 ? req.originalUrl : req.originalUrl.slice(0, at);
       if (!path.endsWith("/")) {
-        res.redirect(302, `${path}/${at < 0 ? "" : req.originalUrl.slice(at)}`);
+        // To the mount path as it matched, never to the request's own text: a
+        // request line in absolute form (`GET http://elsewhere/console/hm/gym`)
+        // would otherwise send the browser to the host it names.
+        res.redirect(302, `${req.baseUrl}/${at < 0 ? "" : req.originalUrl.slice(at)}`);
         return;
       }
       const page = await fileAt(files.site && join(files.site, "index.html"));

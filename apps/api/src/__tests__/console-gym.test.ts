@@ -255,6 +255,10 @@ describe("the Gym on the servicing host", () => {
     const r = await staff()("/console/hm/gym?env=refi-review");
     expect(r.status).toBe(302);
     expect(r.headers.location).toBe("/console/hm/gym/?env=refi-review");
+    // A request line in absolute form names a host; the redirect never goes there.
+    const absolute = await staff()("http://elsewhere.example/console/hm/gym?env=refi-review");
+    expect(absolute.status).toBe(302);
+    expect(absolute.headers.location).toBe("/console/hm/gym/?env=refi-review");
   });
 
   it("refuses a request with no session as the tape desk does", async () => {

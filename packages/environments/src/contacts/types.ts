@@ -296,8 +296,9 @@ export interface ProfilePins {
   /** A multiple of the borrower's ordinary inbound volume, month by month: a borrower who calls often. */
   readonly call_multiplier?: number;
   /**
-   * The chance the borrower calls again, 3 to 60 days later, about a matter an agent closed on a call: filed as any
-   * call about its reason is that day. Unset, never: only an issue left open is followed up.
+   * The chance the borrower calls again, 3 to 60 days later, about a matter an agent handled on a call, open or
+   * closed: filed as any call about its reason is that day, beside the follow-up an issue left open gets. Unset,
+   * never: only an issue left open is followed up.
    */
   readonly closed_follow_up?: number;
   /**
@@ -305,6 +306,16 @@ export interface ProfilePins {
    * it always does; a borrower pinned below one sometimes pays without having promised to.
    */
   readonly kept_promise_share?: number;
+  /**
+   * The most days past the payment's day that a kept promise's date may fall: the borrower names a day and pays on or
+   * before it. Unset, the promise's date is the payment's.
+   */
+  readonly kept_promise_slack?: number;
+  /**
+   * A promise taken on an inbound call ceases the dialer from the call's own minute, so an attempt earlier that day
+   * is made. Unset, it ceases the dialer from the start of the call's day.
+   */
+  readonly cease_from_call?: boolean;
 }
 
 /** The cadence's state over one delinquency, kept so a reader can hold the attempts to it. */

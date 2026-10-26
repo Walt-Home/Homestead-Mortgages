@@ -299,13 +299,14 @@ describe("staff errors in the contact center", () => {
           .filter((x) => x.on < c.on || (x.on === c.on && x.at < c.at))
           .map((x) => ({ ...x, related: [] }));
       expect(toJsonLine(before(twin))).toBe(toJsonLine(before(clean)));
-      // Until the call raising it again nothing else moved: nobody told the borrower how to put the complaint in
-      // writing, so no written request follows it, as one may follow a logged complaint (every contact the twin
-      // drops before it is one such, on the root's issue); a counselor calling it in sends an authorization first,
-      // after the root; and where the root's row is closed, a follow-up on its issue (and what follows that) is the
-      // clean one's, filed under the issue its own day gives the root's reason, since nothing in the log holds the
-      // root's issue open. From the call on, the twin is the contact center's rules: a promise taken on it ceases
-      // the dialer.
+      // Until the call raising it again nothing else moved but what the error unmade. Nobody told the borrower how to
+      // put the complaint in writing, so no written request follows it, as one may follow a logged complaint. The
+      // follow-ups the clean history drew for the call are not made: the borrower's call again about the matter, 3 to
+      // 60 days on, whose place the call raising the complaint again takes, and, where the twin's row is closed and so
+      // holds no issue open, the follow-up on its issue within two weeks that the escalation drew; with each, what
+      // followed it (a hardship letter, a written request, a counselor's authorization). A counselor calling the
+      // complaint in again sends an authorization first, after the root. From the call on, the twin is the contact
+      // center's rules: a promise taken on it ceases the dialer.
       const upTo = (l: LoanContacts) =>
         l.contacts
           .filter((x) => x.on < again.on && x.id !== rootId)
@@ -314,21 +315,28 @@ describe("staff errors in the contact center", () => {
       const cleanUp = upTo(clean);
       const dropped = cleanUp.filter((x) => !twinUp.some((y) => y.id === x.id));
       const added = twinUp.filter((x) => !cleanUp.some((y) => y.id === x.id));
-      const refiled = (x: ContactRecord) =>
-        added.find((y) => contactKey({ ...y, issue: x.issue }) === contactKey(x));
-      for (const x of dropped) {
-        expect(x.issue).toBe(c.issue);
-        const y = refiled(x);
-        if (!y) {
-          expect(["qualified_written_request", "qwr_acknowledgment"]).toContain(x.purpose);
-          continue;
-        }
-        expect(OPEN).not.toContain(w.resolution);
-        expect(y.issue).toMatch(new RegExp(`^${c.reason}:\\d{4}-\\d{2}$`));
-        expect({ ...y, id: x.id, issue: x.issue }).toEqual(x);
+      const days = (x: ContactRecord) => (Date.parse(x.on) - Date.parse(c.on)) / 86_400_000;
+      const papers = ["qualified_written_request", "qwr_acknowledgment", "hardship_letter"];
+      const unmade = dropped.filter(
+        (x) =>
+          x.purpose !== "third_party_authorization" &&
+          !papers.includes(x.purpose) &&
+          x.direction === "inbound",
+      );
+      expect(unmade.length).toBeLessThanOrEqual(2);
+      for (const x of unmade) {
+        expect(x.reason).toBe(c.reason);
+        if (x.issue === c.issue && days(x) <= 15) expect(OPEN).not.toContain(w.resolution);
+        else expect(x.issue).toBe(`${c.reason}:${x.on.slice(0, 7)}`);
+        expect(days(x)).toBeGreaterThanOrEqual(RAISED_AGAIN_AFTER[0]);
+        expect(days(x)).toBeLessThanOrEqual(RAISED_AGAIN_AFTER[1] + 1);
+      }
+      const issues = new Set([c.issue, ...unmade.map((x) => x.issue)]);
+      for (const x of dropped.filter((y) => !unmade.includes(y))) {
+        expect(x.on > c.on).toBe(true);
+        if (x.purpose !== "third_party_authorization") expect(issues.has(x.issue)).toBe(true);
       }
       for (const x of added) {
-        if (dropped.some((y) => refiled(y) === x)) continue;
         expect(x.purpose).toBe("third_party_authorization");
         expect(x.on > c.on).toBe(true);
       }
@@ -359,16 +367,17 @@ describe("staff errors in the contact center", () => {
       );
       expect(res.skipped).toEqual([]);
     }
-    // contact-audit/1.0.0/train/3/2295#1: a hardship call three days after the promise call takes a promise of its
-    // own once nobody recorded the first, so it is no longer escalated, and its follow-up five days later, the call
-    // S-02 was asked for, is never made. S-01 is made alone, and the planter says why.
-    const one = drawContactAuditCandidate("contact-audit/1.0.0/train/3/2295#1", "train", 3, 2295)!;
+    // contact-audit/1.0.0/train/3/2263#2: a hardship call five days after the promise call takes a promise of its
+    // own once nobody recorded the first, so it is no longer escalated, and the borrower's call again about it 28 days
+    // later, the call S-02 was asked for, is never made. S-01 is made alone, and the planter says why.
+    const one = drawContactAuditCandidate("contact-audit/1.0.0/train/3/2263#2", "train", 3, 2263)!;
     expect(one.issues.join(" ")).toMatch(/twin with S-01 does not make this call/);
     expect(one.task.labels.filter((l) => l.root_cause).map((l) => l.defect_id)).toEqual(["S-01"]);
-    // contact-audit/1.0.0/train/3/87#1: 57 days after the call raising the complaint again, the borrower calls about
-    // the same payment arrangement once more and takes a promise, which ceases the dialer through its date, so the
-    // dialer's conversation S-01 was asked for, inside it, is never made. S-02 is made alone.
-    const two = drawContactAuditCandidate("contact-audit/1.0.0/train/3/87#1", "train", 3, 87)!;
+    // contact-audit/1.0.0/train/3/115#2: the call S-01 was asked for is the borrower's call again about the
+    // complaint's hardship 57 days on, which the clean history drew where the complaint was logged. Nobody logged it
+    // in S-02's twin, so the call raising it again, 46 days on, takes that call's place, and the call S-01 was asked
+    // for is never made. S-02 is made alone.
+    const two = drawContactAuditCandidate("contact-audit/1.0.0/train/3/115#2", "train", 3, 115)!;
     expect(two.issues.join(" ")).toMatch(/twin with S-02 does not make this call/);
     expect(two.task.labels.filter((l) => l.root_cause).map((l) => l.defect_id)).toEqual(["S-02"]);
   }, 120_000);
@@ -1248,6 +1257,205 @@ const THIRD_REVIEW: Record<string, (t: ContactAuditTask) => AuditFinding[]> = {
           ),
         ),
 };
+/*
+ * The fourth review's (G1 to G10, and its two learned rankers written out), and the rework's own after it (N1 to N3).
+ * They read the window's extent: a draw's window was what one pair of anchors needs and 90 to 210 days more, so a pair
+ * fits a window only when the days before it (past the ten the anchors need) and after it add up to that, and a closer
+ * fit was a likelier pair. W sums that likelihood over the anchors of the other kind a candidate could be paired with.
+ * The rankers' tables are naive Bayes likelihood ratios fitted on fresh training and held-out draws (train seed 12,
+ * held-out seed 2, 400 each), the fourth review's as it fitted them and refitted on the reworked draw.
+ */
+const firstContact = (t: ContactAuditTask) => /-K0001$/.test(t.contacts[0]?.id ?? "");
+/** How likely the window is for a pair of anchors, a promise call with its pay-by date and a complaint call. */
+function pairFit(t: ContactAuditTask, pOn: string, payBy: string, cOn: string): number {
+  if (Math.abs(dayOf(pOn) - dayOf(cOn)) > 120) return 0;
+  const lead = Math.min(dayOf(pOn), dayOf(cOn)) - 10 - dayOf(t.window.from);
+  const trail = dayOf(t.window.to) - Math.max(dayOf(payBy) + 7, dayOf(cOn) + 61);
+  if (trail < 0) return 0;
+  if (firstContact(t)) return trail <= 210 ? 1 / 150 : 0;
+  if (lead < 0 || lead + trail > 210 || lead + trail < 90) return 0;
+  return 1 / (lead + trail + 1);
+}
+/** Settled promises the log holds on a handled call that is not the scenario's: anchors a draw could have taken. */
+const promiseAnchors = (t: ContactAuditTask) =>
+  t.contacts.flatMap((p) => {
+    if (!p.promise_id || p.mode !== "call" || p.outcome !== "conversation" || !p.agent) return [];
+    if (p.purpose === "promise_to_pay" || p.complaint_logged) return [];
+    const q = t.promises.find((x) => x.contact === p.id);
+    return q && q.status !== "pending" ? [{ on: p.on, pay_by: q.pay_by }] : [];
+  });
+const complaintAnchors = (t: ContactAuditTask) =>
+  t.contacts.filter(
+    (c) => c.mode === "call" && c.outcome === "conversation" && !!c.agent && c.complaint_logged,
+  );
+const w02 = (t: ContactAuditTask, c: Row) =>
+  promiseAnchors(t).reduce((s, p) => s + pairFit(t, p.on, p.pay_by, c.on), 0);
+const w01 = (t: ContactAuditTask, p: Row) =>
+  complaintAnchors(t).reduce(
+    (s, c) =>
+      s +
+      (dayOf(t.window.to) - dayOf(c.on) >= 61
+        ? pairFit(t, p.on, nextPayment(t, p).pay_by, c.on)
+        : 0),
+    0,
+  );
+const cand02 = (t: ContactAuditTask) =>
+  t.contacts.filter((c) => unlogged(c) && againShaped(t, c).length > 0 && inZone(t, c));
+const fit02 = (t: ContactAuditTask) => cand02(t).filter((c) => w02(t, c) > 0);
+const zone01 = (t: ContactAuditTask, p: Row) =>
+  dayOf(p.on) - dayOf(t.window.from) >= 10 && paidInZone(t, p);
+const hold01 = (t: ContactAuditTask) =>
+  keptLike(t).filter((p) => noDialThatDay(t, p) && zone01(t, p));
+const fit01 = (t: ContactAuditTask) => hold01(t).filter((p) => w01(t, p) > 0);
+const unloggedFor = (t: ContactAuditTask, c: Row) =>
+  t.contacts.filter((x) => unlogged(x) && x.reason === c.reason).length;
+const before61 = (t: ContactAuditTask, c: Row) =>
+  t.contacts.some(
+    (x) =>
+      x !== c &&
+      x.direction === "inbound" &&
+      x.reason === c.reason &&
+      after(c, x) &&
+      daysFrom(x, c) <= 61,
+  );
+/** The last of the best: ties go to the later candidate, as the fourth review's rankers took them. */
+const best = <X>(xs: readonly X[], f: (x: X) => number): X[] => {
+  let out: X | undefined;
+  for (const x of xs) if (out === undefined || f(x) >= f(out)) out = x;
+  return out === undefined ? [] : [out];
+};
+const s02Of = (t: ContactAuditTask) => (xs: readonly Row[]) => xs.flatMap((c) => zAgain(t, c));
+const s01Of = (t: ContactAuditTask) => (xs: readonly Row[]) => xs.flatMap((c) => s01By(t, c));
+/** G4's tables, as the fourth review fitted them: a reason's unlogged calls in the window, and the extent's fit. */
+const G4_COUNT: Record<number, number> = { 2: 1, 3: 1.6, 4: 1.8, 5: 1, 6: 0.6, 7: 1 };
+const g4Fit = (w: number) => (w <= 0 ? 0.3 : w > 0.012 ? 1.1 : 1.3);
+/** The same ranker refitted on the reworked draw: the count capped at eight. */
+const NB_COUNT: Record<number, number> = {
+  2: 0.66,
+  3: 1.79,
+  4: 1.73,
+  5: 1.52,
+  6: 1.26,
+  7: 1.22,
+  8: 0.72,
+};
+const nbFit = (w: number) => (w <= 0 ? 0.88 : w > 0.012 ? 1.02 : 1.04);
+/** NB01's tables, refitted: the extent's fit and how many anchors fit, an attempt that day, the zone, the dialer's next attempt and the payment's lag. */
+const NB01 = {
+  fit: { none: 0.04, close: 1.18, loose: 1 },
+  anchors: [0.04, 0.8, 1.25, 1.19],
+  dialed: { yes: 1.62, no: 0.91 },
+  zone: { yes: 1.05, no: 0.11 },
+  next: [0.24, 1.69, 0.91, 0.93, 1.16, 0.91, 2.24, 1.13, 0.85],
+  lag: [1.35, 1.07, 0.71, 0.95, 1.3, 0.79],
+};
+function nb01(t: ContactAuditTask, p: Row): number {
+  const pay = nextPayment(t, p).pay_by;
+  const w = w01(t, p);
+  const anchors = complaintAnchors(t).filter(
+    (c) => dayOf(t.window.to) - dayOf(c.on) >= 61 && pairFit(t, p.on, pay, c.on) > 0,
+  ).length;
+  const nx = t.contacts.find((x) => dialer(x) && x.on > p.on);
+  const next = nx ? Math.min(daysFrom(p, nx), 8) : null;
+  return (
+    NB01.fit[w <= 0 ? "none" : w > 0.012 ? "close" : "loose"] *
+    NB01.anchors[Math.min(anchors, 3)]! *
+    NB01.dialed[noDialThatDay(t, p) ? "no" : "yes"] *
+    NB01.zone[zone01(t, p) ? "yes" : "no"] *
+    NB01.next[next ?? 0]! *
+    NB01.lag[Math.min(Math.floor((dayOf(pay) - dayOf(p.on)) / 4), 5)]!
+  );
+}
+/** An S-01 root with its promise guessed as the next payment's amount, dated some days past it. */
+const s01Late = (t: ContactAuditTask, c: Row, days: number) => {
+  const pay = nextPayment(t, c);
+  const by = new Date((dayOf(pay.pay_by) + days) * 86_400_000).toISOString().slice(0, 10);
+  return asS01(t, c, { amount: pay.amount, pay_by: by });
+};
+/** The days the log's kept promises fall past the payment that kept them, the median. */
+function medianSlack(t: ContactAuditTask): number {
+  const xs = t.promises
+    .filter((p) => p.status === "kept")
+    .flatMap((p) => {
+      const pay = t.payments.filter((x) => x.on > p.made_on && x.on <= p.pay_by).pop();
+      return pay ? [dayOf(p.pay_by) - dayOf(pay.on)] : [];
+    })
+    .sort((a, b) => a - b);
+  return xs.length ? xs[Math.floor(xs.length / 2)]! : 0;
+}
+const FOURTH_REVIEW: Record<string, (t: ContactAuditTask) => AuditFinding[]> = {
+  "G1 S-02: the candidate in the zone the window's extent fits best": (t) =>
+    s02Of(t)(best(fit02(t), (c) => w02(t, c))),
+  "G2 S-02: the first the extent fits": (t) => s02Of(t)(fit02(t).slice(0, 1)),
+  "G3 S-02: the first the extent fits with no call for its reason in the 61 days before, or else the first it fits":
+    (t) => {
+      const fits = fit02(t);
+      return s02Of(t)([fits.find((c) => !before61(t, c)) ?? fits[0]].filter((c) => !!c) as Row[]);
+    },
+  "G4 S-02: a reason with three or four unlogged calls first, then two, five or seven, the rest last; a fit the extent rules out a third, a loose one before a close one; the first":
+    (t) =>
+      s02Of(t)(
+        best(
+          [...cand02(t)].reverse(),
+          (c) => (G4_COUNT[unloggedFor(t, c)] ?? 0.6) * g4Fit(w02(t, c)),
+        ),
+      ),
+  "G5 S-02: the only candidate the extent fits with no call for its reason in the 61 days before and no promise":
+    (t) => s02Of(t)(onlyOne(fit02(t).filter((c) => !before61(t, c) && !c.promise_id))),
+  "G6 S-01: the conversation of V2''s kind the extent fits best": (t) =>
+    s01Of(t)(
+      best(
+        keptLike(t).filter((p) => w01(t, p) > 0),
+        (p) => w01(t, p),
+      ),
+    ),
+  "G7 S-01: of those with no other attempt on their day and the guessed promise in the zone, the best fit, a quiet dialer day counted thrice":
+    (t) => s01Of(t)(best(fit01(t), (p) => w01(t, p) * (quietDay(t, p) ? 3 : 1))),
+  "G8 S-01: no other attempt on its day, the promise in the zone, a quiet day first, the last": (
+    t,
+  ) => s01Of(t)(best(hold01(t), (p) => (quietDay(t, p) ? 3 : 1))),
+  "G9 S-01: the only one of G7's with a quiet dialer day": (t) =>
+    s01Of(t)(onlyOne(fit01(t).filter((p) => quietDay(t, p)))),
+  "G10 both: the conversation and the S-02 candidate whose pair the extent fits best, named together":
+    (t) => {
+      let pick: { w: number; p: Row; c: Row } | null = null;
+      for (const p of hold01(t))
+        for (const c of cand02(t)) {
+          const w = pairFit(t, p.on, nextPayment(t, p).pay_by, c.on);
+          if (w > 0 && (!pick || w > pick.w)) pick = { w, p, c };
+        }
+      return pick ? [...s01By(t, pick.p), ...zAgain(t, pick.c)] : [];
+    },
+  "NB S-02, refitted: a reason's unlogged calls and the extent's fit": (t) =>
+    s02Of(t)(
+      best(cand02(t), (c) => (NB_COUNT[Math.min(unloggedFor(t, c), 8)] ?? 1) * nbFit(w02(t, c))),
+    ),
+  "NB01 S-01, refitted: the fit, the anchors, an attempt that day, the zone, the next attempt, the payment's lag":
+    (t) => s01Of(t)(best(keptLike(t), (p) => nb01(t, p))),
+  "N1 S-02: a reason with three to six calls an agent handled, no complaint logged for it, none in the 61 days after":
+    (t) =>
+      s02Of(t)(
+        best(cand02(t), (c) => {
+          const n = t.contacts.filter((x) => handledInbound(x) && x.reason === c.reason).length;
+          const later = t.contacts.some(
+            (x) =>
+              x.complaint_logged && x.reason === c.reason && after(x, c) && daysFrom(c, x) <= 61,
+          );
+          return (
+            (n >= 3 && n <= 6 ? 2 : n <= 2 ? 0.5 : 0.8) *
+            (noLoggedReason(t, c) ? 1.7 : 0.9) *
+            (later ? 0.75 : 1.3)
+          );
+        }),
+      ),
+  "N2 S-01: G8's choice, its promise dated the log's median days between a kept promise's date and its payment":
+    (t) =>
+      best(hold01(t), (p) => (quietDay(t, p) ? 3 : 1)).flatMap((p) =>
+        s01Late(t, p, medianSlack(t)),
+      ),
+  "N3 S-01: NB01's choice, its promise dated a week past the payment": (t) =>
+    best(keptLike(t), (p) => nb01(t, p)).flatMap((p) => s01Late(t, p, 7)),
+};
 /**
  * The bounds a cheap policy is held to on a suite: no more than four points of its windows past the clean ones, and
  * never a majority of any error plan's windows, nor of either promise arm's within a plan.
@@ -1563,28 +1771,28 @@ describe("contact-audit", () => {
       "every promise": [0, 0, 0, 0, 0],
       "every complaint": [0, 0, 0, 0, 0],
       "every promise and every complaint": [0, 0, 0, 0, 0],
-      "S-01 by disposition: a promise call with no promise, information provided": [3, 2, 1, 0, 0],
-      "the first such call": [10, 2, 8, 0, 0],
-      "S-02 by disposition: escalated and not logged, the first on its issue": [36, 35, 0, 1, 0],
-      "both by disposition": [2, 1, 1, 0, 0],
+      "S-01 by disposition: a promise call with no promise, information provided": [1, 0, 1, 0, 0],
+      "the first such call": [4, 0, 4, 0, 0],
+      "S-02 by disposition: escalated and not logged, the first on its issue": [30, 30, 0, 0, 0],
+      "both by disposition": [0, 0, 0, 0, 0],
       "every promise call with no promise_id": [0, 0, 0, 0, 0],
       "a promise_to_pay call with no promise_id": [50, 50, 0, 0, 0],
       "a hardship call with no promise, information provided": [50, 50, 0, 0, 0],
       "a promise call with no promise that a payment followed within three weeks": [
-        18, 18, 0, 0, 0,
+        18, 16, 2, 0, 0,
       ],
-      "the same, only where it is the only one": [41, 41, 0, 0, 0],
+      "the same, only where it is the only one": [43, 41, 2, 0, 0],
       "every handled call with no CMPL note": [0, 0, 0, 0, 0],
       "every call with no CMPL note whose reason a logged complaint has": [0, 0, 0, 0, 0],
       "an unlogged call another unlogged call for its reason follows within 3 to 60 days": [
-        4, 2, 0, 2, 0,
+        0, 0, 0, 0, 0,
       ],
-      "the first such pair": [10, 2, 0, 8, 0],
-      "the same, only where it is the only pair": [48, 46, 0, 2, 0],
-      "the first such pair whose later call is under an issue of its own": [9, 3, 0, 6, 0],
-      "a written request on an issue no logged call has": [50, 50, 0, 0, 0],
-      "a closed call followed on its issue within 15 days": [9, 9, 0, 0, 0],
-      "the promise note nearest the window's middle": [15, 0, 15, 0, 0],
+      "the first such pair": [3, 0, 0, 3, 0],
+      "the same, only where it is the only pair": [49, 49, 0, 0, 0],
+      "the first such pair whose later call is under an issue of its own": [4, 0, 0, 4, 0],
+      "a written request on an issue no logged call has": [48, 48, 0, 0, 0],
+      "a closed call followed on its issue within 15 days": [0, 0, 0, 0, 0],
+      "the promise note nearest the window's middle": [16, 0, 16, 0, 0],
       "every complaint not logged, the raised-again clause left out": [50, 50, 0, 0, 0],
       "the roots alone, no symptom": [50, 50, 0, 0, 0],
     });
@@ -1592,46 +1800,46 @@ describe("contact-audit", () => {
     expect(
       Object.fromEntries(Object.entries(STRUCTURAL).map(([name, p]) => [name, floorOf(tasks, p)])),
     ).toEqual({
-      "V1 the first unlogged hardship or escrow-analysis call": [6, 6, 0, 0, 0],
+      "V1 the first unlogged hardship or escrow-analysis call": [1, 1, 0, 0, 0],
       "V2 the only conversation with no promise, information provided, a payment within 21 days and no promise near":
-        [39, 39, 0, 0, 0],
-      "V2' the same, any disposition": [40, 40, 0, 0, 0],
+        [39, 38, 1, 0, 0],
+      "V2' the same, any disposition": [39, 38, 1, 0, 0],
       "V3 a closed first call on its issue that a later contact follows into the next month": [
-        27, 27, 0, 0, 0,
+        24, 24, 0, 0, 0,
       ],
       "V4 the only two unlogged calls for a reason no logged call has, 3 to 61 days apart": [
-        32, 30, 0, 2, 0,
+        35, 34, 0, 1, 0,
       ],
-      "V5 V1, or else V3": [5, 5, 0, 0, 0],
-      "V6 V1 and V2": [5, 5, 0, 0, 0],
-      "V7 V1, or else V2": [5, 5, 0, 0, 0],
-      "V8 the first unlogged hardship call referred to loss mitigation": [16, 14, 0, 2, 0],
-      "V8 the first unlogged hardship call transferred": [18, 17, 0, 1, 0],
-      "the first conversation of V2' kind": [30, 24, 6, 0, 0],
-      "the last": [28, 24, 4, 0, 0],
-      "the one its payment follows soonest": [31, 24, 7, 0, 0],
-      "the only one the dialer made": [42, 39, 3, 0, 0],
-      "the only inbound one": [44, 40, 4, 0, 0],
+      "V5 V1, or else V3": [1, 1, 0, 0, 0],
+      "V6 V1 and V2": [0, 0, 0, 0, 0],
+      "V7 V1, or else V2": [0, 0, 0, 0, 0],
+      "V8 the first unlogged hardship call referred to loss mitigation": [8, 7, 0, 1, 0],
+      "V8 the first unlogged hardship call transferred": [7, 7, 0, 0, 0],
+      "the first conversation of V2' kind": [22, 19, 3, 0, 0],
+      "the last": [20, 19, 1, 0, 0],
+      "the one its payment follows soonest": [21, 19, 2, 0, 0],
+      "the only one the dialer made": [39, 37, 2, 0, 0],
+      "the only inbound one": [42, 42, 0, 0, 0],
       "the first unlogged call a later one for its reason follows within 3 to 61 days": [
-        7, 2, 0, 5, 0,
+        3, 0, 0, 3, 0,
       ],
-      "the first such call whose later one is under an issue of its own": [6, 3, 0, 3, 0],
-      "the last such call": [8, 2, 0, 6, 0],
-      "every such call, one a reason": [4, 2, 0, 2, 0],
-      "the only such call": [48, 46, 0, 2, 0],
+      "the first such call whose later one is under an issue of its own": [3, 0, 0, 3, 0],
+      "the last such call": [2, 0, 0, 2, 0],
+      "every such call, one a reason": [0, 0, 0, 0, 0],
+      "the only such call": [49, 49, 0, 0, 0],
       "the only such call whose later one is with the borrower and took no promise": [
-        44, 41, 0, 3, 0,
+        48, 48, 0, 0, 0,
       ],
       "a reason's only two unlogged calls, 3 to 61 days apart, the only such reason": [
-        36, 34, 0, 2, 0,
+        33, 32, 0, 1, 0,
       ],
-      "the first unlogged call of the reason with the most": [3, 0, 0, 3, 0],
+      "the first unlogged call of the reason with the most": [2, 0, 0, 2, 0],
       "the unlogged call the most later ones for its reason follow within 3 to 61 days": [
-        7, 2, 0, 5, 0,
+        2, 0, 0, 2, 0,
       ],
-      "the only closed unlogged call followed on its issue within 3 to 15 days": [40, 40, 0, 0, 0],
+      "the only closed unlogged call followed on its issue within 3 to 15 days": [48, 48, 0, 0, 0],
       "the unlogged call before the only later arrangement or hardship call no dialer attempt is near":
-        [39, 39, 0, 0, 0],
+        [33, 31, 0, 2, 0],
       "the last conversation of V2' kind, and the first call of a pair": [1, 0, 0, 1, 0],
     });
     // The third review's, and the rework's own after it.
@@ -1644,51 +1852,82 @@ describe("contact-audit", () => {
         [49, 49, 0, 0, 0],
       "A1' the only one, raised_again on the first call of the shape": [49, 49, 0, 0, 0],
       "A2 the only inbound conversation of V2''s kind with no attempt on its day and one the next":
-        [52, 47, 5, 0, 0],
-      "A2' the same either way, its payment a week before the window closes": [54, 48, 6, 0, 0],
+        [46, 45, 1, 0, 0],
+      "A2' the same either way, its payment a week before the window closes": [47, 46, 1, 0, 0],
       "A3 the only conversation of V2''s kind no other conversation follows before its payment": [
-        36, 34, 2, 0, 0,
+        29, 27, 2, 0, 0,
       ],
       "A3' the same, with no attempt on its day, its payment a week before the window closes": [
-        36, 33, 3, 0, 0,
+        32, 30, 2, 0, 0,
       ],
       "A4 the only reason with one unlogged call in the zone and one call of the shape after it": [
-        45, 41, 0, 4, 0,
+        40, 40, 0, 0, 0,
       ],
       "A4' the same, no logged call for its reason, a promise the log holds within 120 days": [
-        47, 45, 0, 2, 0,
+        44, 44, 0, 0, 0,
       ],
       "A5 the only conversation of V2''s kind from four days in, its payment a week before the window closes":
-        [40, 40, 0, 0, 0],
+        [40, 39, 1, 0, 0],
       "A6 the only first call in the zone of three unlogged calls for a reason, each of the shape after the one before":
-        [38, 35, 0, 3, 0],
+        [39, 39, 0, 0, 0],
       "A7 the only closed call in the zone with its issue's call 3 to 15 days on and a later one of the shape under another":
-        [40, 40, 0, 0, 0],
-      "A8 A1, or else A4', and A2 beside it": [49, 41, 5, 1, 2],
-      "A8' A1 and A2, nothing else": [51, 46, 5, 0, 0],
-      "A9 the only first call of a pair in the zone with a single note": [46, 39, 0, 7, 0],
+        [44, 44, 0, 0, 0],
+      "A8 A1, or else A4', and A2 beside it": [40, 39, 1, 0, 0],
+      "A8' A1 and A2, nothing else": [45, 44, 1, 0, 0],
+      "A9 the only first call of a pair in the zone with a single note": [48, 48, 0, 0, 0],
       "A10 the only first call of a pair in the zone whose later call is its reason's only unlogged call that month":
-        [39, 35, 0, 4, 0],
-      "Z0 the last unlogged call a call of the shape follows": [8, 2, 0, 6, 0],
-      "Z0' the same, one of them under another issue": [10, 3, 0, 7, 0],
-      "Z1 the last such call in the zone": [11, 3, 0, 8, 0],
-      "Z1' the first": [12, 3, 0, 9, 0],
-      "Z2 the last in the zone, one of its later calls under another issue": [13, 3, 0, 10, 0],
-      "Z3 the same, with a promise the log holds within 120 days": [15, 4, 0, 11, 0],
-      "Z4 the same, one of its later calls with no promise": [15, 4, 0, 11, 0],
-      "Z5 Z2, with a settled promise a draw could have anchored within 120 days": [15, 4, 0, 11, 0],
-      "Z6 the first of those": [12, 4, 0, 8, 0],
-      "V2' as the earlier script had it, hardship calls left out": [40, 40, 0, 0, 0],
+        [49, 47, 0, 2, 0],
+      "Z0 the last unlogged call a call of the shape follows": [0, 0, 0, 0, 0],
+      "Z0' the same, one of them under another issue": [4, 0, 0, 4, 0],
+      "Z1 the last such call in the zone": [3, 0, 0, 3, 0],
+      "Z1' the first": [8, 0, 0, 8, 0],
+      "Z2 the last in the zone, one of its later calls under another issue": [6, 0, 0, 6, 0],
+      "Z3 the same, with a promise the log holds within 120 days": [6, 0, 0, 6, 0],
+      "Z4 the same, one of its later calls with no promise": [7, 0, 0, 7, 0],
+      "Z5 Z2, with a settled promise a draw could have anchored within 120 days": [6, 0, 0, 6, 0],
+      "Z6 the first of those": [8, 0, 0, 8, 0],
+      "V2' as the earlier script had it, hardship calls left out": [40, 39, 1, 0, 0],
       "V8 as the earlier script had it, raised_again on the later calls with the root's disposition":
-        [16, 14, 0, 2, 0],
-      "M1 Z3, skipping a call that is another candidate's later call, the last": [18, 6, 0, 12, 0],
-      "M2 the first of those": [14, 6, 0, 8, 0],
-      "M3 Z3 where a chain starts, the last": [26, 22, 0, 4, 0],
+        [7, 7, 0, 0, 0],
+      "M1 Z3, skipping a call that is another candidate's later call, the last": [4, 1, 0, 3, 0],
+      "M2 the first of those": [8, 1, 0, 7, 0],
+      "M3 Z3 where a chain starts, the last": [8, 6, 0, 2, 0],
       "M4 the only call with no promise, no logged call for its reason, none on its issue 3 to 15 days on, and a chain after":
-        [54, 50, 0, 4, 0],
-      "M5 the last conversation of V2''s kind with no attempt on its day": [30, 24, 6, 0, 0],
+        [43, 43, 0, 0, 0],
+      "M5 the last conversation of V2''s kind with no attempt on its day": [23, 22, 1, 0, 0],
       "M6 the first call in the zone with no promise, a later one of the shape with the borrower, a promise the log holds within 120 days":
-        [21, 7, 0, 14, 0],
+        [9, 0, 0, 9, 0],
+    });
+    // The fourth review's, and the rework's own after it.
+    expect(
+      Object.fromEntries(
+        Object.entries(FOURTH_REVIEW).map(([name, p]) => [name, floorOf(tasks, p)]),
+      ),
+    ).toEqual({
+      "G1 S-02: the candidate in the zone the window's extent fits best": [7, 0, 0, 7, 0],
+      "G2 S-02: the first the extent fits": [9, 0, 0, 9, 0],
+      "G3 S-02: the first the extent fits with no call for its reason in the 61 days before, or else the first it fits":
+        [7, 0, 0, 7, 0],
+      "G4 S-02: a reason with three or four unlogged calls first, then two, five or seven, the rest last; a fit the extent rules out a third, a loose one before a close one; the first":
+        [8, 0, 0, 8, 0],
+      "G5 S-02: the only candidate the extent fits with no call for its reason in the 61 days before and no promise":
+        [34, 33, 0, 1, 0],
+      "G6 S-01: the conversation of V2''s kind the extent fits best": [26, 23, 3, 0, 0],
+      "G7 S-01: of those with no other attempt on their day and the guessed promise in the zone, the best fit, a quiet dialer day counted thrice":
+        [29, 26, 3, 0, 0],
+      "G8 S-01: no other attempt on its day, the promise in the zone, a quiet day first, the last":
+        [26, 24, 2, 0, 0],
+      "G9 S-01: the only one of G7's with a quiet dialer day": [47, 46, 1, 0, 0],
+      "G10 both: the conversation and the S-02 candidate whose pair the extent fits best, named together":
+        [24, 24, 0, 0, 0],
+      "NB S-02, refitted: a reason's unlogged calls and the extent's fit": [4, 0, 0, 4, 0],
+      "NB01 S-01, refitted: the fit, the anchors, an attempt that day, the zone, the next attempt, the payment's lag":
+        [21, 19, 2, 0, 0],
+      "N1 S-02: a reason with three to six calls an agent handled, no complaint logged for it, none in the 61 days after":
+        [2, 0, 0, 2, 0],
+      "N2 S-01: G8's choice, its promise dated the log's median days between a kept promise's date and its payment":
+        [25, 24, 1, 0, 0],
+      "N3 S-01: NB01's choice, its promise dated a week past the payment": [22, 19, 3, 0, 0],
     });
     // Every one of them, by reason too, on the held-out suite and on a training suite: at most four points past the
     // clean windows, and never a majority of any error's windows, nor of either promise arm's within one.
@@ -1696,7 +1935,12 @@ describe("contact-audit", () => {
       for (const [name, p] of Object.entries(CHEAP))
         holdsTheBounds(suite, name, (t) => policyFindings(t, p));
       holdsTheBounds(suite, "the roots alone, no symptom", rootsOnly);
-      for (const [name, p] of Object.entries({ ...STRUCTURAL, ...BY_REASON, ...THIRD_REVIEW }))
+      for (const [name, p] of Object.entries({
+        ...STRUCTURAL,
+        ...BY_REASON,
+        ...THIRD_REVIEW,
+        ...FOURTH_REVIEW,
+      }))
         holdsTheBounds(suite, name, p);
     }
     // The rule, clause by clause, passes every window: the floors are what leaving a clause out costs.
@@ -1739,7 +1983,7 @@ describe("contact-audit", () => {
         kinds.set(`${f.error} ${f.kind}`, (kinds.get(`${f.error} ${f.kind}`) ?? 0) + 1);
     expect(Object.fromEntries([...kinds].sort())).toEqual({
       "S-01 broken_not_followed_up": 50,
-      "S-01 dialed_in_window": 202,
+      "S-01 dialed_in_window": 212,
       "S-01 kept_not_marked": 50,
       "S-01 root": 100,
       "S-02 no_acknowledgment": 100,
@@ -1763,7 +2007,7 @@ describe("contact-audit", () => {
       held.filter((h) => h.promises >= 3).length,
       held.filter((h) => h.complaints >= 2).length,
       held.filter((h) => h.complaints >= 3).length,
-    ]).toEqual([187, 149, 197, 188]);
+    ]).toEqual([186, 161, 200, 197]);
   }, 1_800_000);
 
   it("keeps a draw only when it is fair to grade", () => {
@@ -1837,7 +2081,7 @@ describe("contact-audit", () => {
     // A change here moves every score: bump CONTACT_AUDIT_ENVIRONMENT_VERSION, then the pin. The suite is drawn
     // from the life generator and the contact center: a change to either moves it too.
     expect(sha256(heldTasks().map(toJsonLine).join(""))).toMatchInlineSnapshot(
-      `"a221ff6e0b23990e820dc6e514288f47debece0b31571076b2ef98532b0d9286"`,
+      `"23ec82a1af1cd4efd0925d58407265d5b77fee8aea47ad80e90443ed2f67413a"`,
     );
   }, 600_000);
 

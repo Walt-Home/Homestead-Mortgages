@@ -9,12 +9,13 @@
  * often, and complains on a third of the calls, about whatever the call is
  * about (the contact center's pins, `AUDIT_PINS`). Two calls are the task's anchors, in
  * turn by index: a promise call (one the borrower kept, then one broken) and a
- * complaint call, within 120 days of each other. What the anchors need runs
- * from ten days before the first to a week past the promise's pay-by date and
- * past the last day the complaint can be raised again; the window adds 90 to
- * 210 days more, split at random between before and after, so where the
- * anchors sit in it says nothing. The plan, in turn by index, says what is
- * made on them (`plantStaffErrors`):
+ * complaint call, within 120 days of each other. What a pair needs runs from
+ * ten days before the first to a week past the promise's pay-by date and past
+ * the last day the complaint can be raised again; the window is what one pair
+ * needs and 90 to 210 days more, split at random between before and after,
+ * and the anchors are then drawn again from every pair the window holds, so
+ * neither where they sit in it nor how far apart says which pair they are.
+ * The plan, in turn by index, says what is made on them (`plantStaffErrors`):
  *
  *   - clean: nothing, the control; both calls handled as the rules say;
  *   - S-01: the promise not recorded;
@@ -78,18 +79,22 @@ export const AUDIT_HISTORY_MONTHS = 30;
  * The contact center's pins on every task's loan: an English-speaking borrower (v1 reads no interpreted
  * call), irritated, with a grievance voiced on 35 % of the inbound calls an agent handles whatever the call
  * is about (an outbound call carries none), so a call of any reason is as likely as any other to carry one
- * and, as often, not; who calls nine times as often as the calibration's borrower in the same status, and
- * calls again 3 to 60 days later about seven in ten of the matters an agent closed, as S-02's borrower calls
- * again about a complaint nobody logged; and who pays within three weeks of a conversation without having
- * promised to on it 85 % of the time. docs/environments.md gives what the pins make of a window.
+ * and, as often, not; who calls fourteen times as often as the calibration's borrower in the same status,
+ * and calls again 3 to 60 days later about seven in ten of the matters an agent handled, as S-02's borrower
+ * always calls again about a complaint nobody logged; who pays within three weeks of a conversation without
+ * having promised to on it 85 % of the time, and who, promising, names a day up to a week past the one the
+ * payment then comes; and whose promise ceases the dialer from the call, not from the start of its day.
+ * docs/environments.md gives what the pins make of a window.
  */
 export const AUDIT_PINS: ProfilePins = {
   language: "en",
   style: "irritated",
   complaint_chance: 0.35,
-  call_multiplier: 9,
+  call_multiplier: 14,
   closed_follow_up: 0.7,
   kept_promise_share: 0.15,
+  kept_promise_slack: 7,
+  cease_from_call: true,
 };
 /**
  * The share of the scenario's delinquencies that carry its own promise call. On the others the contact
@@ -201,26 +206,36 @@ export function drawContactAuditCandidate(
       named(c) &&
       addDays(c.on, RAISED_AGAIN_AFTER[1] + 1) <= end,
   );
-  const pairs = promiseCalls.flatMap((p) =>
+  type Pair = readonly [ContactRecord, ContactRecord];
+  const pairs: Pair[] = promiseCalls.flatMap((p) =>
     complaintCalls
       .filter((c) => c.id !== p.id && Math.abs(daysBetween(p.on, c.on)) <= ANCHOR_SPAN_DAYS)
       .map((c) => [p, c] as const),
   );
   if (!pairs.length) return null;
-  const [p, c] = pairs[r.int(0, pairs.length - 1)]!;
-  const promise = promiseOf(p);
-  const first = p.on < c.on ? p.on : c.on;
-  // What the anchors need: from ten days before the first to a week past the promise's date and past the latest day
-  // the complaint is raised again. The rest of the window is split at random, so where the anchors sit says nothing.
-  const tail = addDays(promise.pay_by, 7);
-  const after = addDays(c.on, RAISED_AGAIN_AFTER[1] + 1);
+  // What a pair needs: from ten days before the first of the two to a week past the promise's date and past the latest
+  // day the complaint is raised again.
+  const firstOf = ([pp, cc]: Pair) => (pp.on < cc.on ? pp.on : cc.on);
+  const lastOf = ([pp, cc]: Pair) => {
+    const tail = addDays(promiseOf(pp).pay_by, 7);
+    const after = addDays(cc.on, RAISED_AGAIN_AFTER[1] + 1);
+    return tail > after ? tail : after;
+  };
+  // The window: what one pair needs, and 90 to 210 days more split at random between before and after.
+  const drawn = pairs[r.int(0, pairs.length - 1)]!;
   const extra = r.int(AUDIT_WINDOW_EXTRA[0], AUDIT_WINDOW_EXTRA[1]);
   const lead = r.int(0, extra);
-  let from = addDays(first, -(10 + lead));
+  let from = addDays(firstOf(drawn), -(10 + lead));
   if (from < start) from = start;
-  let to = addDays(tail > after ? tail : after, extra - lead);
+  let to = addDays(lastOf(drawn), extra - lead);
   if (to > end) to = end;
   const window: Window = { from, to };
+  // The anchors are then drawn again from every pair the window holds as it holds that one, so given the window they are
+  // any pair it holds: where they sit in it, and how far apart, says nothing of which pair they are.
+  const holds = (x: Pair) =>
+    firstOf(x) >= (from === start ? from : addDays(from, 10)) && lastOf(x) <= to;
+  const fit = pairs.filter(holds);
+  const [p, c] = fit[r.int(0, fit.length - 1)]!;
 
   const requests: StaffErrorRequest[] = [];
   if (plan === "S-01" || plan === "S-01+S-02") requests.push({ id: "S-01", contacts: [p.id] });

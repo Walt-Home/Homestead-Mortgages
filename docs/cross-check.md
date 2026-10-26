@@ -12,13 +12,14 @@ here, not an authority: each disagreement is triaged as a generator bug, a
 defect in the servicing app, or the harness's own doing.
 
 Run on 23 October 2026, against life 1.0.0 and the servicing app at the commit
-`apps/servicing/VENDORED_FROM` names. Every figure on this page is that run's.
-Life 1.1.0, the calibration reader merged the same day, draws every book
-differently, so the same seeds now draw other books; the two-hour batch has not
-been rerun on it, and `report` and `loan` refuse a run drawn under another life
-version than the generator's. Life 1.2.0 (24 October) fixes both generator
-bugs below and stops walking into the engine half of cashiering-11; the batch
-has not been rerun on it either.
+`apps/servicing/VENDORED_FROM` names. Every figure on this page is that run's,
+but for the last section's. Life 1.1.0, the calibration reader merged the same
+day, draws every book differently, so the same seeds now draw other books; the
+two-hour batch has not been rerun on it, and `report` and `loan` refuse a run
+drawn under another life version than the generator's. Life 1.2.0 (24 October)
+fixes both generator bugs below and stops walking into the engine half of
+cashiering-11; the batch was rerun on it on 26 October, and "Life 1.2.0", the
+last section, has that run.
 
 ## At a glance
 
@@ -394,8 +395,8 @@ posts, but every transferred loan whose first month brings none meets it.
 
 Neither touches a figure an environment grades; both were worked around in
 the harness. Both are fixed in life 1.2.0, the tape row's half of the second
-in 1.1.0 already, and the harness's repairs find nothing on a book it draws
-now. Paths are under `packages/environments/src/life/`, and the lines are
+in 1.1.0 already, and the rerun on 1.2.0 met neither ("Life 1.2.0", below).
+Paths are under `packages/environments/src/life/`, and the lines are
 life 1.0.0's, the version this run drew from.
 
 - **The MIN's check digit is random.** `draw.ts:361` writes `"1000001"` and
@@ -484,3 +485,202 @@ servicer received on time is shielded.
   loan's months before it reaches the servicing app; and windows longer than
   two years. The escrow analyses are the generator's own composition of the
   engine and are checked by escrow-history and escrow-analysis, not here.
+
+## Life 1.2.0
+
+Rerun on 26 October 2026, against life 1.2.0 and the servicing app at the
+same commit, in the configuration "How it runs" and "Scale and speed" give:
+the same eight processes, seeds, shapes and 6,600-second deadline, each on its
+own database cloned from the same template (`hm_xcheck_v12o1` to `_v12o4` and
+`hm_xcheck_v12b1` to `_v12b4`, so the 1.0.0 databases stand). The same seeds
+draw other books under 1.2.0, because 1.1.0 moved every draw, so no loan here
+is a loan above: the two runs are compared class by class, not loan by loan.
+The harness changed in two ways, neither in a figure it compares. The three
+Metro 2 classes it called new are named by the defects they were logged as
+since, metro2-2 to metro2-4. And a date of first delinquency is put in
+metro2-2 only when the servicing app's is the later one, because re-aging only
+ever moves it later (below).
+
+### At a glance
+
+- **189 loans, 4,250 loan-months, 3,925 receipts, 134,287 loan-days** (about
+  368 loan-years), against 178, 3,503, 3,240 and 111,334 under 1.0.0. 96 were
+  boarded at origination and 93 came from the transfer books: 92 by transfer
+  and one the book drew as ours from its first payment. One transfer was not
+  reached before its process stopped (37 under 1.0.0), and 26 of the transfer
+  books' 120 loans reach us after the ten years a book is drawn for, so they
+  were never stepped (none under 1.0.0).
+- **Away from the defects, every figure of money still agrees to the cent.**
+  On the clear fields, every receipt's split (2,400 of 2,400), every
+  installment (2,619 of 2,619), and every late charge assessed and month-end
+  balance, suspense and ledger figure (2,589 of 2,589) agree, and so do the
+  Metro 2 account status, amount past due and current balance.
+- **Every one of the 19,080 disagreeing fields falls to a logged defect or to
+  the harness.** 17,021 fall to seven logged defects (metro2-1 to metro2-4,
+  cashiering-18, cashiering-19 and boarding-6) and 2,059 to the harness's
+  scheduled monthly payment, the same harness class as under 1.0.0. None is
+  unclassified, and nothing is a new lead.
+- **Both generator bugs are gone.** The harness repaired no MIN (155 under
+  1.0.0); none of the 216 MINs drawn fails Mod-10 (188); and none of the
+  16,704 active month-ends lacks a next due date (2,311).
+- **cashiering-11 is gone from the disagreements.** Inside a transfer's 60-day
+  window the generator now charges what the servicing app charges: 13 late
+  charges on 11 loans, the same on both sides to the cent, where under 1.0.0
+  the generator charged none and the servicing app 18. 1,477 fields on 16
+  loans named cashiering-11 then, and none does now.
+- **The same speed.** 0.37 to 0.43 seconds per loan-day per process, about 20
+  loan-days a second across the eight, and still rising as the database's
+  records grow (perf-1).
+
+### Agreement per field
+
+"Clear" is as above. The 1.0.0 columns are the table above.
+
+| Field                              | Agree         | Rate   | Clear         | 1.0.0 rate | 1.0.0 clear   |
+| ---------------------------------- | ------------- | ------ | ------------- | ---------- | ------------- |
+| `receipt.posted`                   | 3,920 / 3,925 | 99.9 % | 2,400 / 2,400 | 99.9 %     | 2,431 / 2,431 |
+| `receipt.outcome`                  | 3,876 / 3,925 | 98.8 % | 2,400 / 2,400 | 99.1 %     | 2,431 / 2,431 |
+| `receipt.installments`             | 3,613 / 3,925 | 92.1 % | 2,400 / 2,400 | 93.2 %     | 2,431 / 2,431 |
+| `receipt.interest`                 | 3,579 / 3,925 | 91.2 % | 2,400 / 2,400 | 93.0 %     | 2,431 / 2,431 |
+| `receipt.principal`                | 3,579 / 3,925 | 91.2 % | 2,400 / 2,400 | 93.0 %     | 2,431 / 2,431 |
+| `receipt.escrow`                   | 3,871 / 3,925 | 98.6 % | 2,400 / 2,400 | 98.8 %     | 2,431 / 2,431 |
+| `receipt.split_by_installment`     | 3,579 / 3,925 | 91.2 % | 2,400 / 2,400 | 93.0 %     | 2,431 / 2,431 |
+| `receipt.late_charge`              | 3,651 / 3,925 | 93.0 % | 2,400 / 2,400 | 94.2 %     | 2,431 / 2,431 |
+| `receipt.curtailment`              | 3,917 / 3,925 | 99.8 % | 2,400 / 2,400 | 99.8 %     | 2,431 / 2,431 |
+| `receipt.to_suspense`              | 3,682 / 3,925 | 93.8 % | 2,400 / 2,400 | 95.3 %     | 2,431 / 2,431 |
+| `installment.amount`               | 4,262 / 4,262 | 100 %  | 2,619 / 2,619 | 100 %      | 2,619 / 2,619 |
+| `installment.status`               | 4,203 / 4,262 | 98.6 % | 2,619 / 2,619 | 99.1 %     | 2,619 / 2,619 |
+| `installment.satisfied_on`         | 3,956 / 4,262 | 92.8 % | 2,619 / 2,619 | 93.8 %     | 2,619 / 2,619 |
+| `installment.credited_as_of`       | 3,956 / 4,262 | 92.8 % | 2,619 / 2,619 | 93.8 %     | 2,619 / 2,619 |
+| `late_charge.assessed`             | 3,967 / 4,250 | 93.3 % | 2,589 / 2,589 | 94.0 %     | 2,603 / 2,603 |
+| `late_charge.assessed_on`          | 3,967 / 4,250 | 93.3 % | 2,589 / 2,589 | 94.0 %     | 2,603 / 2,603 |
+| `month.upb`                        | 3,896 / 4,250 | 91.7 % | 2,589 / 2,589 | 93.5 %     | 2,603 / 2,603 |
+| `month.suspense`                   | 4,002 / 4,250 | 94.2 % | 2,589 / 2,589 | 95.7 %     | 2,603 / 2,603 |
+| `month.late_charges_owed`          | 1,410 / 4,250 | 33.2 % | 1,393 / 2,589 | 35.1 %     | 1,225 / 2,603 |
+| `month.late_charges_ledger`        | 3,705 / 4,250 | 87.2 % | 2,589 / 2,589 | 84.3 %     | 2,603 / 2,603 |
+| `metro2.min_present`               | 0 / 4,250     | 0 %    | 0 / 2,589     | 0 %        | 0 / 2,603     |
+| `metro2.account_status`            | 4,082 / 4,250 | 96.0 % | 2,589 / 2,589 | 96.6 %     | 2,603 / 2,603 |
+| `metro2.payment_history_profile`   | 97 / 4,250    | 2.3 %  | 97 / 2,589    | 2.7 %      | 96 / 2,603    |
+| `metro2.amount_past_due`           | 3,971 / 4,250 | 93.4 % | 2,589 / 2,589 | 94.2 %     | 2,603 / 2,603 |
+| `metro2.current_balance`           | 3,896 / 4,250 | 91.7 % | 2,589 / 2,589 | 93.5 %     | 2,603 / 2,603 |
+| `metro2.scheduled_monthly_payment` | 2,191 / 4,250 | 51.6 % | 1,514 / 2,589 | 54.7 %     | 1,494 / 2,603 |
+| `metro2.actual_payment_amount`     | 4,199 / 4,250 | 98.8 % | 2,561 / 2,589 | 98.7 %     | 2,576 / 2,603 |
+| `metro2.date_of_first_delinquency` | 3,725 / 4,250 | 87.6 % | 2,398 / 2,589 | 93.5 %     | 2,563 / 2,603 |
+| `metro2.date_of_last_payment`      | 4,216 / 4,250 | 99.2 % | 2,575 / 2,589 | 99.1 %     | 2,585 / 2,603 |
+| `metro2.terms_duration`            | 4,250 / 4,250 | 100 %  | 2,589 / 2,589 | 100 %      | 2,603 / 2,603 |
+| `metro2.interest_type_indicator`   | 4,250 / 4,250 | 100 %  | 2,589 / 2,589 | 100 %      | 2,603 / 2,603 |
+| `metro2.special_comment`           | 4,250 / 4,250 | 100 %  | 2,589 / 2,589 | 100 %      | 2,603 / 2,603 |
+
+What moved, and why:
+
+- **The money fields fell one to two points** because two logged defects
+  reach more of these books. cashiering-18 reaches 23 of the 25 loans
+  scripted with a repayment plan, against 17 of 26. And 63 of the 92
+  transfers carried late charges on the tape, which boarding-6 reaches,
+  against 32 of 82; these transfers come later in their loans' lives (the
+  median boarding is November 2031, against October 2028).
+- **The late-charge ledger rose three points**, though the other defects
+  reach more: under 1.0.0, 316 of its 551 disagreements named cashiering-11,
+  and none does now.
+- **The date of first delinquency fell six points**, five of them metro2-2's
+  re-aging: 356 month-ends on 79 loans, against 109 on 43. The rest follow
+  from the money defects, 169 month-ends against 118.
+- **The payment history profile agrees on 97** month-ends: the first
+  month-end of each of the 97 loans boarded at origination, which have no
+  history yet, as under 1.0.0.
+
+130 of the 189 loans agree on every receipt, installment, late charge,
+month-end balance, suspense and ledger figure, and Metro 2 status, amount
+past due and current balance from boarding to the end of their window: 86 of
+the 97 boarded at origination and 44 of the 92 boarded by transfer, against
+133 of 178 (89 of 96 and 44 of 82). Of the loans scripted with a repayment
+plan, 2 of 25 do (7 of 26). The generator assessed 838 late charges and the
+servicing app 1,119 (549 and 755). The 3,925 receipts compared were 3,184
+regular, 296 paying the oldest installment only, 110 with a curtailment, 105
+cures, 92 under a plan, 35 partials and 34 remainders, 30 short by $50 or
+less, 23 kept promises and 16 stale bill-pay amounts. All 531 monthly Metro 2
+units sent files with no records (metro2-1), against 344.
+
+### Disagreement classes beside 1.0.0's
+
+The classes are 1.0.0's, read the same way, and each was read by hand on at
+least one loan with `loan`. The three Metro 2 ones carry their logged ids.
+
+| Class                                                    | Triage  | Fields | Loans | Under 1.0.0         | Example                                                                                                                                                                                                                                                                                    |
+| -------------------------------------------------------- | ------- | ------ | ----- | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| metro2-2: payment history and DOFD without a prior month | logged  | 4,509  | 189   | 3,516, 178 (new)    | b1 LN-684925e3-00002: behind from 1 December 2033 into August 2034; the generator reported that date throughout, the servicing app moved it to 1 January in May and to 1 February from June                                                                                                |
+| metro2-1                                                 | logged  | 4,250  | 189   | 3,503, 178          | every month-end, as under 1.0.0                                                                                                                                                                                                                                                            |
+| cashiering-18 with cashiering-19                         | logged  | 3,044  | 13    | 1,949, 9            | o1 LN-c34c575e-00005: October's and November's $23.82 charges suspended under the plan; on 23 November 2026 a plan payment took $95.28 of charges where the generator took $47.64, and each of the next nine took charges again, up to $262.02, the loan a month behind from February 2027 |
+| boarding-6, alone or with cashiering-18 or -19           | logged  | 3,358  | 63    | 1,967, 32 (and -11) | b1 LN-684925e3-00003: the tape owed $1,015.56; on 29 March 2033 a promise payment took $1,241.24 of charges in the generator and $225.68 in the servicing app, the two it has fee rows for                                                                                                 |
+| scheduled monthly payment                                | harness | 2,059  | 146   | 1,587, 138          | o1 LN-c34c575e-00000, May 2027: $6,027, June's installment after the analysis, against $5,953, the boarded terms                                                                                                                                                                           |
+| cashiering-19, alone                                     | logged  | 1,696  | 117   | 1,555, 117          | o1 LN-c34c575e-00001, August 2027: the ledger and the generator owe nothing, the cash state $192.92                                                                                                                                                                                        |
+| cashiering-18, alone                                     | logged  | 79     | 13    | 57, 9               | o1 LN-c34c575e-00021, 3 November 2026: a plan payment took $157.02 of charges where the generator took $104.68                                                                                                                                                                             |
+| metro2-3: held receipt not reported                      | logged  | 79     | 48    | 74, 39 (new)        | o1 LN-c34c575e-00002, August 2027: $1,391 received against $775 reported                                                                                                                                                                                                                   |
+| metro2-4: transfer history not reported                  | logged  | 6      | 6     | 4, 4 (new)          | b1 LN-684925e3-00007, July 2032: last paid 28 June to the prior servicer, reported as never                                                                                                                                                                                                |
+| cashiering-11, alone or with -18 or -19                  | logged  | 0      | 0     | 552, 8              | none (below)                                                                                                                                                                                                                                                                               |
+
+Under 1.0.0 another 925 of boarding-6's fields named cashiering-11 too; none
+does now. Of the logged defects found since the first run, escrow-5 and
+escrow-6 show in no field: the harness writes each analysis's figures onto the
+due rows itself, a spread's final installment included, so neither the work
+screen's analysis nor the runtime's billing of a spread's last month is
+reached. perf-1 shows in the timing.
+
+**The triage fix.** Four month-ends read as metro2-2 on the first report
+because their account status agreed, but on them the two sides owed different
+installments. On three the servicing app's date was the earlier, because it
+was a month further behind (cashiering-18, -19 and boarding-6 had moved its
+money); re-aging only ever moves the date later, so these now follow from
+their loans' roots. The fourth, b4 LN-6b492a9c-00016 in March 2033, is later
+on a loan boarding-6 had put a month ahead, and stays in metro2-2, explained
+by both.
+
+### The transfer window
+
+Under 1.0.0, 178 installments due in a transfer's first 60 days had a late
+charge run on one side or the other. The generator charged none of them,
+because it set the engine's blanket shield, and the servicing app charged 18,
+on 16 loans. Under 1.2.0, 192 do, and the two sides charge the same 13, on 11
+loans, to the cent: each an installment paid to us after its grace or not
+paid, which §2.7 charges and the blanket shield spared. b4 LN-6b492a9c-00011,
+boarded 1 September 2026, paid September's installment on 6 October and
+October's on 4 November, and both sides charged $199.81 for each.
+
+What this run does not reach is the half of cashiering-11 that remains: the
+runtime never sets the shield for a payment the prior servicer received on
+time. No book here sends one, because the harness's scripts never give a
+`transfer_in` event `misdirected_payments`, so the generator wrote no
+`transfer_window_60` overlay, and the triage's cashiering-11 root, which
+needs one, never fired. A book that forwards payments is what would test it.
+
+### Scale and speed
+
+| Process  | Loans compared | Loan-days | Wall             | Cashiering | Delinquency counters | Month-ends and Metro 2 |
+| -------- | -------------- | --------- | ---------------- | ---------- | -------------------- | ---------------------- |
+| o1 to o4 | 96             | 70,873    | 6,610 to 6,697 s | 79 to 83 % | 13 to 17 %           | 1.4 to 1.9 %           |
+| b1 to b4 | 93             | 63,414    | 6,601 to 6,639 s | 74 to 79 % | 15 to 21 %           | 2.2 to 3.4 %           |
+
+The eight ran from 16:19Z to 18:11Z, with no suspension this time. A process
+stepped a loan-day in 0.37 to 0.43 seconds, against 0.36 to 0.44 under 1.0.0
+without its suspension, on a busier machine: the one-minute load average,
+sampled every minute, ran from 9 to 243, with a median of 77, on ten cores.
+The origination books stopped in July to October 2028, so 40 of their 96
+loans were compared for less than their 24 months (all reached the servicing
+app); the transfer books stopped between November 2034 and December 2035.
+Cost per loan-day rose as the records grew, as under 1.0.0: in the origination
+books, with all 24 loans live, from 0.19 to 0.31 seconds in the first months
+all were live to 0.45 to 0.55 about a year later. That growth is perf-1, logged
+since the first run: each unit's book-wide reads. The generator drew each
+book in 0.36 to 1.0 seconds.
+
+### What it changes
+
+- **The generator is now right where it was wrong.** Its MINs pass Mod-10,
+  every month-end has a next due date, and in a transfer's first two months
+  it charges what the spec charges, which on every case these books draw is
+  what the servicing app charges too.
+- **Nothing else moved.** Every disagreement is still the servicing app's
+  runtime (seven logged defects) or the harness's scheduled payment, and the
+  figures where no defect stands between them still agree to the cent.
+- **What is still untested** is what the first run did not cover, plus the
+  runtime half of cashiering-11 on a forwarded payment.

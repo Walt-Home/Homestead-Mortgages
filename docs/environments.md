@@ -3672,8 +3672,9 @@ refuses to read back a run drawn under another life version. Life 1.2.0
 fixes both generator bugs (a drawn MIN carries its Mod-10 check digit,
 computed by the port of the boarding gate's own `min.ts`, and a month-end
 paid ahead has a next due date) and steers around the engine half of
-cashiering-11, which the generator walked into on every transfer; the batch
-has not been rerun on it.
+cashiering-11, which the generator walked into on every transfer. The batch
+was rerun on it on 26 October 2026 (docs/cross-check.md, "Life 1.2.0"): it met
+neither bug, and no field named cashiering-11.
 
 ### The demo page
 

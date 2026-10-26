@@ -1141,14 +1141,15 @@ const CLASSES: Record<
     ref: "metro2-1",
     what: "the monthly unit builds every loan with no MIN, so validation leaves it out (K3_MIN_MISSING)",
   },
-  "metro2-prior": {
-    kind: "new",
-    ref: "domain/operations-runtime/runners.ts:144; credit-reporting/metro2.ts:65, :105",
+  // The three Metro 2 classes were new on the first run (23 October 2026) and are logged since, as metro2-2 to metro2-4.
+  "metro2-2": {
+    kind: "known",
+    ref: "metro2-2",
     what: "the typed-row builder passes `prior: null` every month: the payment history profile is the boarding hand-off (24 × B) forever, and the date of first delinquency restarts at each month's oldest unpaid installment",
   },
-  "metro2-held": {
-    kind: "new",
-    ref: "domain/operations-runtime/runners.ts:137-139",
+  "metro2-3": {
+    kind: "known",
+    ref: "metro2-3",
     what: "the actual payment amount and the date of last payment count only `posted` payments, so a receipt held in suspense was never received as far as the bureaus are told",
   },
   "escrow-terms": {
@@ -1181,9 +1182,9 @@ const CLASSES: Record<
     ref: "cashiering-10",
     what: "the runtime hard-codes `partial_count_12m` to 0, so a fourth $50-rule shortfall in twelve months is applied",
   },
-  "transfer-history": {
-    kind: "new",
-    ref: "domain/boarding/service.ts:166, :367-371; domain/operations-runtime/runners.ts:137-139",
+  "metro2-4": {
+    kind: "known",
+    ref: "metro2-4",
     what: "boarding reads the tape's payment history only to seed delinquency and writes no payment record, so until the servicing app posts a receipt of its own the bureaus are told the borrower never paid",
   },
   "escrow-sync": {
@@ -1205,6 +1206,14 @@ function classOf(name: string): { kind: string; ref: string; what: string } {
     ref: name.split("+").join(", "),
     what: `follows from ${name.split("+").join(" and ")} together`,
   };
+}
+
+/** A Metro 2 date (MMDDYYYY) as ISO, or "" for a zero-filled or absent one. */
+function mmddyyyyIso(v: unknown): string {
+  const s = String(v ?? "");
+  return /^\d{8}$/.test(s) && s !== "00000000"
+    ? `${s.slice(4, 8)}-${s.slice(0, 2)}-${s.slice(2, 4)}`
+    : "";
 }
 
 /** The date a field speaks for: a receipt's day, an installment's due date, a charge's run, or a month's last day. */
@@ -1307,24 +1316,27 @@ function triageLoan(
     let cls: Cls | null = null;
     if (f.field === "metro2.min_present") cls = "metro2-1";
     else if (f.field === "metro2.payment_history_profile" && /^B{24}$/.test(String(f.svc)))
-      cls = "metro2-prior";
+      cls = "metro2-2";
     else if (
       f.field === "metro2.date_of_first_delinquency" &&
-      other("metro2.account_status", f)?.agree
+      other("metro2.account_status", f)?.agree &&
+      // Re-aging only ever moves the date later; an earlier one is a money disagreement's (an older installment owed).
+      mmddyyyyIso(f.svc) > mmddyyyyIso(f.gen) &&
+      mmddyyyyIso(f.gen) !== ""
     )
-      cls = "metro2-prior";
+      cls = "metro2-2";
     else if (f.field === "metro2.scheduled_monthly_payment" && life.draw.escrowed)
       cls = "escrow-terms";
     else if (f.field === "metro2.actual_payment_amount" && heldIn(f.month).length) {
       // Base-segment money is whole dollars, truncated: the held receipts account for the gap to within a dollar.
       const held = Number(sum(heldIn(f.month).map((p) => c(p.amount_cents)))) / 100;
-      if (Math.abs(Number(f.gen) - Number(f.svc) - held) <= 1) cls = "metro2-held";
+      if (Math.abs(Number(f.gen) - Number(f.svc) - held) <= 1) cls = "metro2-3";
     } else if (f.field === "metro2.date_of_last_payment") {
       const g = String(f.gen);
       const genIso = `${g.slice(4, 8)}-${g.slice(0, 2)}-${g.slice(2, 4)}`;
       if (svc.payments.some((p) => p.status !== "posted" && String(p.received_on) === genIso))
-        cls = "metro2-held";
-      else if (transfer && genIso < board) cls = "transfer-history";
+        cls = "metro2-3";
+      else if (transfer && genIso < board) cls = "metro2-4";
     } else if (
       f.field === "month.late_charges_owed" &&
       other("month.late_charges_ledger", f)?.agree

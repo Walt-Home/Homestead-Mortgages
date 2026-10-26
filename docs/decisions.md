@@ -9819,8 +9819,8 @@ copy there carries the page, its bundle and the held-out counts, and no
 recorded attempts by a model. The claude.ai page stays the Gym's home and
 keeps showing them.
 
-**Why it is in the app.** The claude.ai page is private and shared by
-link, one person at a time, from its owner's account. The team already
+**Why it is in the app.** The claude.ai page is shared from its owner's
+account, and reaching it takes that share. The team already
 signs in to the console, every loan in the Gym is synthetic, and the page
 runs entirely in the browser and sends nothing anywhere, so the console is
 the cheapest place for everyone on staff to try it, on staging and in
@@ -9871,3 +9871,9 @@ the footer) and links the claude.ai page; a `runs.json` that answers 404 is
 read as such a build rather than as a failure (`gym-page.test.ts`). The
 held-out counts are a different thing: numbers this document and the
 environments document already report.
+
+The claude.ai page is not outside that decision. Its address is in this
+repository (the environments document, docs/testing.md, and the page's own
+link), so who can read the transcripts on it is whoever its sharing setting
+admits; a setting of "anyone with the link" publishes them as surely as a
+commit would. That setting is part of the same open decision.

@@ -30,6 +30,11 @@
  *   npm run env:refi -w @hm/environments -- --env boarding-triage --policy reference
  *   npm run env:refi -w @hm/environments -- --env call-qa --policy reference
  *   npm run env:refi -w @hm/environments -- --env tape-intake --policy reference
+ *   npm run env:refi -w @hm/environments -- --env boarding-triage --policy vertex --max-tokens 32000
+ *
+ * `--max-tokens` is a Vertex episode's output budget per turn, reasoning
+ * included (16,000 unless asked); a run at another budget says so in its
+ * policy id.
  *
  * The default is the held-out suite, the one every reported score is
  * measured on. A model run spends real money: it is never the default, and
@@ -712,6 +717,7 @@ const { values } = parseArgs({
     effort: { type: "string", default: "high" },
     project: { type: "string", default: DEFAULT_VERTEX_PROJECT },
     thinking: { type: "string", default: "on" },
+    "max-tokens": { type: "string" },
     concurrency: { type: "string", default: "4" },
     resume: { type: "boolean", default: false },
     out: { type: "string" },
@@ -763,10 +769,14 @@ function policyOf(reference: () => Policy): Policy {
     });
   }
   if (values.policy === "vertex") {
+    const maxTokens = values["max-tokens"] === undefined ? undefined : Number(values["max-tokens"]);
+    if (maxTokens !== undefined && !(Number.isInteger(maxTokens) && maxTokens > 0))
+      throw new Error(`--max-tokens must be a positive whole number`);
     return new VertexOpenModelPolicy({
       model: values.model ?? DEFAULT_VERTEX_MODEL,
       project: values.project,
       thinking: values.thinking !== "off",
+      ...(maxTokens === undefined ? {} : { maxTokens }),
     });
   }
   throw new Error(`--policy must be reference, anthropic, anthropic-vertex or vertex`);

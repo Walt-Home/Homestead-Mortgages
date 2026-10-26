@@ -189,6 +189,22 @@ describe("the Vertex open-model policy", () => {
     });
   });
 
+  it("names a budget other than the default in its id, and sends it", async () => {
+    expect(policy(fakeVertex([]).fetch).id).toBe(
+      "vertex:deepseek-ai/deepseek-v4.1-flash-maas:thinking",
+    );
+    const { fetch, sent } = fakeVertex([reply({ content: "done" }, "stop")]);
+    const wide = new VertexOpenModelPolicy({
+      fetch,
+      maxTokens: 32000,
+      accessToken: async () => "tok",
+      retryDelaysMs: [0, 0],
+    });
+    expect(wide.id).toBe("vertex:deepseek-ai/deepseek-v4.1-flash-maas:thinking:max-tokens-32000");
+    await runEpisode(refiReview, workedExample, wide);
+    expect(sent[0]?.body).toMatchObject({ max_tokens: 32000 });
+  });
+
   it("leaves thinking off when asked, and answers malformed arguments with an error", async () => {
     const { fetch, sent } = fakeVertex([
       reply({ calls: [["c1", "per_diem", "{not json"]] }),

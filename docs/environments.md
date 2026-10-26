@@ -4689,6 +4689,11 @@ There are three model policies, and none falls back to another model:
     message instead.
   - Thinking is on (`--thinking off` turns it off), and the reasoning goes
     back with its assistant turn.
+  - Each turn may write 16,000 output tokens, reasoning included.
+    `--max-tokens` sets another budget, and the policy id then names it
+    (`…:thinking:max-tokens-32000`), so a run record says which budget its
+    episodes had. An episode that spends its budget mid-turn ends
+    `max_tokens` and fails.
   - Every request streams. The endpoint takes 2 to 70 seconds a turn, and
     some turns run past five minutes. Unstreamed, that is where Node's fetch
     gives up waiting for headers, which ended four of the first five smoke

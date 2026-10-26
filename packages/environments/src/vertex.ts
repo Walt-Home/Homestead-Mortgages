@@ -258,7 +258,11 @@ export class VertexOpenModelPolicy implements Policy {
       fetch: opts.fetch ?? (globalThis.fetch as unknown as Fetch),
       retryDelaysMs: opts.retryDelaysMs ?? [2_000, 8_000, 30_000],
     };
-    this.id = `vertex:${this.opts.model}:${this.opts.thinking ? "thinking" : "no-thinking"}`;
+    // A cap other than the default is in the id, so a run record says which
+    // budget its episodes had; pricing reads the id by its prefix.
+    this.id = `vertex:${this.opts.model}:${this.opts.thinking ? "thinking" : "no-thinking"}${
+      this.opts.maxTokens === 16000 ? "" : `:max-tokens-${this.opts.maxTokens}`
+    }`;
     this.url = `https://aiplatform.googleapis.com/v1/projects/${this.opts.project}/locations/global/endpoints/openapi/chat/completions`;
   }
 

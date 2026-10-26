@@ -4913,12 +4913,13 @@ windows (seed 11), 75 of them clean:
 | The last conversation of V2''s kind, and the first call of a pair                                               |      6 |     1 |    0 |    4 |    1 | 0.095 |        2 |
 
 The clean share is 50 of 200, and 75 of 300 on the training suite. On the
-held-out suite no policy passes more than 50; of the ones that pass an
-error's window the most is 49, the only unlogged pair a window holds for one
-reason, read for an escrow analysis (48 clean and 1 S-02) or for online
-access (47 and 2), and the best in the tables, the only conversation of V2's
-kind made on an inbound call, passes 45. On the training suite the most is
-77, the escrow-analysis pair again (74 and 3), two past the clean share. None passes a majority of any error's windows, nor of
+held-out suite no policy in the tables passes more than 50; of the ones that
+pass an error's window the most is 49, the only unlogged pair a window holds
+for one reason, read for an escrow analysis (48 clean and 1 S-02) or for
+online access (47 and 2), and the best in the tables, the only conversation
+of V2's kind made on an inbound call, passes 45. On the training suite the
+most is 77, the escrow-analysis pair again (74 and 3), two past the clean
+share. None in the tables passes a majority of any error's windows, nor of
 either promise arm's within one: on the held-out suite the most is 13 S-01
 windows (the promise note nearest the window's middle, which reads the notes)
 and 9 structurally, and 9 of an arm's 25 (the conversation of V2's kind its
@@ -4992,6 +4993,28 @@ is a guess: the structural policies that pass most S-01 windows pick the
 first, the last or the soonest-paid of several conversations of V2's kind,
 and the ones that pass most S-02 windows the first or the last call of a
 pair; each loses as many clean windows as it gains.
+
+A third review the same day tried structural policies the tables do not
+hold, each on the held-out suite and then the training suite. The twin keeps
+an inbound promise call's own day quiet on the dialer, so the only
+conversation of V2's kind with no attempt on its day and one the next passes
+49 and 73 (53 and 74 in either direction, its payment a week before the
+window closes). An unlogged complaint leaves its issue open, so its call's
+follow-up is filed under the call's own issue: one landing in a later month
+on a closed call's issue, or on a closed call's fee or analysis, is nearly
+always the root's, which finds 2 and 3 S-02 roots and loses one clean window
+of 325 on four suites. The best of 4,413 combinations of structural filters
+on S-01's kept arm passes 54 and 79, and the best of 28,926 on S-02's pairs
+55 and 78, neither four points past the clean share. One of the S-02
+combinations breaks a bound: naming as an S-02 root, whenever a window has
+one, the last unlogged call in the anchors' zone (from ten days after the
+window opens to 61 before it closes, where an S-02 root always is) that a
+later unlogged call for its reason follows 3 to 61 days on in another month,
+with a recorded promise call within 120 days. It fails 44 of the 50 clean
+windows and passes 27, but 21 of the 50 S-02 windows, 14 of one arm's 25.
+Out of sample it finds a quarter of S-02 roots (24 and 26 % on two fresh
+suites of 400; 20 of 75 on the training suite, 7 of 38 and 13 of 37 by arm),
+and the held-out suite's draw takes one arm past half.
 
 **The proof of fairness.** The reference passes the held-out suite, 300
 training tasks (seed 11) and fifteen hand-built histories in at most three

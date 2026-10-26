@@ -9098,18 +9098,25 @@ possible; neither suite moved for it.
 are given every symptom the rules give them, so a floor is the roots'
 alone; the second table's read only the logs' structure, V1 to V8 among
 them. On the held-out suite submitting nothing passes the 50 clean windows
-(mean 0.546) and no policy passes more: of the ones that pass an error's
-window the most is 49, the only unlogged pair a window holds for an escrow
-analysis or online access, and of the structural ones in the table 45, the
-only conversation of V2's kind on an inbound call. V1 passes 7, V2 40, V2'
-42, V3 36, V4 35, V5, V6 and V7 6 each, and V8 19 either way. On the
-training suite (seed 11, 300 windows, 75 clean) the most is 77. None passes
-a majority of any error's windows or of either promise arm within one: on
-the held-out suite the most is 13 S-01 windows and 9 of an arm's 25, on the
-training suite 31 of 75 and 17 of 38 (the promise note nearest the window's
-middle, which reads the notes), and 16 of 38 structurally. The tables are in
-docs/environments.md, and a test holds every row and the bounds on both
-suites, every structural policy by reason too.
+(mean 0.546) and no policy in the tables passes more: of the ones that pass
+an error's window the most is 49, the only unlogged pair a window holds for
+an escrow analysis or online access, and of the structural ones in the table
+45, the only conversation of V2's kind on an inbound call. V1 passes 7, V2
+40, V2' 42, V3 36, V4 35, V5, V6 and V7 6 each, and V8 19 either way. On the
+training suite (seed 11, 300 windows, 75 clean) the most is 77. None in the
+tables passes a majority of any error's windows or of either promise arm
+within one: on the held-out suite the most is 13 S-01 windows and 9 of an
+arm's 25, on the training suite 31 of 75 and 17 of 38 (the promise note
+nearest the window's middle, which reads the notes), and 16 of 38
+structurally. The tables are in docs/environments.md, and a test holds every
+row and the bounds on both suites, every structural policy by reason too. A
+third review's structural policies, outside the tables, pass at most 55 on
+the held-out suite and 79 on the training suite, and one breaks the arm
+bound: the last unlogged call in the anchors' zone that a later unlogged
+call for its reason follows in another month, with a recorded promise call
+within 120 days, named as an S-02 root whenever a window has one, fails 44
+of the 50 clean windows but passes 21 of the 50 S-02 windows and 14 of one
+arm's 25, where out of sample it finds a quarter of S-02 roots.
 
 **The complaint log is a view, so no clean center moved.** Spec 4.5 puts
 complaints in a case-management system beside the contact log, acknowledged

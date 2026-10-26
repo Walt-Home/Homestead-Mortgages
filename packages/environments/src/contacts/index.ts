@@ -6,7 +6,10 @@
  *
  * `contactCenter(book)` derives the rows and the notes; `transcriptOf` writes
  * a call's transcript on demand; `plantContactDefects` makes the defective
- * twin and its labels. Everything is a function of the book's seed. See
+ * twin and its labels; `plantStaffErrors` makes a twin with a staff error (a
+ * promise not tracked, a complaint not logged) and labels its root apart from
+ * its symptoms; `complaintLog` reads the complaint system's cases off the
+ * contact log. Everything is a function of the book's seed. See
  * docs/environments.md, "The contact center".
  */
 
@@ -21,4 +24,6 @@ export * from "./notes.js";
 export * from "./defects.js";
 export * from "./check.js";
 export * from "./center.js";
+export * from "./complaints.js";
+export * from "./staff.js";
 export { money, spokenDate, noteDate, noteMoney } from "./format.js";

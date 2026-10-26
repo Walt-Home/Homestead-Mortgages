@@ -36,4 +36,5 @@ export * as escrowReview from "./escrow-review/index.js";
 export * as boarding from "./boarding/index.js";
 export * as calls from "./calls/index.js";
 export * as callQa from "./call-qa/index.js";
+export * as contactAudit from "./contact-audit/index.js";
 export * as tapeIntake from "./tape-intake/index.js";

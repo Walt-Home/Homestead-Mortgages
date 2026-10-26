@@ -29,6 +29,7 @@
  *   npm run env:refi -w @hm/environments -- --env escrow-review --policy reference
  *   npm run env:refi -w @hm/environments -- --env boarding-triage --policy reference
  *   npm run env:refi -w @hm/environments -- --env call-qa --policy reference
+ *   npm run env:refi -w @hm/environments -- --env contact-audit --policy reference
  *   npm run env:refi -w @hm/environments -- --env tape-intake --policy reference
  *   npm run env:refi -w @hm/environments -- --env boarding-triage --policy vertex --max-tokens 32000
  *
@@ -318,6 +319,19 @@ import {
   type CallQaTask,
 } from "./call-qa/index.js";
 import {
+  CONTACT_AUDIT_FINGERPRINT,
+  CONTACT_AUDIT_HELDOUT_SUITE,
+  ContactAuditReferencePolicy,
+  contactAudit,
+  contactAuditSpecTasks,
+  contactAuditTaskId,
+  contactAuditVerdict,
+  generateContactAuditSuite,
+  generateContactAuditTask,
+  type ContactAuditAnswer,
+  type ContactAuditTask,
+} from "./contact-audit/index.js";
+import {
   INTAKE_FINGERPRINT,
   INTAKE_HELDOUT_SUITE,
   IntakeReferencePolicy,
@@ -367,6 +381,7 @@ interface Bench<T extends TaskCoordinates, A = RefiAnswer> {
     | typeof REVIEW_FINGERPRINT
     | typeof BOARDING_FINGERPRINT
     | typeof CALL_QA_FINGERPRINT
+    | typeof CONTACT_AUDIT_FINGERPRINT
     | typeof INTAKE_FINGERPRINT;
   readonly heldout: { readonly seed: number; readonly n: number };
   /** The generator's task id, so a train index is checked before it is drawn. */
@@ -691,6 +706,17 @@ const BENCHES = {
     verdictOf: callQaVerdict,
     reference: () => new CallQaReferencePolicy(),
   } satisfies Bench<CallQaTask, CallQaAnswer>,
+  "contact-audit": {
+    env: contactAudit,
+    fingerprint: CONTACT_AUDIT_FINGERPRINT,
+    heldout: CONTACT_AUDIT_HELDOUT_SUITE,
+    suite: generateContactAuditSuite,
+    one: generateContactAuditTask,
+    taskId: contactAuditTaskId,
+    spec: contactAuditSpecTasks,
+    verdictOf: contactAuditVerdict,
+    reference: () => new ContactAuditReferencePolicy(),
+  } satisfies Bench<ContactAuditTask, ContactAuditAnswer>,
   // One partner's monthly tape before the desk loads it, graded against the labels of what the delivery and the partner's records carry.
   "tape-intake": {
     env: tapeIntake,
@@ -898,6 +924,7 @@ async function main(): Promise<void> {
   if (values.env === "escrow-review") return run(BENCHES["escrow-review"]);
   if (values.env === "boarding-triage") return run(BENCHES["boarding-triage"]);
   if (values.env === "call-qa") return run(BENCHES["call-qa"]);
+  if (values.env === "contact-audit") return run(BENCHES["contact-audit"]);
   if (values.env === "tape-intake") return run(BENCHES["tape-intake"]);
   throw new Error(`--env must be one of ${Object.keys(BENCHES).join(", ")}`);
 }

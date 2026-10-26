@@ -43,6 +43,13 @@ import { templateWriter, type ContactTextWriter } from "./writer.js";
  * its note records what was explained; C-05 and C-08 plant a wrong figure in that explanation; no statement is
  * mailed to a borrower more than 30 days behind at the analysis; a pin draws the borrower's call about each one;
  * and an interpreted call's note no longer reads the interpreter's relay of the question as a second question.
+ * Beside them, and drawing nothing new on a clean center (held byte for byte against the center without them): two
+ * staff errors a twin can make on a call the clean history has (staff.ts), S-01, a promise said and noted and never
+ * recorded, and S-02, a complaint voiced and never logged and raised again; the complaint log, read off the logged
+ * complaints as a view (complaints.ts); four pins, the borrower's manner, a multiple of the chance of a complaint, a
+ * multiple of the ordinary inbound volume, and the share of conversations a payment follows within three weeks that
+ * take a promise for it; and a call the writer threw on (a payment taken with nothing left to quote), which it now
+ * writes without the quote.
  */
 export const CONTACTS_VERSION = "1.2.0";
 
@@ -103,7 +110,8 @@ export function contactCenter(book: LifeBook, opts: ContactCenterOptions = {}): 
   };
 }
 
-const loanIdOf = (contactId: string) => contactId.replace(/-K\d+$/, "");
+/** The loan a contact id names: `<loan>-K0042`, or a row a staff error's twin added, `<loan>-K0042-S01-1`. */
+const loanIdOf = (contactId: string) => contactId.replace(/-K\d+(-S\d\d(-\d+)?)?$/, "");
 
 function locate(
   center: ContactCenter,

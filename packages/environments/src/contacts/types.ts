@@ -284,6 +284,38 @@ export interface ProfilePins {
    * sent, whatever the rate: an inbound call that reaches an agent, the borrower on the line.
    */
   readonly escrow_call?: boolean;
+  /** How the borrower talks on the phone, in place of the drawn manner (the draw is still made). */
+  readonly style?: ContactProfile["style"];
+  /** A multiple of the chance a handled call carries a complaint: a borrower with a grievance. */
+  readonly complaint_multiplier?: number;
+  /**
+   * The chance itself, in place of the reason's weight and the multiples above: a borrower with a grievance voices it
+   * on that share of the calls an agent handles, whatever a call is about.
+   */
+  readonly complaint_chance?: number;
+  /** A multiple of the borrower's ordinary inbound volume, month by month: a borrower who calls often. */
+  readonly call_multiplier?: number;
+  /**
+   * The chance the borrower calls again, 3 to 60 days later, about a matter an agent handled on a call, open or
+   * closed: filed as any call about its reason is that day, beside the follow-up an issue left open gets. Unset,
+   * never: only an issue left open is followed up.
+   */
+  readonly closed_follow_up?: number;
+  /**
+   * The chance a conversation the borrower's next payment follows within three weeks takes a promise for it. Unset,
+   * it always does; a borrower pinned below one sometimes pays without having promised to.
+   */
+  readonly kept_promise_share?: number;
+  /**
+   * The most days past the payment's day that a kept promise's date may fall: the borrower names a day and pays on or
+   * before it. Unset, the promise's date is the payment's.
+   */
+  readonly kept_promise_slack?: number;
+  /**
+   * A promise taken on an inbound call ceases the dialer from the call's own minute, so an attempt earlier that day
+   * is made. Unset, it ceases the dialer from the start of the call's day.
+   */
+  readonly cease_from_call?: boolean;
 }
 
 /** The cadence's state over one delinquency, kept so a reader can hold the attempts to it. */
@@ -312,6 +344,11 @@ export interface LoanContacts {
   readonly promises: readonly PromiseRecord[];
   readonly bankruptcy: BankruptcyCase | null;
   readonly cadence: readonly CadenceEpisode[];
+  /**
+   * Promises a call made that nobody recorded (S-01, staff.ts): the borrower said them and the agent noted them, and
+   * no promise record was written. Present only on a twin that carries the error; the call's words come from here.
+   */
+  readonly unrecorded_promises?: readonly PromiseRecord[];
 }
 
 /* ── transcripts ─────────────────────────────────────────────────────────── */

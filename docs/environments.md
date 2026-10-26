@@ -7,8 +7,9 @@ only and with the engine itself as the grader. `escrow-analysis` is the
 first on the servicing side, and `regz-price-tests` the first on the
 origination side. `catchup-posting`, `escrow-review` and `boarding-triage`
 are the first drawn from the life generator's histories, `call-qa` draws
-from them through the contact center, and `tape-intake` is the first drawn
-from its tape stream. The defects found in the servicing app's own engines
+from them through the contact center, `contact-audit` reads a loan's whole
+contact history for the staff errors the contact center plants, and
+`tape-intake` is the first drawn from its tape stream. The defects found in the servicing app's own engines
 are in `docs/servicing-engine-defects.md`.
 
 ## refi-review
@@ -3131,7 +3132,8 @@ Not in 1.0.0:
 - a stream defect in the last tape loaded, which was reviewed when it came;
 - D-28, which a monthly tape cannot tell from a borrower paying early, and
   the history errors that show only in a payment history;
-- staff errors, which need the contacts layer.
+- staff errors, which a monthly tape does not show; contact-audit grades two
+  from the contact history.
 
 ## The life generator
 
@@ -3343,9 +3345,13 @@ the next of its line's, named by its line and the day it was due
 (`tax_county@2028-01-01`), which a bill paid late or at the wrong amount
 still is; any other row by its kind and day (`refund@2028-07-18`). A refund
 one history makes and the other does not once renumbered every later bill,
-and labeled each with another bill's day, line and amount. Staff errors that
-need the contacts layer, such as a promise not tracked or a complaint not
-logged, are not planted here.
+and labeled each with another bill's day, line and amount. Staff errors,
+which need the contacts layer, are planted by the contact center the same
+way (below, "The contact center", "Staff errors"): a promise not tracked is
+S-01, and a complaint not logged with everything that follows from it is
+S-02. The call defects it plants on calls and notes are numbered apart (C-01
+to C-08, below): a complaint not logged on the call alone is C-04, a wrong
+figure in a call explaining the annual statement C-05.
 
 **Moments.** `generate(…, { observe })` shows an environment what each
 engine is about to be handed, as it stands, in the clean history and in the
@@ -3631,10 +3637,6 @@ none of the first's.
 **Not covered yet:**
 
 - the other 36 defects of the catalog;
-- staff errors that need the contacts layer. The contact center plants
-  those on calls and notes (C-01 to C-08, below): a complaint not logged is
-  C-04, a wrong figure in a call explaining the annual statement C-05. A
-  promise not tracked is planted nowhere yet;
 - foreclosure, forbearance, trial plans and modification, whose tape fields
   are present and always empty; a bankruptcy's plan, trustee, discharge and
   dismissal; loss mitigation beyond a repayment plan; the end of a
@@ -3677,7 +3679,7 @@ has not been rerun on it.
 
 `npm run env:demo -w @hm/environments` writes `playground/dist/demo.html`,
 the first demo as one self-contained page titled "Synthetic Loan
-Histories", its data inlined (about 585 KB). `scripts/build-demo.mjs`
+Histories", its data inlined (about 587 KB). `scripts/build-demo.mjs`
 bundles `src/demo/page-data.ts` from the workspace's sources, runs it, and
 fills `playground/demo/template.html`. No figure on it is typed by hand, and
 the same code writes the same bytes.
@@ -4347,6 +4349,139 @@ check holds the agent's figures to the record, which carries the statement
 lines. On every call explaining a statement in call-qa's 120-loan rubric
 book, pinned, both are planted and both found, 215 of 215 each.
 
+**Staff errors.** Two errors an agent makes by not recording something,
+`plantStaffErrors(center, book, requests, { pins })` (`staff.ts`), numbered
+S-01 and S-02 apart from the catalog's and the call defects. Each is planted
+the way the life generator plants a vendor's or a system's error: on one
+contact the clean history has, with the twin derived again from the same
+draws and the error made on that contact (`StaffOverride`, `derive.ts`). So
+the twin is the clean history until the call, and the contact center's own
+rules from there:
+
+- **S-01, a promise not tracked.** The borrower promises a payment on a
+  call, and the call's words and the agent's note carry it, word for word
+  the clean call's but for a transfer. No record is written: the row's
+  `promise_id` is null, the call is dispositioned as it would have been
+  without the promise, by the same draw (a hardship call transferred or
+  referred to loss mitigation, a dialer's conversation referred or
+  "information provided" half the time each, a payment arrangement
+  "information provided" or a callback), so its row is one a clean history
+  holds for a call of its kind that took no promise, and the promise log
+  holds nothing (`unrecorded_promises` keeps the promise, for the writer).
+  It is made on a promise the contact center drew from a call, never on the
+  scenario's own promise call: that call's purpose code is `promise_to_pay`,
+  a twin keeps every row's purpose, and a `promise_to_pay` call with no
+  promise is one no clean history holds, found from the row without reading
+  its note. What the rules then do: nothing ceases the dialer, so it calls
+  inside the window, about twice a root in the held-out suite; no "PTP SET"
+  line, and a kept promise is never marked kept, a broken one never marked
+  broken or the dialer resumed for it. A later call may take a promise of
+  its own, which the first would have stopped. A call made before the
+  promise is still the clean one's: the promise keeps it from taking one of
+  its own, as it did, and the dialer stays quiet on the day of a promise
+  taken on an inbound call, the hours before the call among them, as the
+  clean history ceased it for the whole day. A center pinned to cease the
+  dialer from the call itself (`cease_from_call`, contact-audit's books)
+  made the attempts before the call that day in the clean history too, so
+  there the twin dials the call's day as any other.
+- **S-02, a complaint not logged.** C-04's error at the call (the row's
+  flag, the agent's acknowledgment, the note, the CMPL line), and everything
+  after it: the complaint system opens no case (below), so nothing
+  acknowledges it and nobody answers it in writing. Nobody escalates it
+  either: the call is dispositioned as its reason would have it without the
+  complaint, by the same draw (a late fee may be escalated anyway, a
+  hardship call transferred or referred), and it is followed up as a call of
+  that row is: where the row is open, the follow-up on its issue is the
+  clean history's; where it is closed, nothing in the log holds the issue
+  open, and the follow-up the escalation drew is not made (it is drawn and
+  undone, so every later call keeps its number). Nobody tells the borrower
+  how to put it in writing either, so no written request follows it, as one
+  may follow a logged complaint (on a clean history every complaint voiced
+  is logged, so that draw is what it was). Nothing having come of it, the
+  borrower calls about it again 3 to 60 days later (`RAISED_AGAIN_AFTER`, a
+  design choice: as soon as a follow-up would be, or weeks later once no
+  written answer has come), a call that voices the complaint and is not
+  logged or escalated either. No case links it to the first, so it is filed
+  as any call about its reason is that day, under an issue of its own (the
+  root's own when the two fall in one month), and its reason is what ties
+  the two. On a center whose borrower is pinned to call again about the
+  matters an agent handled (`closed_follow_up`, below), it is that call,
+  which the pin makes at its chance and a complaint nobody logged always, so
+  the one the clean history drew there is not made. Beside the complaint it
+  is drawn as any call about its reason that reaches an agent is: whoever
+  calls (someone the agent can verify, the co-borrower or a counselor among
+  them), how it is dispositioned, a promise taken on it, a follow-up and the
+  letters after it. It is drawn before the dialer, so a promise it takes
+  ceases the dialer as any other does, keeps no call before it from taking
+  one, and takes sequence numbers of its own, so no other call's stream
+  moves.
+
+The complaint system is the servicing app's spec 4.5, "Complaint handling /
+UDAAP", whose blueprint names a complaint log in a case-management system
+(`apps/servicing/spec/sections/04-customer-service-borrower-communications/4-5-complaint-handling-udaap.md`).
+`complaintLog(loan, key)` (`complaints.ts`) reads it off the contact log:
+every complaint an agent logged on a call opens a case, received on the
+call's day (an oral complaint is a complaint, 4.5 "Inputs and triggers"),
+acknowledged on the call (`SM_COMPLAINT_ACK_1BD`: any channel), and answered
+by the response letter `NTC_COMPLAINT_RESPONSE` within 15 calendar days
+(`SM_COMPLAINT_RESOLVE_15`), three to eleven days after the call moved to a
+servicer business day. It is a view, so no clean center holds anything new.
+§1024.35's notice-of-error procedures reach a written notice, and a call is
+not one; §1024.38(b)(5) has a borrower unsatisfied with an oral complaint
+told how to send one.
+
+Rows the two histories share keep the clean ids (`contactKey`: the day and
+time, direction, mode, purpose, reason and issue), so every stream a contact
+id keys draws the same; a row the twin adds is named off the root
+(`<root>-S01-1`, the borrower's call again `<root>-S02`, what follows from
+it `<root>-S02-1`), and a row it drops keeps its id spent. The labels are
+the life generator's, with the contact a finding names and, for a symptom a
+reviewer's rule names, which: the root is the call's missing record
+(`contacts.promise_id`, with the promise the record should have held, or
+`contacts.complaint_logged`); every other difference between the two
+histories, field by field, is a symptom (the contact log but for its
+`related` lists, the promise log, the comment log, the complaint log, the
+transcripts, the dialer's pauses); and the named ones are
+`dialed_in_window`, `kept_not_marked`, `broken_not_followed_up`,
+`no_acknowledgment`, `no_response` and `raised_again`. A loan takes one of
+each. Where one error's twin does not make the call the other was asked for,
+the other is not made, and the planter says so: S-01's, when a hardship call
+days after the promise call takes a promise of its own, so it is no longer
+escalated and its follow-up is never made; S-02's, when a promise taken on
+the call raising the complaint again, or on the borrower's next call about
+the same matter, ceases the dialer and the dialer's conversation S-01 was
+asked for is never made, or when the call S-01 was asked for was the
+borrower's call again about the complaint's matter, whose place the call
+raising it again takes.
+
+A clean center is byte for byte what it was. The override and
+`unrecorded_promises` are absent from every clean history, and
+`complaintLog` stores nothing, so the staff errors moved no version of their
+own: they arrived beside contacts 1.2.0's escrow call, and a center with
+them is the center without them, held side by side (rows, notes, every
+transcript and C-01 to C-08 planted at 5 %, on 120 loans over 48 months and
+60 over 120, 80 loans over 72 months with the escrow call pinned, and 60
+over 36 pinned irritated).
+call-qa's held-out pin (`4e175948…`) passes as contacts 1.2.0 left it.
+contact-audit's books set seven profile pins of their own, `style`,
+`complaint_chance` (the share of handled calls that carry a complaint, in
+place of the reason's weight and the multiples; `complaint_multiplier` is
+the other way to pin it), `call_multiplier` (the ordinary inbound volume,
+month by month), `closed_follow_up` (how often the borrower calls again, 3
+to 60 days later, about a matter an agent handled, open or closed, filed as
+any call about its reason is that day, beside the follow-up an open issue
+gets; unset, never), `kept_promise_share` (how often a conversation the next
+payment follows within three weeks takes a promise for it; unset, always),
+`kept_promise_slack` (how many days past the payment's day a kept promise's
+date may fall, the borrower naming a day and paying on or before it; unset,
+none) and `cease_from_call` (a promise taken on an inbound call ceases the
+dialer from the call's minute, so an attempt earlier that day is made;
+unset, from the start of the day), each of which changes no draw on a center
+that does not set it. The audit's busier books reached one call the writer
+had never written, a payment taken on a call with nothing left to quote,
+which threw; it now quotes nothing, which changes no call that was written
+before.
+
 **Not covered yet:**
 
 - the §1024.40 assignment and the good-faith determination;
@@ -4579,6 +4714,579 @@ holds (docs/decisions.md, "The escrow call reads the annual statement").
 
 Generating the held-out suite takes about nine seconds on a loaded machine.
 
+## contact-audit
+
+contact-audit 1.0.0 grades a quality-control desk's audit of a contact
+center for staff errors: one loan's contact history over a window, read for
+a promise an agent heard and did not record (S-01) and a complaint an agent
+heard and did not log (S-02), each reported at its root with the symptoms it
+caused. It is built on the contact center's staff errors (above, "The
+contact center", "Staff errors").
+
+**The task.** The loan (its number, borrowers, state and servicer), the
+window, and the contact log for the window in the task itself: every call,
+phone-menu session, portal login, text, e-mail, letter and dialer attempt,
+each with its disposition, issue, agent, the promise it recorded and whether
+a complaint was logged. The ids are the desk's own: every contact and note
+is numbered in its log's order, because a twin names what it added off its
+root. The rest it reads with the tools.
+
+**The rulebook** says first what the servicer's systems do: a promise is
+written in the note ("PTP $1,234.56 BY 03/28/27") and recorded, ceases the
+dialer through its date, and is marked kept or broken; a complaint is
+acknowledged on the call, logged, and answered in writing within 15
+calendar days (spec 4.5). Then the two errors:
+
+- **S-01.** A call made a promise when its note's own part (before a
+  copied-forward "| PREV:") says an amount, BY and a date. Such a call with
+  no promise in the log is a root, reported with the promise as the note
+  gives it. Its symptoms: each outbound collection attempt after the call
+  through the pay-by date (`dialed_in_window`), and `kept_not_marked` when
+  the payments after the call's day through the pay-by date add up to the
+  amount (with the calculator), `broken_not_followed_up` otherwise.
+- **S-02.** A call voiced a complaint when any line of its transcript says
+  one of the call rubric's complaint phrases (`COMPLAINT_PHRASES`), whoever
+  the recognizer labeled. Such a call with `complaint_logged` false is a
+  root, unless an earlier one with the same reason was too: then it is the
+  borrower raising that root's complaint again, a symptom and never a root.
+  Nobody logged the first, so no case links the two, and the later call may
+  be filed under an issue of its own: its reason is what ties them. Its
+  symptoms: no line acknowledging it (`ACK_PHRASES`, the contact center's
+  three wordings), no case in the complaint log, and each later call with
+  the same reason that voiced one and was not logged (`raised_again`).
+
+**The tools.** Primitives only: `read_notes` (by contact or by days),
+`read_transcript`, `search_transcripts` (every recorded call in the window,
+read as call-qa's search reads a line), `read_promises`, `read_complaints`
+(each as it stood at the window's end), `read_payments` and refi's
+`calculate`. No tool compares two records or names an error.
+
+**The grader** is the twin's labels, a root read apart from its symptoms as
+boarding-triage 1.1.0 reads its manifest, with two differences: a root's
+symptoms are required, and a root the window does not hold fails it.
+
+- Each root is found when a finding names its error, kind "root" and its
+  call; an S-01 root also has its promise, the amount in cents and the
+  date.
+- Each root has a symptoms field: every symptom the rules give it, each on
+  its contact. The root without them fails; they without the root earn
+  that field and fail on the root.
+- Every window has a false-roots field: a finding of kind "root" that no
+  label names fails the window, whatever else is right. A promise the log
+  holds, a complaint logged, a call raising a complaint again, and a root's
+  call named under the other error are each no staff error, and naming one
+  is the mistake a QA reviewer must not make. A clean window is a control:
+  it passes only with no root.
+- Extra findings are one field, symptoms only, a second finding on one
+  thing among them: at most two.
+
+**A root's symptoms are required.** The rulebook asks for them, and they are
+where a window's arithmetic and timing are: the payments after the call's
+day through the pay-by date, added with the calculator; an attempt later on
+the promise call's own day inside its window and one earlier outside it; the
+three wordings of an acknowledgment; the call raising a complaint again,
+found by its reason. The reference reaches every one on every kept draw, so
+they are fair to require. The roots alone, once false roots fail, would
+already tell a recorded promise from an unrecorded one and a logged
+complaint from an unlogged one; with the symptoms required they pass the
+50 clean windows and nothing else (mean score 0.816), so a pass is the
+whole audit.
+
+**The tasks.** Each is a life book of one loan, run 30 months: a delinquency
+every two to four months, half of them with the scenario's promise (kept or
+broken), beside the ones the contact center draws from the receipts. Seven
+profile pins make the borrower the kind a desk audits: irritated, with a
+grievance voiced on 35 % of the inbound calls an agent handles whatever the
+call is about (0.352 of them on the books of 400 training keys, seed 11, and
+0.323 of every handled call; an outbound call carries none), so whether a
+call carries one says nothing of what the call is about; calling fourteen
+times as often as the calibration's borrower in the same status; calling
+again 3 to 60 days later about seven in ten of the matters an agent handled,
+open or closed, filed as any call about its reason is that day, as S-02's
+borrower always calls again about a complaint nobody logged; paying within
+three weeks of a conversation without having promised to on it 85 % of the
+time (in the calibration's center every such conversation takes a promise,
+which made a kept promise's call the only one of its kind: below); naming,
+when promising, a day up to a week past the one the payment then comes (in
+the calibration's center the promise's date is the payment's); and a promise
+taken on an inbound call ceases the dialer from the call, an attempt earlier
+that day being made. The task takes two anchors from the clean center, in
+turn by index a promise the borrower kept and one broken, which the contact
+center drew from a call (never the scenario's own promise call: "Staff
+errors" above), and a complaint call, within 120 days of each other, each a
+call no other contact on the loan shares a key with. A pair needs from ten
+days before the first to a week past the promise's date and past the last
+day the complaint can be raised again. The window is what one pair drawn
+from them needs and 90 to 210 days more, split at random between before and
+after, and the anchors are then drawn again from every pair the window holds
+as it holds that one, so given the window they are any pair it holds: where
+they sit in it, and how far apart, says nothing of which pair they are. Four
+plans in turn make nothing (the control), S-01 on the promise, S-02 on the
+complaint, or both, so the held-out suite (seed 1, 200 windows, drawn on
+life 1.2.0 and contacts 1.2.0, pinned by hash) holds 50 of each. It has 100
+roots of each error, 212 dialer attempts inside a promise's window, 50
+promises kept and 50 broken, and 100 calls raising a complaint again, 3 to
+60 days after it (19 within 15 days; 19 under the root's own issue, 81 under
+issues of their own; 19 made by someone other than the borrower, and 4
+taking a promise). A kept promise's date falls 0 to 7 days past the payment
+that keeps it, 9, 6, 4, 9, 5, 3, 8 and 6 of the 50 on each day. S-01's roots
+are 30 dialer conversations, 32 inbound calls about a payment arrangement
+and 38 about a hardship; S-02's are on 16 reasons, a payment arrangement
+(30) and a hardship (17) the most. A window averages 252 days, both ends
+counted (102 to 373), 89.5 contacts (28 to 188), 53.8 recorded calls, 4.7
+calls whose note states a promise and 14.2 that voice a complaint. 216 of the
+windows' calls are about an escrow analysis, 3 of them S-02 roots.
+
+**Beside the roots, every window holds promises recorded and complaints
+logged.** Counting the calls whose promise the log holds, and the logged
+calls whose transcript says the complaint in the rubric's words (one the
+recognizer hid is no false root a reviewer could name): at least one of each
+in every window, a draw with fewer being turned away (`AUDIT_MIN_HANDLED`),
+and 4.2 promises (1 to 9) and 13.2 complaints (2 to 32) on average. 186
+windows hold two promises or more and 161 three or more; 200 hold two
+complaints or more and 197 three or more. So reporting every promise or
+every complaint names a false root in every window.
+
+**A draw is kept only when it is fair to grade, and this is a filter.** The
+reference, reading the window as rendered, must find exactly the labels'
+roots and the symptoms a rule names, and nothing more (nothing at all in a
+clean window). On the held-out suite 144 of 200 windows are first draws,
+and the longest took 6; the redraws are 72 books with no pair of anchors,
+5 windows with too few promises recorded or complaints logged beside the
+roots, 5 where the recognizer hid the complaint raised again (a misheard or
+dropped word in the phrase) and 5 where it hid the root's own. Of the first
+draws of 1,000 training tasks (train seed 11), 769 had a pair of anchors and
+reached the check, and 42 were turned away: 16 for too few promises recorded
+or complaints logged, 9 because the recognizer hid the complaint, 15 the
+complaint raised again, and 2 because S-02's twin does not make the call
+S-01 was asked for (a promise taken on the call raising the complaint again,
+or on the borrower's next call about the same matter, ceases the dialer, and
+the dialer's conversation is never made; or S-01's call was the borrower's
+call again about the complaint's matter, whose place the call raising it
+again takes). None is turned away for its payments any more: a scripted
+promise, which the scenario could break on a day the borrower's own payment
+met it, is never an anchor. The same filters are v1's limits.
+
+**The floors.** Each cheap policy in the first table chooses its roots and is
+then given every symptom the rules give those roots, read off the window as
+the reference reads them, so a floor is what its choice of roots is worth.
+Passes are of 200 windows, then of the 50 clean, S-01, S-02 and both:
+
+| Policy                                                                            | Passes | Clean | S-01 | S-02 | Both |  Mean |
+| --------------------------------------------------------------------------------- | -----: | ----: | ---: | ---: | ---: | ----: |
+| Report nothing                                                                    |     50 |    50 |    0 |    0 |    0 | 0.546 |
+| Every promise (each call whose note states one, as an S-01 root)                  |      0 |     0 |    0 |    0 |    0 | 0.301 |
+| Every complaint (each call whose transcript voices one, as an S-02 root)          |      0 |     0 |    0 |    0 |    0 | 0.390 |
+| Every promise and every complaint                                                 |      0 |     0 |    0 |    0 |    0 | 0.472 |
+| S-01 by disposition: a promise call with no promise, "information provided"       |      1 |     0 |    1 |    0 |    0 | 0.141 |
+| The first such call                                                               |      4 |     0 |    4 |    0 |    0 | 0.301 |
+| S-02 by disposition: escalated and not logged, the first on its issue             |     30 |    30 |    0 |    0 |    0 | 0.386 |
+| Both by disposition                                                               |      0 |     0 |    0 |    0 |    0 | 0.134 |
+| Every promise call with no `promise_id`                                           |      0 |     0 |    0 |    0 |    0 | 0.257 |
+| A `promise_to_pay` call with no `promise_id`                                      |     50 |    50 |    0 |    0 |    0 | 0.541 |
+| A hardship call with no promise, "information provided"                           |     50 |    50 |    0 |    0 |    0 | 0.546 |
+| A promise call with no promise that a payment followed within three weeks         |     18 |    16 |    2 |    0 |    0 | 0.322 |
+| The same, only where it is the only one                                           |     43 |    41 |    2 |    0 |    0 | 0.509 |
+| Every handled call with no CMPL note                                              |      0 |     0 |    0 |    0 |    0 | 0.196 |
+| Every call with no CMPL note whose reason a logged complaint has                  |      0 |     0 |    0 |    0 |    0 | 0.158 |
+| An unlogged call another unlogged call for its reason follows within 3 to 60 days |      0 |     0 |    0 |    0 |    0 | 0.078 |
+| The first such pair                                                               |      3 |     0 |    0 |    3 |    0 | 0.272 |
+| The same, only where it is the only pair                                          |     49 |    49 |    0 |    0 |    0 | 0.543 |
+| The first such pair whose later call is under an issue of its own                 |      4 |     0 |    0 |    4 |    0 | 0.279 |
+| A written request on an issue no logged call has                                  |     48 |    48 |    0 |    0 |    0 | 0.539 |
+| A closed call followed on its issue within 15 days                                |      0 |     0 |    0 |    0 |    0 | 0.061 |
+| The promise note nearest the window's middle                                      |     16 |     0 |   16 |    0 |    0 | 0.369 |
+| Every complaint not logged, the raised-again clause left out                      |     50 |    50 |    0 |    0 |    0 | 0.645 |
+| The roots the rules give, no symptom                                              |     50 |    50 |    0 |    0 |    0 | 0.816 |
+
+The second table is the policies that read only the logs' structure: the
+rows' fields and flags, their dispositions, reasons, purposes, issues and
+dates, the promise log's dates, the payments, and the comment log's areas
+and counts, never what a transcript or a note says. With no words to read,
+each gives its roots the symptoms a structure can: an S-02 root
+`no_acknowledgment`, `no_response` where the complaint log holds no case for
+it, and `raised_again` on the later unlogged calls for its reason (every one,
+or the first 3 to 61 days on); an S-01 root its promise guessed as the next
+payment after the call, which a kept promise is, and the symptoms the rules
+give from there. V1 to V8 are the second review's; the rest are the ones the
+rework tried against itself. Training is the passes of the 300 training
+windows (seed 11), 75 of them clean:
+
+| Policy                                                                                                          | Passes | Clean | S-01 | S-02 | Both |  Mean | Training |
+| --------------------------------------------------------------------------------------------------------------- | -----: | ----: | ---: | ---: | ---: | ----: | -------: |
+| V1: the first unlogged hardship or escrow-analysis call                                                         |      1 |     1 |    0 |    0 |    0 | 0.034 |        4 |
+| V2: the only conversation with no promise, "information provided", a payment within 21 days and no promise near |     39 |    38 |    1 |    0 |    0 | 0.457 |       51 |
+| V2': the same, any disposition                                                                                  |     39 |    38 |    1 |    0 |    0 | 0.484 |       56 |
+| V3: a closed first call on its issue that a later contact follows into the next month                           |     24 |    24 |    0 |    0 |    0 | 0.306 |       36 |
+| V4: the only two unlogged calls for a reason no logged call has, 3 to 61 days apart                             |     35 |    34 |    0 |    1 |    0 | 0.356 |       41 |
+| V5: V1, or else V3                                                                                              |      1 |     1 |    0 |    0 |    0 | 0.034 |        4 |
+| V6: V1 and V2                                                                                                   |      0 |     0 |    0 |    0 |    0 | 0.033 |        3 |
+| V7: V1, or else V2                                                                                              |      0 |     0 |    0 |    0 |    0 | 0.027 |        3 |
+| V8: the first unlogged hardship call referred to loss mitigation                                                |      8 |     7 |    0 |    1 |    0 | 0.090 |       10 |
+| The same, transferred                                                                                           |      7 |     7 |    0 |    0 |    0 | 0.089 |       14 |
+| The first conversation of V2''s kind                                                                            |     22 |    19 |    3 |    0 |    0 | 0.280 |       22 |
+| The last                                                                                                        |     20 |    19 |    1 |    0 |    0 | 0.321 |       21 |
+| The one its payment follows soonest                                                                             |     21 |    19 |    2 |    0 |    0 | 0.342 |       21 |
+| The only one the dialer made                                                                                    |     39 |    37 |    2 |    0 |    0 | 0.469 |       61 |
+| The only inbound one                                                                                            |     42 |    42 |    0 |    0 |    0 | 0.480 |       56 |
+| The first unlogged call a later one for its reason follows within 3 to 61 days                                  |      3 |     0 |    0 |    3 |    0 | 0.031 |        6 |
+| The first such call whose later one is under an issue of its own                                                |      3 |     0 |    0 |    3 |    0 | 0.041 |        4 |
+| The last such call                                                                                              |      2 |     0 |    0 |    2 |    0 | 0.035 |        6 |
+| Every such call, one a reason                                                                                   |      0 |     0 |    0 |    0 |    0 | 0.071 |        1 |
+| The only such call                                                                                              |     49 |    49 |    0 |    0 |    0 | 0.539 |       73 |
+| The only such call whose later one is with the borrower and took no promise                                     |     48 |    48 |    0 |    0 |    0 | 0.528 |       66 |
+| A reason's only two unlogged calls, 3 to 61 days apart, the only such reason                                    |     33 |    32 |    0 |    1 |    0 | 0.345 |       40 |
+| The first unlogged call of the reason with the most                                                             |      2 |     0 |    0 |    2 |    0 | 0.047 |        2 |
+| The unlogged call the most later ones for its reason follow within 3 to 61 days                                 |      2 |     0 |    0 |    2 |    0 | 0.039 |        3 |
+| The only closed unlogged call followed on its issue within 3 to 15 days                                         |     48 |    48 |    0 |    0 |    0 | 0.516 |       69 |
+| The unlogged call before the only later arrangement or hardship call no dialer attempt is near                  |     33 |    31 |    0 |    2 |    0 | 0.395 |       54 |
+| The last conversation of V2''s kind, and the first call of a pair                                               |      1 |     0 |    0 |    1 |    0 | 0.039 |        2 |
+
+The rows that read the logs' structure are the tells the twin has carried,
+and what each passes now. The first build left five, which the first rework
+removed: a scripted `promise_to_pay` call with no `promise_id` and
+"information provided" (S-01 is never made on one); a hardship call
+"information provided" (a hardship call whose promise nobody recorded is
+dispositioned as one that took none); a written request on an issue no
+logged call has (nobody tells the borrower whose complaint nobody logged how
+to send one); the call raising a complaint again 16 to 35 days later on the
+root's own issue (now 3 to 60 days, under an issue of its own, tied by its
+reason); and a promise call with no promise that a payment followed within
+three weeks (in the calibration's center every such call takes a promise, so
+a kept promise nobody recorded was the only one of its kind). The second
+review found that the rework's pins and dispositions left more, each removed
+at its cause:
+
+- **V1, an unlogged hardship or escrow-analysis call** (73 of 200 on the
+  first rework's suite, 50 clean and 23 of the S-02 windows): a borrower
+  complaining five times as often complained on nearly every hardship and
+  escrow call, so an unlogged one was nearly always the root. The pinned
+  chance is now 35 % on every call whatever its reason, so a reason says
+  nothing of whether its calls carry one, and every reason's calls go
+  unlogged without a complaint in the clean windows as often as any other's;
+- **V8, the first unlogged hardship call referred to loss mitigation** (66):
+  the twin referred a hardship call nobody logged, or whose promise nobody
+  recorded, because a transfer would change its words, while a clean one is
+  transferred half the time. It now takes the same draw, a transfer
+  included: the root's words change, and nothing grades them;
+- **V2, the only conversation with no promise, "information provided", a
+  payment within 21 days and no promise near** (53, 13 of the 25 on S-01's
+  kept arm): the twin's dialer conversation was always "information
+  provided", while a clean one that takes no promise is referred half the
+  time, and few clean conversations a payment followed took no promise. The
+  twin draws the disposition half and half on a stream of its own; half the
+  scenario's delinquencies carry its promise call, so the contact center
+  draws the others' promises from what the borrower did; and the pinned
+  borrower pays without having promised to 85 % of the time, so such
+  conversations are many in every window. V6 (V1 and V2) passed 83 and V7
+  76;
+- **the call raising a complaint again** was always the borrower, by phone,
+  with no promise, drawn after the dialer, and the only call in a clean
+  window that came weeks after another of its reason under an issue of its
+  own. It is now drawn as any call of its reason that reaches an agent is
+  (whoever the agent can verify, its disposition, a promise, a follow-up and
+  the letters after it, and before the dialer, so a promise ceases it). That
+  left the pair: with every other fix made, the first unlogged call another
+  for its reason follows within 3 to 61 days passed 19 of the 50 S-02
+  windows, 14 of one arm's 25, with the call raising it again read off the
+  transcripts, and 21 where the later call came under an issue of its own.
+  So the pinned borrower calls again about two in five of the matters an
+  agent closed (seven in ten since the third review, and of the matters an
+  agent handled, open or closed, since the fourth: below), 3 to 60 days
+  later and filed the same way, and a clean window holds such calls without
+  a complaint as a twin holds one with: the two pass 3 and 3 now.
+
+The passes of V3, V4 and V5 were near the clean share on the first rework's
+suite too (52, 49 and 71, V5 riding on V1), and are lower now. What is left
+is a guess: the structural policies that pass most S-01 windows pick the
+first, the last or the soonest-paid of several conversations of V2's kind,
+and the ones that pass most S-02 windows the first or the last call of a
+pair; each loses as many clean windows as it gains.
+
+A third review the same day tried structural policies the tables did not
+then hold, on the suite before the fix below; they are the third table's,
+with what each passes now. Two were tells. An unlogged complaint left its
+issue open, so its call's follow-up was filed under the call's own issue:
+one landing in a later month on a closed call's issue, or on a closed call's
+fee or analysis, was nearly always the root's (A1), which found 2 and 3 S-02
+roots and lost one clean window of 325 on four suites. And one policy broke
+a bound (Z3): naming as an S-02 root, whenever a window has one, the last
+unlogged call in the anchors' zone (from ten days after the window opens to
+61 before it closes, where an S-02 root always is) that a later unlogged
+call for its reason follows 3 to 61 days on in another month, with a
+recorded promise call within 120 days. It failed 44 of the 50 clean windows
+and passed 27, but 21 of the 50 S-02 windows, 14 of one arm's 25, and out of
+sample a quarter of S-02 roots (24 and 26 % on two fresh suites of 400). The
+borrower always calls again about a complaint nobody logged, and called
+again about two in five of the matters an agent closed, so a root was nearly
+always such a call and a clean call seldom, and a window held two to four of
+them in the zone. Two changes, at those causes:
+
+- the pinned borrower calls again about seven in ten of the matters an
+  agent closed (`closed_follow_up` 0.7; since the fourth review, of the
+  matters an agent handled), so a clean window holds such pairs with no
+  complaint nearly as often as a twin holds its one with; the pin is read
+  only where it is set, so no clean center moves;
+- the follow-up drawn on an unlogged complaint's issue, which the clean
+  history draws for the escalation and the twin drew the same, was filed,
+  where the root's row is closed, as one after a closed call is: under the
+  issue its own day gives its reason, since nothing in the log holds the
+  issue open. Since the fourth review (below) it is not made there at all,
+  as no closed row's issue is followed up.
+
+After that fix Z3 passed 15 (4 clean and 11 S-02, 5 and 6 by arm) and 20 on
+the training suite (5 clean, 6 and 9), and found 17 and 20 % of S-02 roots
+on the two fresh suites; it passes 6 (6 S-02, 3 and 3) and 11 (1 clean, 10
+S-02) now, and 14 and 18 % on two fresh suites of 400 (train seed 12,
+held-out seed 2); A1 finds none. The rest of the third review's policies
+held the bounds before and hold them now. The only conversation of V2's kind
+with no attempt on its day and one the next (A2) passed 52 and 75, and 54
+and 76 in either direction (A2'), while the twin kept an inbound promise
+call's own day quiet on the dialer (the fourth review, below); they pass 46
+and 64, and 47 and 66, now. The review's searches, every conjunction of up
+to four structural filters with a first, last or only choice, 4,413 on
+S-01's kept arm and 28,926 on S-02's pairs, found at most 54 and 79 for S-01
+and 55 and 78 for S-02 after the third review, and now find at most 51 and
+75 for S-01 and 52 and 77 for S-02, and at most 4 and 7 of an arm's 25 on
+the held-out suite, 3 and 9 of its 37 or 38 on the training suite. M1 to M3
+are the rework's own, Z3 read for where a chain of such calls starts; M4 is
+one of the S-02 search's best on the held-out suite (its best, 55, adds a
+later call on a Saturday), M5 the S-01 search's that passes most of the kept
+arm on the training suite, and M6 the S-02 search's that passes most of an
+arm on the held-out suite:
+
+| Policy                                                                                                                              | Passes | Clean | S-01 | S-02 | Both |  Mean | Training |
+| ----------------------------------------------------------------------------------------------------------------------------------- | -----: | ----: | ---: | ---: | ---: | ----: | -------: |
+| A1: a closed unlogged call an open call's follow-up follows, into a later month or onto a fee's or analysis's issue                 |     49 |    49 |    0 |    0 |    0 | 0.537 |       74 |
+| A1': the only one, `raised_again` on the first call of the shape                                                                    |     49 |    49 |    0 |    0 |    0 | 0.537 |       74 |
+| A2: the only inbound conversation of V2''s kind with no attempt on its day and one the next                                         |     46 |    45 |    1 |    0 |    0 | 0.483 |       64 |
+| A2': the same in either direction, its payment a week before the window closes                                                      |     47 |    46 |    1 |    0 |    0 | 0.491 |       66 |
+| A3: the only conversation of V2''s kind no other conversation follows before its payment                                            |     29 |    27 |    2 |    0 |    0 | 0.407 |       42 |
+| A3': the same, with no attempt on its day, its payment a week before the window closes                                              |     32 |    30 |    2 |    0 |    0 | 0.433 |       48 |
+| A4: the only reason with one unlogged call in the zone and one call of the shape after it                                           |     40 |    40 |    0 |    0 |    0 | 0.451 |       65 |
+| A4': the same, no logged call for its reason, a promise the log holds within 120 days                                               |     44 |    44 |    0 |    0 |    0 | 0.490 |       68 |
+| A5: the only conversation of V2''s kind from four days in, its payment a week before the window closes                              |     40 |    39 |    1 |    0 |    0 | 0.489 |       58 |
+| A6: the only first call in the zone of three for a reason, each of the shape after the one before                                   |     39 |    39 |    0 |    0 |    0 | 0.454 |       61 |
+| A7: the only closed call in the zone with its issue's call 3 to 15 days on and one of the shape under another                       |     44 |    44 |    0 |    0 |    0 | 0.482 |       66 |
+| A8: A1, or else A4', and A2 beside it                                                                                               |     40 |    39 |    1 |    0 |    0 | 0.426 |       57 |
+| A8': A1 and A2, nothing else                                                                                                        |     45 |    44 |    1 |    0 |    0 | 0.474 |       64 |
+| A9: the only first call of a pair in the zone with a single note                                                                    |     48 |    48 |    0 |    0 |    0 | 0.526 |       72 |
+| A10: the only first call of a pair in the zone whose later call is its reason's only unlogged call that month                       |     49 |    47 |    0 |    2 |    0 | 0.523 |       71 |
+| Z0: the last unlogged call a call of the shape follows                                                                              |      0 |     0 |    0 |    0 |    0 | 0.008 |        3 |
+| Z0': the same, one of those under another issue                                                                                     |      4 |     0 |    0 |    4 |    0 | 0.035 |        5 |
+| Z1: the last such call in the zone                                                                                                  |      3 |     0 |    0 |    3 |    0 | 0.035 |       11 |
+| Z1': the first                                                                                                                      |      8 |     0 |    0 |    8 |    0 | 0.062 |        7 |
+| Z2: the last in the zone, one of its later calls under another issue                                                                |      6 |     0 |    0 |    6 |    0 | 0.053 |       11 |
+| Z3: the same, with a promise the log holds within 120 days                                                                          |      6 |     0 |    0 |    6 |    0 | 0.059 |       11 |
+| Z4: the same, one of its later calls with no promise                                                                                |      7 |     0 |    0 |    7 |    0 | 0.062 |        9 |
+| Z5: Z2, with a settled promise a draw could have anchored within 120 days                                                           |      6 |     0 |    0 |    6 |    0 | 0.059 |       11 |
+| Z6: the first of those                                                                                                              |      8 |     0 |    0 |    8 |    0 | 0.070 |        8 |
+| V2' as the earlier script had it, hardship calls left out                                                                           |     40 |    39 |    1 |    0 |    0 | 0.472 |       57 |
+| V8 as the earlier script had it, `raised_again` on the later calls with the root's disposition                                      |      7 |     7 |    0 |    0 |    0 | 0.119 |       10 |
+| M1: Z3, skipping a call that is another candidate's later call                                                                      |      4 |     1 |    0 |    3 |    0 | 0.061 |        8 |
+| M2: the first of those                                                                                                              |      8 |     1 |    0 |    7 |    0 | 0.075 |        9 |
+| M3: Z3 where a chain of three starts                                                                                                |      8 |     6 |    0 |    2 |    0 | 0.098 |       18 |
+| M4: the only call with no promise, no logged call for its reason, none on its issue 3 to 15 days on, and a chain after              |     43 |    43 |    0 |    0 |    0 | 0.491 |       74 |
+| M5: the last conversation of V2''s kind with no attempt on its day                                                                  |     23 |    22 |    1 |    0 |    0 | 0.341 |       23 |
+| M6: the first call in the zone with no promise, a later one of the shape with the borrower, a promise the log holds within 120 days |      9 |     0 |    0 |    9 |    0 | 0.076 |        7 |
+
+A fourth review the same day tried structural policies that read what the
+tables did not: the window's extent, the dialer on a promise call's day, and
+how often a candidate's reason is called about. They are the fourth table's
+(G1 to G10, the two naive Bayes rankers it fitted written out, and the
+rework's own N1 to N3), with what each passes now. Three tells, each removed
+at its cause:
+
+- **the window's extent.** The window was drawn about the pair of anchors,
+  so a pair fit it only when the days before it (past the ten the anchors
+  need) and after it added up to 90 to 210, and a closer fit was a likelier
+  pair. Over the settled promises the log holds, that ruled out about a
+  fifth of the calls that look like an S-02 root and few roots. Read beside
+  how many unlogged calls the candidate's reason has in the window (a root's
+  call raising it again is certain, a look-alike's later call came at the
+  pin's chance or by chance, and chance favors a reason the borrower calls
+  about often), it passed 13 of the 25 windows on S-02's kept arm (G4, and
+  the ranker it is written from), a majority of an arm. The window is now
+  drawn about one pair, and the anchors drawn again from every pair it holds
+  as it holds that one, so given the window they are any pair it holds;
+- **the dialer on a promise call's day.** A recorded promise ceased the
+  dialer from the start of its call's day, and the twin kept that day quiet
+  to stay the clean history until the call, so no root's day held another
+  attempt where 13 % of the look-alikes' did, and the twin dialed the next
+  day (A2's quiet day). Reading both, G7 passed 18 of the kept arm's 38 on
+  the training suite and 26 to 31 of 50 on three of four fresh suites. A
+  pinned promise now ceases the dialer from the call's minute
+  (`cease_from_call`): an attempt earlier that day is made in the clean
+  history too, and the twin dials that day as any other;
+- **the follow-ups around an S-02 root.** The twin drew the escalation's
+  follow-up on a closed root's issue and refiled it, on a Sunday as often as
+  any day, which no closed call's follow-up is; it called again about the
+  complaint beside the borrower's call again about the matter; and only a
+  closed matter was called about again, so an open row with a later call
+  was twice as likely a root. The pinned borrower now calls again about the
+  matters an agent handled, open or closed; about a complaint nobody logged
+  that call is the one raising it again, and the one the clean history drew
+  is not made; and where the twin's row is closed the escalation's
+  follow-up is not made either (each is drawn and undone, so every later
+  call keeps its number).
+
+What is left is the reason count: a root's call raising it again is certain
+and a look-alike's later call is not, so a reason called about three to six
+times in a window holds a root two to three times as often as one called
+about nine times or more. Two pins thin what it buys. The borrower calls
+fourteen times as often (`call_multiplier`, nine before), so a window holds
+about thirteen calls that look like an S-02 root where it held seven. And an
+S-01 root's promise is no longer the payment that kept it: the pinned
+borrower names a day up to a week past the payment's (`kept_promise_slack`),
+as a promise's date is the borrower's and the payment comes on or before it,
+so only the note says the date, and a policy that guesses the promise from
+the payment names the wrong date seven times in eight. Before that pin the
+kept arm was the nearest: a random pick among the conversations of V2's kind
+the zone allows found 35 % of its roots, and NB01, refitted, 26 of 50 on a
+fresh held-out draw (seed 3).
+
+| Policy                                                                                                                                                           | Passes | Clean | S-01 | S-02 | Both |  Mean | Training |
+| ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | -----: | ----: | ---: | ---: | ---: | ----: | -------: |
+| G1: S-02, the candidate in the zone the window's extent fits best                                                                                                |      7 |     0 |    0 |    7 |    0 | 0.085 |       14 |
+| G2: the first the extent fits                                                                                                                                    |      9 |     0 |    0 |    9 |    0 | 0.094 |       11 |
+| G3: the first it fits with no call for its reason in the 61 days before, or else the first it fits                                                               |      7 |     0 |    0 |    7 |    0 | 0.087 |       10 |
+| G4: a reason with three or four unlogged calls first, then two, five or seven, the rest last; a fit the extent rules out a third, a loose one before a close one |      8 |     0 |    0 |    8 |    0 | 0.076 |        9 |
+| G5: the only one the extent fits with no call for its reason in the 61 days before and no promise                                                                |     34 |    33 |    0 |    1 |    0 | 0.421 |       50 |
+| G6: S-01, the conversation of V2''s kind the extent fits best                                                                                                    |     26 |    23 |    3 |    0 |    0 | 0.332 |       31 |
+| G7: of those with no other attempt on their day and the guessed promise in the zone, the best fit, a quiet dialer day counted thrice                             |     29 |    26 |    3 |    0 |    0 | 0.351 |       32 |
+| G8: no other attempt on its day, the promise in the zone, a quiet day first, the last                                                                            |     26 |    24 |    2 |    0 |    0 | 0.353 |       29 |
+| G9: the only one of G7's with a quiet dialer day                                                                                                                 |     47 |    46 |    1 |    0 |    0 | 0.493 |       66 |
+| G10: both, the conversation and the S-02 candidate whose pair the extent fits best                                                                               |     24 |    24 |    0 |    0 |    0 | 0.248 |       32 |
+| NB, refitted: S-02 by a reason's unlogged calls and the extent's fit                                                                                             |      4 |     0 |    0 |    4 |    0 | 0.058 |       14 |
+| NB01, refitted: S-01 by the fit, the anchors, an attempt that day, the zone, the next attempt and the payment's lag                                              |     21 |    19 |    2 |    0 |    0 | 0.305 |       21 |
+| N1: S-02, a reason with three to six calls an agent handled, no complaint logged for it, none in the 61 days after                                               |      2 |     0 |    0 |    2 |    0 | 0.034 |       18 |
+| N2: S-01, G8's choice, its promise dated the log's median days between a kept promise's date and its payment                                                     |     25 |    24 |    1 |    0 |    0 | 0.350 |       29 |
+| N3: S-01, NB01's choice, its promise dated a week past the payment                                                                                               |     22 |    19 |    3 |    0 |    0 | 0.295 |       24 |
+
+A fifth review the same day read the redraw itself, and what the tables still
+did not: the share of a window's pairs a candidate is in, the call raising a
+complaint again and what follows it, which call comes first on an issue, the
+comment log's counts and users, and the payments around a call. It wrote ten
+policies on them (H1 to H9, and H6') and fitted logistic rankers on those and
+about seventy other features of a candidate, the smallest written out (LF).
+They are the fifth table's. None found a tell:
+
+- **the redraw.** Given the window, a candidate is as likely as the share
+  of the window's pairs it is in, by arm its promise partners over every
+  logged complaint's and its own. The pairs a window holds are held to the
+  zone, so most candidates share the largest: the root's is the largest in
+  41 of the 50 held-out S-02 windows, tied there with eight or nine others
+  on average, and H1 finds 4 roots;
+- **what follows the call raising a complaint again.** It is followed for its
+  reason, at the pin's chance, by a call of its own, which a look-alike's
+  call again about its matter, a follow-up itself, never is. The borrower
+  calls fourteen times as often, so a later call for the reason comes by
+  chance about as often (H2, H4, H8);
+- **the window with no pair of a kind.** Where no settled promise the log
+  holds fits a logged complaint, the window's promise anchor was not recorded
+  or was of the other arm: on the held-out suite no kept promise fits one in
+  33 of the 50 S-01 and both windows on the kept arm and in 1 of the 50 clean
+  and S-02 ones, but in 32 of the 100 clean and S-02 windows on the broken
+  arm. It says S-01 is likelier, not which call, and never the date, which
+  the borrower names up to a week past the payment's; dated by the log's
+  commonest slack, or three days past the payment, the call finds no kept
+  promise held out and at most 2 of an arm's 38 in training (H6, H6', H7);
+- **the rankers.** LF, fitted on the 800 clean and S-02 windows of four fresh
+  suites of 400 (train seeds 12 and 13, held-out seeds 2 and 3) and written
+  out with 32 weights, passes 12 S-02 windows held out (6 and 6 by arm) and
+  17 of 75 in training (10 and 7). The same logistic over all 281 indicator
+  features passes 14 (10 and 4) and 19 (10 and 9); with the reason, its count
+  and the later call's crossed, 15 (8 and 7) and 22 (11 and 11); a
+  conditional logit fitted on the S-02 windows, alone or with the both
+  windows, at most 12 (10 and 2) and 21 (12 and 9). Fitted on three of the
+  fresh suites and scored on the fourth, the 281-feature logistic passes 15
+  to 26 of 100 S-02 windows, at most 15 of an arm's 50. Naming its candidate
+  only where its fitted chance clears a threshold, the one chosen on the
+  fitting suites or any from 0.3 to 0.6, a logistic passes at most 51 held
+  out and 78 in training: the window and the anchors are drawn before the
+  plan is made, and the root's row is a clean row's, so a window with an S-02
+  root reads as a clean one does.
+
+| Policy                                                                                                                                                                                                         | Passes | Clean | S-01 | S-02 | Both |  Mean | Training |
+| -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -----: | ----: | ---: | ---: | ---: | ----: | -------: |
+| H1: S-02, the candidate the redrawn pair most likely lands on                                                                                                                                                  |      4 |     0 |    0 |    4 |    0 | 0.040 |       11 |
+| H2: its later call followed for its reason 3 to 61 days on, logged or not, the reason three to six calls, the likeliest pair                                                                                   |     32 |    23 |    0 |    9 |    0 | 0.266 |       37 |
+| H3: a closed call off the arrangement and hardship reasons, its later call closed, with the borrower and no promise, the last                                                                                  |     16 |    11 |    0 |    5 |    0 | 0.136 |       24 |
+| H4: one note on it and one on its later call, an agent's each, and a call after that, the only one                                                                                                             |     44 |    43 |    0 |    1 |    0 | 0.506 |       68 |
+| H5: nothing on its issue 3 to 15 days on, its later call the first on an issue of a later month, the reason with the fewest calls, three or more                                                               |      7 |     2 |    0 |    5 |    0 | 0.098 |       19 |
+| H6: S-01, where no kept promise the log holds fits a logged complaint, the conversation of V2''s kind one payment follows within 21 days and none preceded, the most partners, dated the log's commonest slack |     43 |    43 |    0 |    0 |    0 | 0.472 |       62 |
+| H6': the same call in every window, dated three days past the payment                                                                                                                                          |     28 |    28 |    0 |    0 |    0 | 0.362 |       35 |
+| H7: both, where no promise the log holds fits a logged complaint, H6's call and LF's candidate                                                                                                                 |     50 |    50 |    0 |    0 |    0 | 0.525 |       77 |
+| H8: a reason's first call, in the zone, of three or four for it, each 3 to 61 days after the one before, the only such reason                                                                                  |     40 |    39 |    0 |    1 |    0 | 0.406 |       62 |
+| H9: a payment in the week before it and none in the three weeks after, the likeliest pair                                                                                                                      |     22 |    19 |    0 |    3 |    0 | 0.263 |       46 |
+| LF: S-02, a logistic written out: the pair's share, the later call and what follows it, the reason, its count, the caller                                                                                      |     12 |     0 |    0 |   12 |    0 | 0.095 |       18 |
+
+The clean share is 50 of 200, and 75 of 300 on the training suite. On the
+held-out suite no structural policy in the five tables passes more than 50:
+of the ones that pass an error's window the most there is 49, A10 (47 clean
+and 2 S-02), and 48 by reason, the only unlogged pair for a payoff request
+(46 and 2). On the training suite the most is 77, H7 (75 clean, one S-02
+window and one both), then 74, M4 (67 and 7), and by reason 72, the
+online-access pair (71 and 1). None passes a majority of any error's windows,
+nor of either promise arm's within one: on the held-out suite the most is 16
+S-01 windows (the promise note nearest the window's middle, which reads the
+notes; 8 of the kept arm's 25) and 3 structurally, and 12 S-02 windows (LF),
+7 of an arm's 25 (M6); on the training suite 24 of 75 S-01 windows (the same
+note; 17 of the kept arm's 38) and 4 structurally (N3), and 17 of 75 S-02
+windows (N1 and LF), 12 of an arm's 38 (N1). Out of sample, on four fresh
+suites of 400 (train seeds 12 and 13, held-out seeds 2 and 3; NB and NB01
+fitted on the first two, and LF, fitted on all four, left out), no structural
+policy in the tables passes more than 20 of the 100 S-02 windows (H2,
+held-out seed 3) or 12 of an arm's 50 (H2), nor 9 of the kept arm's 50 (N3).
+Beyond the tables, the fifth review's larger rankers pass at most 15 of the
+50 S-02 windows held out and 10 of an arm's 25, 22 of 75 in training and 12
+of an arm's 38, and out of sample 26 of 100 and 15 of an arm's 50. A test
+holds every row of the five tables, and holds each policy, every one of the
+structural ones by reason too (a reason's first unlogged call, and its only
+pair), under those bounds on both suites: at most four points past the clean
+windows, and less than half of any error's windows and of either arm's. The
+rule itself, clause by clause, passes all 200, so each row of the first table
+is what leaving a clause out costs: the raised-again clause alone costs the
+100 windows with an S-02 root, every one of which holds a call raising it
+again.
+
+**The proof of fairness.** The reference passes the held-out suite, 300
+training tasks (seed 11) and fifteen hand-built histories in at most three
+turns and seven tool calls (two and six on the generated windows): one turn
+reads the logs and searches the transcripts, one adds up a window's
+payments, one submits. The histories hold each rule on its edge: a promise
+recorded and kept; one not recorded with two attempts in its window; the
+window's pay-by date in and the day after out, and a payment a cent short;
+an attempt earlier on the promise call's day out and one later in; two
+payments after the call's day adding up to the promise, beside one on the
+call's day that does not count; a copied-forward note's promise; a complaint
+logged and answered on day 9; one not logged and raised again; a later
+complaint for the same fee, logged this time; both on one loan; and, for the
+rules on false roots, a clean window beside promises recorded, kept and
+broken, and complaints logged; an unrecorded promise beside promises the log
+holds; an unlogged complaint beside complaints logged, raised again under an
+issue of its own; one raised again four days later, before an answer was
+due; and a promise on a hardship call referred to loss mitigation, whose
+disposition says nothing either way. On the first three of those, reporting
+every promise or every complaint fails on a false root; on every history
+raising a complaint again, so does leaving the raised-again clause out; and
+on every history with an error, the roots alone fail on their symptoms.
+
+Not in 1.0.0:
+
+- other staff errors (a payment taken over the phone and not posted, a
+  callback promised and not made, a third party's authorization taken and
+  not recorded);
+- interpreted calls: the borrower is English-speaking, as in call-qa;
+- the written channels' complaints: a complaint by letter or e-mail may be
+  a notice of error (§1024.35), with clocks of its own, and the contact
+  center draws complaints on calls only;
+- a promise or a complaint the recognizer hid from the reviewer, which only
+  the label could tell;
+- a staff error on the scenario's own promise call.
+
+Generating the held-out suite takes about a minute on a loaded machine.
+
 ## The Supermortgage Gym
 
 Every environment also runs in a browser, for people without a checkout:
@@ -4625,6 +5333,7 @@ npm run env:refi -w @hm/environments -- --env catchup-posting --policy reference
 npm run env:refi -w @hm/environments -- --env escrow-review --policy reference
 npm run env:refi -w @hm/environments -- --env boarding-triage --policy reference
 npm run env:refi -w @hm/environments -- --env call-qa --policy reference
+npm run env:refi -w @hm/environments -- --env contact-audit --policy reference
 npm run env:refi -w @hm/environments -- --env tape-intake --policy reference
 npm run env:transfer-package -w @hm/environments -- --out /tmp/packages   # the demo loan's four packages
 npm run env:transfer-package -w @hm/environments -- --out /tmp/packages --each   # and one of each defect alone

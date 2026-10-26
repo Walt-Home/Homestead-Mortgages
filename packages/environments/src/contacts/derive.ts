@@ -126,6 +126,13 @@ const COMPLAINT_BASE = 0.03;
 const IRRITATED_COMPLAINT = 2.5;
 /** A follow-up call on an issue left open, within two weeks. */
 const FOLLOW_UP = 0.25;
+/**
+ * The sequence numbers a twin's own drafts take (S-02's call raising the complaint again, and what follows it): past
+ * any a history reaches, so no draft the clean history holds is numbered otherwise, and no stream keyed by one moves.
+ */
+const STAFF_SEQ = 1_000_000_000;
+/** How many callers S-02's call raising the complaint again draws, until one fits; then the borrower. */
+const AGAIN_DRAWS = 8;
 /** Outbound attempts to a working number: how each ends. Conversations are a small share, as on any dialer. */
 const ATTEMPT_OUTCOMES: readonly (readonly [ContactOutcome, number])[] = [
   ["no_answer", 0.41],
@@ -281,7 +288,35 @@ export interface DeriveContext {
   readonly key: string;
   readonly rates: ContactRates;
   readonly pins?: ProfilePins;
+  /** A staff error to make on one contact the clean history has (staff.ts); absent on a clean history. */
+  readonly staff?: StaffOverride;
 }
+
+/**
+ * The staff errors a twin makes, each on the contact with the given key (`contactKey`), which the clean history
+ * holds. Nothing else is changed: every draw is the clean history's, so the twin is the clean history until the
+ * contact, and the contact center's own rules from there.
+ */
+export interface StaffOverride {
+  /** S-01: the promise the call made is said and noted and never recorded, so nothing ceases the dialer for it. */
+  readonly unrecorded_promise?: string;
+  /** S-02: the complaint the call voiced is never logged, and the borrower raises it again on a later call. */
+  readonly unlogged_complaint?: string;
+}
+
+/**
+ * The days after a complaint nobody logged that the borrower calls about it again: as soon as a follow-up would be,
+ * or weeks later, once no written answer has come by the fifteenth day, up to two months on.
+ */
+export const RAISED_AGAIN_AFTER: readonly [number, number] = [3, 60];
+
+/**
+ * A contact's identity across a history and its twin, which number their rows apart: its day and time, direction
+ * and mode, purpose, reason and issue. No two contacts on one loan share one in practice; the planter checks.
+ */
+export const contactKey = (
+  c: Pick<ContactRecord, "on" | "at" | "direction" | "mode" | "purpose" | "reason" | "issue">,
+): string => `${c.on} ${c.at} ${c.direction} ${c.mode} ${c.purpose} ${c.reason ?? "-"} ${c.issue}`;
 
 export const statusOf = (days: number): StatusBucket =>
   days >= 90 ? "d90_plus" : days >= 60 ? "d60" : days >= 30 ? "d30" : "current";
@@ -436,7 +471,25 @@ interface Draft {
   counts_as_inquiry: boolean;
   transcript: boolean;
   promise: Omit<PromiseRecord, "id" | "contact_id"> | null;
+  /** A promise the call made and nobody recorded (S-01): said and noted, absent from the promise log. */
+  unrecorded?: Omit<PromiseRecord, "id" | "contact_id">;
 }
+
+const hhmm0 = (m: number) =>
+  `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+/** A draft's `contactKey`, from the time its row will carry. */
+const draftKey = (
+  x: Pick<Draft, "on" | "minute" | "direction" | "mode" | "purpose" | "reason" | "issue">,
+): string =>
+  contactKey({
+    on: x.on,
+    at: hhmm0(Math.min(x.minute, 23 * 60 + 59)),
+    direction: x.direction,
+    mode: x.mode,
+    purpose: x.purpose,
+    reason: x.reason,
+    issue: x.issue,
+  });
 
 /** The servicer's agents: invented names and user ids, one pool per servicer. */
 export const AGENTS: Readonly<
@@ -490,6 +543,12 @@ export interface DerivedLoan {
   readonly cadence: CadenceEpisode[];
   /** A third party's authorization by the day it was received, for the record on later days. */
   readonly authorizations: readonly PlainDate[];
+  /** Each contact's `contactKey`, in the contacts' order: how a twin's rows are matched to the clean history's. */
+  readonly keys: readonly string[];
+  /** Promises made and never recorded (a twin's S-01); empty on a clean history. */
+  readonly unrecorded: PromiseRecord[];
+  /** The key of the call on which the borrower raises an unlogged complaint again (a twin's S-02), or null. */
+  readonly raised_again: string | null;
 }
 
 export function deriveLoan(life: LoanLife, ctx: DeriveContext): DerivedLoan {
@@ -586,20 +645,61 @@ export function deriveLoan(life: LoanLife, ctx: DeriveContext): DerivedLoan {
       authorization_on: authorizations.filter((a) => a <= on).pop() ?? null,
     });
 
-  /** A promise window: from the call to the day it is due, when the cadence is ceased (ptp_pending). */
-  const promiseWindows: { from: PlainDate; to: PlainDate }[] = [];
+  /**
+   * A promise window: from the call to the day it is due, when the cadence is ceased (ptp_pending). One taken on S-02's
+   * call raising the complaint again (the twin's alone) carries that call's minute, and keeps no call before it from
+   * taking a promise of its own, as the clean history, which never had it, did not.
+   */
+  const promiseWindows: { from: PlainDate; to: PlainDate; minute?: number; callMinute?: number }[] =
+    [];
   const pending = (on: PlainDate) => promiseWindows.find((w) => w.from <= on && on <= w.to);
+  /**
+   * Pinned (`cease_from_call`), an inbound call's promise ceases the dialer from the call's minute, which its window
+   * carries, rather than from the start of its day: an attempt earlier that day is made, as on any other day.
+   */
+  const fromCall = ctx.pins?.cease_from_call === true;
+  /**
+   * A promise nobody recorded (S-01's twin), from the call and the minute it was made. It ceases nothing, and no
+   * later call knows of it; a call made before it still draws as the clean history's did, which the promise kept
+   * from taking one of its own, so the twin is the clean history until the call.
+   */
+  const unrecordedWindows: { from: PlainDate; minute: number; to: PlainDate }[] = [];
+  const earlier = (on: PlainDate, minute: number, w: { from: PlainDate; minute: number }) =>
+    on < w.from || (on === w.from && minute < w.minute);
 
   /** A promise drawn from what the borrower then did: the next receipt within three weeks keeps it; otherwise it may be made and broken. */
-  const drawPromise = (r: Rng, on: PlainDate, f: RecordFacts): Draft["promise"] => {
+  const drawPromise = (r: Rng, on: PlainDate, f: RecordFacts, minute = 0): Draft["promise"] => {
     const uBroken = r.next();
     const lagBroken = r.int(7, 14);
-    if (promiseWindows.some((w) => w.from <= addDays(on, 21) && w.to >= on)) return null;
+    if (
+      promiseWindows.some(
+        (w) =>
+          w.from <= addDays(on, 21) &&
+          w.to >= on &&
+          !(w.minute !== undefined && earlier(on, minute, { from: w.from, minute: w.minute })),
+      )
+    )
+      return null;
+    if (
+      unrecordedWindows.some(
+        (w) => w.from <= addDays(on, 21) && w.to >= on && earlier(on, minute, w),
+      )
+    )
+      return null;
     const next = life.receipts.find((x) => x.on > on && x.mode !== "payoff");
     if (next && daysBetween(on, next.on) <= 21) {
+      // A pinned borrower who pays within three weeks did not always promise to on the call (a draw of its own, made
+      // only when pinned, so nothing else moves).
+      const share = ctx.pins?.kept_promise_share;
+      if (share !== undefined && !(r.next() < share)) return null;
+      // A pinned borrower names a day up to that many days past the payment's, and pays on or before it (a draw of its
+      // own, made only when pinned).
+      const slack = ctx.pins?.kept_promise_slack;
+      let by = slack === undefined ? next.on : addDays(next.on, r.int(0, slack));
+      if (by > endOn) by = endOn;
       return {
         made_on: on,
-        pay_by: next.on,
+        pay_by: by,
         amount: next.amount,
         status: "kept",
         receipt_id: next.id,
@@ -649,6 +749,8 @@ export function deriveLoan(life: LoanLife, ctx: DeriveContext): DerivedLoan {
     readonly followUp?: boolean;
     /** The call reaches an agent: the phone menu serves nothing on it. */
     readonly answered?: boolean;
+    /** The borrower raising a complaint nobody logged (S-02's twin): voiced again, and logged by nobody. */
+    readonly again?: boolean;
   }
   const inbound = (
     r: Rng,
@@ -841,24 +943,52 @@ export function deriveLoan(life: LoanLife, ctx: DeriveContext): DerivedLoan {
       profile.language === "es" && party !== "attorney" && party !== "housing_counselor";
     const live = verified && party !== "unknown_caller";
     const complaintP =
+      ctx.pins?.complaint_chance ??
       COMPLAINT_BASE *
-      complaintW(reason) *
-      (profile.style === "irritated" ? IRRITATED_COMPLAINT : 1);
-    const complaint = live && uComplaint < complaintP;
+        complaintW(reason) *
+        (profile.style === "irritated" ? IRRITATED_COMPLAINT : 1) *
+        (ctx.pins?.complaint_multiplier ?? 1);
+    const complaint = live && (o.again === true || uComplaint < complaintP);
     const behind = f.past_due !== null;
-    const promise =
+    const drawn =
       live &&
       behind &&
       !barred(on) &&
       (reason === "payment_arrangement" || reason === "hardship" || o.scriptedPromise)
-        ? (o.scriptedPromise ?? drawPromise(promiseR, on, f))
+        ? (o.scriptedPromise ?? drawPromise(promiseR, on, f, minute))
         : null;
-    if (promise) promiseWindows.push({ from: promise.made_on, to: promise.pay_by });
+    // A staff error on this call: the promise said and never recorded (S-01), the complaint never logged (S-02).
+    const key = draftKey({
+      on,
+      minute,
+      direction: "inbound",
+      mode: "call",
+      purpose: base.purpose,
+      reason,
+      issue,
+    });
+    const unrecorded = drawn !== null && ctx.staff?.unrecorded_promise === key ? drawn : null;
+    const unlogged = o.again === true || (complaint && ctx.staff?.unlogged_complaint === key);
+    const promise = unrecorded ? null : drawn;
+    if (promise)
+      promiseWindows.push({
+        from: promise.made_on,
+        to: promise.pay_by,
+        ...(o.again ? { minute } : {}),
+        ...(fromCall ? { callMinute: minute } : {}),
+      });
+    if (unrecorded)
+      unrecordedWindows.push({ from: unrecorded.made_on, minute, to: unrecorded.pay_by });
+    // A complaint nobody logged is escalated by nobody (S-02's twin), and a promise nobody recorded marks nothing
+    // (S-01's): either call is dispositioned exactly as it would have been without the complaint or the promise, by the
+    // same draw, a hardship call transferred or referred to loss mitigation as any other hardship call is. So its row
+    // is one a clean history holds for a call of its reason. The unlogged complaint's issue stays open, so the
+    // follow-ups below are drawn for it as for an escalated call, and filed as for a call of its row.
     const resolution: Resolution = !live
       ? "unresolved"
       : promise
         ? "promise_recorded"
-        : complaint
+        : complaint && !unlogged
           ? "escalated"
           : reason === "hardship" || reason === "disaster_assistance"
             ? uRes < 0.5
@@ -909,8 +1039,9 @@ export function deriveLoan(life: LoanLife, ctx: DeriveContext): DerivedLoan {
           ? { recording: true, fdcpa: false, bankruptcy: false }
           : { ...voiceDisclosures(on, f, true), recording: true },
       complaint_voiced: complaint,
-      complaint_logged: complaint,
+      complaint_logged: complaint && !unlogged,
       promise,
+      ...(unrecorded ? { unrecorded } : {}),
     };
   };
 
@@ -968,7 +1099,7 @@ export function deriveLoan(life: LoanLife, ctx: DeriveContext): DerivedLoan {
       0.1,
       perYear * STATUS_MULTIPLIER[bucket] - EVENT_CALLS[bucket] * eventScale,
     );
-    const n = poisson(r, yearly / 12);
+    const n = poisson(r, (yearly * (ctx.pins?.call_multiplier ?? 1)) / 12);
     const { y, m: mo } = parts(monthStart);
     const dim = daysInMonth(y, mo);
     if (n === 0) continue;
@@ -1150,24 +1281,127 @@ export function deriveLoan(life: LoanLife, ctx: DeriveContext): DerivedLoan {
     });
   }
 
-  /* follow-ups on issues left open */
-  for (const x of [...drafts]) {
+  /* follow-ups on issues left open, and a pinned borrower's calls again about the matters an agent handled */
+  const unloggedKey = ctx.staff?.unlogged_complaint;
+  /**
+   * A follow-up the clean history drew for S-02's root that the twin does not make: drawn as the clean history drew it,
+   * so every later draft keeps its number, and undone. One whose counselor's authorization reached the servicer before
+   * the root stands as the clean history drew it, since the twin is the clean history until the root.
+   */
+  const unmade = (x: Draft, f: Draft | null, d0: number, a0: number, w0: number) => {
+    if (f === null) return;
+    const before = drafts
+      .slice(d0)
+      .some((l) => l.on < x.on || (l.on === x.on && l.minute < x.minute));
+    if (before) {
+      push(f);
+      return;
+    }
+    drafts.length = d0;
+    authorizations.length = a0;
+    promiseWindows.length = w0;
+  };
+  const followUp = (x: Draft, key: string) => {
     if (x.direction !== "inbound" || x.mode !== "call" || x.outcome !== "conversation" || !x.reason)
-      continue;
-    if (
-      !["pending_documents", "unresolved", "escalated", "callback_scheduled"].includes(x.resolution)
-    )
-      continue;
-    const r = rngFor(`${lk}/fu/${x.on}/${x.seq}`);
-    const go = r.chance(FOLLOW_UP);
-    const lag = r.int(3, 15);
-    if (go)
-      push(
-        inbound(rngFor(`${lk}/fu/${x.on}/${x.seq}/call`), addDays(x.on, lag), x.reason, {
+      return;
+    const openRow = ["pending_documents", "unresolved", "escalated", "callback_scheduled"].includes(
+      x.resolution,
+    );
+    // S-02's root (never on a clean history): a complaint voiced and not logged. The clean history logged it, and
+    // escalated it where no promise was taken, so its draws here are those of an open row, whatever the twin's row is.
+    const root =
+      unloggedKey !== undefined &&
+      x.complaint_voiced &&
+      !x.complaint_logged &&
+      draftKey(x) === unloggedKey;
+    const cleanOpen = openRow || (root && x.promise === null);
+    // A pinned borrower calls again about every matter an agent handled, open or closed, at the pin's chance.
+    const closed = ctx.pins?.closed_follow_up;
+    if (!cleanOpen && closed === undefined) return;
+    const r = rngFor(key);
+    if (cleanOpen) {
+      // An issue left open is followed up within two weeks, under its issue. Where S-02's twin dispositions its root as
+      // a closed call is, nothing in the log holds the issue open, and no follow-up is made on it.
+      const go = r.chance(FOLLOW_UP);
+      const lag = r.int(3, 15);
+      if (go) {
+        const d0 = drafts.length;
+        const a0 = authorizations.length;
+        const w0 = promiseWindows.length;
+        const f = inbound(rngFor(`${key}/call`), addDays(x.on, lag), x.reason, {
           issue: x.issue,
           followUp: true,
-        }),
-      );
+        });
+        if (openRow) push(f);
+        else unmade(x, f, d0, a0, w0);
+      }
+      if (closed === undefined) return;
+    }
+    // The pinned borrower calls again 3 to 60 days later, filed as any call about its reason is that day, since no open
+    // issue links it to the first. About S-02's root the borrower always calls again, raising the complaint: that call
+    // (below) is this one, so the one the clean history drew here is not made.
+    const ra = cleanOpen ? rngFor(`${key}/later`) : r;
+    const go = ra.chance(closed!);
+    let on = addDays(x.on, ra.int(RAISED_AGAIN_AFTER[0], RAISED_AGAIN_AFTER[1]));
+    if (dayOfWeek(on) === 0) on = addDays(on, 1);
+    if (!go) return;
+    const d0 = drafts.length;
+    const a0 = authorizations.length;
+    const w0 = promiseWindows.length;
+    const f = inbound(rngFor(`${key}/${cleanOpen ? "later/" : ""}call`), on, x.reason, {
+      forceChannel: "call",
+      followUp: true,
+    });
+    if (root) unmade(x, f, d0, a0, w0);
+    else push(f);
+  };
+  for (const x of [...drafts]) followUp(x, `${lk}/fu/${x.on}/${x.seq}`);
+
+  /*
+   * S-02's twin: nothing came of the complaint, so the borrower calls about it again 3 to 60 days later, and nobody
+   * logs it then either. No case was opened to link the call to, so it is filed as any call about its reason is that
+   * day: an issue of its own, which a reviewer ties to the first by its reason and its words, not by the log's index.
+   * Beside that it is drawn as any call about its reason that reaches an agent is: whoever calls (someone the agent
+   * can verify, since the complaint is voiced), how it is dispositioned, a promise taken on it, a follow-up and the
+   * letters after it. It is drawn here, before the dialer, so a promise it takes ceases the dialer as any other does,
+   * and on sequence numbers of its own, so no other draft's stream moves.
+   */
+  let raisedAgain: string | null = null;
+  if (unloggedKey) {
+    const root = drafts.find((x) => x.complaint_voiced && draftKey(x) === unloggedKey);
+    if (root?.reason) {
+      const key = `${lk}/staff/S-02/${unloggedKey}`;
+      const r = rngFor(key);
+      let on = addDays(root.on, r.int(RAISED_AGAIN_AFTER[0], RAISED_AGAIN_AFTER[1]));
+      if (dayOfWeek(on) === 0) on = addDays(on, 1);
+      const shared = seq;
+      seq = STAFF_SEQ;
+      const opts: InboundOpts = { forceChannel: "call", followUp: true, again: true };
+      // A caller the agent can verify, and a counselor's authorization, which reaches the servicer days before the
+      // call, after the root: a draw that is neither is undone and drawn again.
+      let again: Draft | null = null;
+      for (let k = 0; k < AGAIN_DRAWS; k++) {
+        const d0 = drafts.length;
+        const a0 = authorizations.length;
+        const w0 = promiseWindows.length;
+        const x = inbound(rngFor(`${key}/again${k ? `/${k}` : ""}`), on, root.reason, opts);
+        if (x === null) break;
+        if (x.live_contact && drafts.slice(d0).every((l) => l.on > root.on)) {
+          again = x;
+          break;
+        }
+        drafts.length = d0;
+        authorizations.length = a0;
+        promiseWindows.length = w0;
+      }
+      if (again === null)
+        again = inbound(rngFor(`${key}/again`), on, root.reason, { ...opts, party: "borrower" });
+      if (push(again)) {
+        raisedAgain = draftKey(again!);
+        followUp(again!, `${key}/fu`);
+      }
+      seq = shared;
+    }
   }
 
   /* outbound: payment reminders by text and e-mail, between days 6 and 9 */
@@ -1268,9 +1502,30 @@ export function deriveLoan(life: LoanLife, ctx: DeriveContext): DerivedLoan {
           break;
         }
         const w = pending(dd);
-        if (w) {
+        // Pinned, a promise taken on an inbound call that day ceases the dialer from the call: an attempt whose minute
+        // (its own stream's first draw) comes before every such call is made.
+        const beforeCall =
+          fromCall &&
+          w !== undefined &&
+          (() => {
+            const m = dialMinute(rngFor(`${lk}/dq/${ep.start}/${n}`), dd);
+            return promiseWindows.every(
+              (x) =>
+                !(x.from <= dd && dd <= x.to) ||
+                (x.from === dd && x.callMinute !== undefined && m < x.callMinute),
+            );
+          })();
+        if (w && !beforeCall) {
           paused.push({ from: w.from > ep.day17 ? w.from : dd, to: w.to, reason: "ptp_pending" });
           dd = dialOnOrAfter(addDays(w.to, 1));
+          continue;
+        }
+        // A promise nobody recorded (S-01's twin) ceases nothing, but the clean history ceased the dialer from the
+        // call's own day, the hours before the call among them: the twin keeps that day quiet, so it is the clean
+        // history until the call, and dials again from the next. Pinned, the clean history ceased it from the call
+        // alone, so the twin dials that day as any other.
+        if (!fromCall && unrecordedWindows.some((u) => u.from === dd)) {
+          dd = dialOnOrAfter(addDays(dd, 1));
           continue;
         }
         // Massachusetts: the third call at least eight days after the first of the two before it.
@@ -1281,6 +1536,21 @@ export function deriveLoan(life: LoanLife, ctx: DeriveContext): DerivedLoan {
         }
         const ar = rngFor(`${lk}/dq/${ep.start}/${n}`);
         const a = attempt(ar, dd, n, issue);
+        if (a.promise && ctx.staff?.unrecorded_promise === draftKey(a)) {
+          // S-01: the agent heard the promise and noted it, and wrote no record, so nothing ceases the dialer. The call
+          // is dispositioned as a conversation that took no promise is, referred to loss mitigation or information
+          // provided half the time each, by a draw of the twin's own (the attempt's stream drew none for it).
+          a.unrecorded = a.promise;
+          a.promise = null;
+          a.resolution = rngFor(`${lk}/staff/S-01/${draftKey(a)}`).chance(0.5)
+            ? "referred_lossmit"
+            : "information_provided";
+          unrecordedWindows.push({
+            from: a.unrecorded.made_on,
+            minute: a.minute,
+            to: a.unrecorded.pay_by,
+          });
+        }
         drafts.push(a);
         dialed.push(dd);
         n++;
@@ -1336,17 +1606,20 @@ export function deriveLoan(life: LoanLife, ctx: DeriveContext): DerivedLoan {
     });
   }
 
-  function attempt(r: Rng, on: PlainDate, n: number, issue: string): Draft {
-    const usable = profile.phones.filter((p) => !removed.has(p.id));
-    const phone = usable[n % Math.max(1, usable.length)] ?? profile.phones[0]!;
-    const sat = dayOfWeek(on) === 6;
-    const minute = sat
+  /** An attempt's minute, its stream's first draw. */
+  function dialMinute(r: Rng, on: PlainDate): number {
+    return dayOfWeek(on) === 6
       ? r.int(...DIAL_MINUTES.saturday)
       : r.weighted([
           [r.int(...DIAL_MINUTES.morning), 0.3],
           [r.int(...DIAL_MINUTES.afternoon), 0.4],
           [r.int(...DIAL_MINUTES.evening), 0.3],
         ] as const);
+  }
+  function attempt(r: Rng, on: PlainDate, n: number, issue: string): Draft {
+    const usable = profile.phones.filter((p) => !removed.has(p.id));
+    const phone = usable[n % Math.max(1, usable.length)] ?? profile.phones[0]!;
+    const minute = dialMinute(r, on);
     const coB = b2 !== undefined && r.chance(0.25);
     const agent = agentFor(r, on);
     const durRing = r.int(22, 40);
@@ -1379,7 +1652,7 @@ export function deriveLoan(life: LoanLife, ctx: DeriveContext): DerivedLoan {
     const f = rec(on);
     const conv = outcome === "conversation";
     const person = coB && conv ? b2! : b1;
-    const promise = conv ? drawPromise(promiseR, on, f) : null;
+    const promise = conv ? drawPromise(promiseR, on, f, minute) : null;
     const voice =
       outcome === "conversation" ||
       outcome === "answered_unverified" ||
@@ -1516,7 +1789,9 @@ export function deriveLoan(life: LoanLife, ctx: DeriveContext): DerivedLoan {
           reason: "hardship",
         });
     }
-    if (x.complaint_voiced && uQwr < QWR_AFTER_COMPLAINT)
+    // A logged complaint's borrower is told how to put it in writing (§1024.38(b)(5)), and some do. Nobody tells the
+    // borrower whose complaint nobody logged (S-02's twin; on a clean history every complaint voiced is logged).
+    if (x.complaint_voiced && x.complaint_logged && uQwr < QWR_AFTER_COMPLAINT)
       qwr(r, rollForward(addDays(x.on, qLag), servicerCalendar), x.reason ?? "late_fee", x.issue);
   }
   {
@@ -1605,11 +1880,13 @@ export function deriveLoan(life: LoanLife, ctx: DeriveContext): DerivedLoan {
   const byIssue = new Map<string, string[]>();
   const contacts: ContactRecord[] = [];
   const promises: PromiseRecord[] = [];
+  const unrecorded: PromiseRecord[] = [];
   drafts.forEach((x, i) => {
     const id = `${life.loan_id}-K${String(i + 1).padStart(4, "0")}`;
     const prior = byIssue.get(x.issue) ?? [];
     const promiseId = x.promise ? `${id}-P` : null;
     if (x.promise && promiseId) promises.push({ id: promiseId, contact_id: id, ...x.promise });
+    if (x.unrecorded) unrecorded.push({ id: `${id}-P`, contact_id: id, ...x.unrecorded });
     contacts.push({
       id,
       loan_id: life.loan_id,
@@ -1655,5 +1932,8 @@ export function deriveLoan(life: LoanLife, ctx: DeriveContext): DerivedLoan {
     bankruptcy,
     cadence,
     authorizations: [...authorizations].sort(),
+    keys: drafts.map(draftKey),
+    unrecorded,
+    raised_again: raisedAgain,
   };
 }

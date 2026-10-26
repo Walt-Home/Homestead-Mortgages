@@ -173,9 +173,10 @@ export function planCall(
 ): CallPlan {
   const kind = kindOf(contact);
   if (!kind) throw new RangeError(`${contact.id} is not a call with a voice on it`);
+  // A promise the call recorded, or one it made that nobody recorded (S-01): the words are the same either way.
   const promise = contact.promise_id
     ? (loan.promises.find((p) => p.id === contact.promise_id) ?? null)
-    : null;
+    : (loan.unrecorded_promises?.find((p) => p.contact_id === contact.id) ?? null);
   const auth = [...loan.contacts]
     .filter((c) => c.purpose === "third_party_authorization" && c.on <= contact.on)
     .map((c) => c.on)

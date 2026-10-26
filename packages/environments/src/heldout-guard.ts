@@ -48,6 +48,7 @@ import { CATCHUP_HELDOUT_SUITE, catchupTaskId } from "./catchup/index.js";
 import { REVIEW_HELDOUT_SUITE, reviewTaskId } from "./escrow-review/index.js";
 import { BOARDING_HELDOUT_SUITE, boardingTaskId } from "./boarding/index.js";
 import { CALL_QA_HELDOUT_SUITE, callQaTaskId } from "./call-qa/index.js";
+import { CONTACT_AUDIT_HELDOUT_SUITE, contactAuditTaskId } from "./contact-audit/index.js";
 import { INTAKE_HELDOUT_SUITE, intakeTaskId } from "./tape-intake/index.js";
 
 /** A held-out suite: the `name/version` its ids are drawn under, and its seed and size. */
@@ -99,6 +100,7 @@ export const HELDOUT_SUITES: readonly HeldoutSuite[] = Object.freeze([
   today(reviewTaskId, REVIEW_HELDOUT_SUITE),
   today(boardingTaskId, BOARDING_HELDOUT_SUITE),
   today(callQaTaskId, CALL_QA_HELDOUT_SUITE),
+  today(contactAuditTaskId, CONTACT_AUDIT_HELDOUT_SUITE),
   today(intakeTaskId, INTAKE_HELDOUT_SUITE),
   { namespace: "refi-tape/1.0.0", ...TAPE_HELDOUT_SUITE },
   { namespace: "refi-hard/1.0.0", ...HARD_HELDOUT_SUITE },

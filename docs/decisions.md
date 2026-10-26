@@ -8952,3 +8952,463 @@ then, ei-clocks' 188 of 200 is 188 of 198 scored, and metro2-furnishing's
 133 of 200 is 133 of 197. The call-qa pass is not a baseline. Its 8 later
 `no_submission` episodes make a whole rerun into a new file the cleaner
 reading.
+
+## Staff errors are made on a call the clean history has, and contact-audit grades them
+
+**Built 24 October 2026,** as the staff errors in the contact center
+(`packages/environments/src/contacts/staff.ts`) and `contact-audit` 1.0.0
+over them: phase 4's last piece. S-01 is a promise to pay an agent heard,
+noted and never recorded; S-02 a complaint an agent heard and never logged.
+**Its grading and its draw were reworked on 25 October, before any model
+ran, and its draw and its twin three times more, that day, after a third
+review the next, and after a fourth review the same day,** because cheap
+policies passed it, the second, third and fourth times by reading the logs'
+structure alone (below). docs/environments.md, "The
+contact center" and "contact-audit", says what each plants and how a window
+is graded; docs/synthetic-data-defects.md has what real data shows of each.
+
+**Made on a call, as the history errors are made on an event.** A staff
+error is a wrong act on one call, so it is placed on a call the clean
+history has, and the twin is derived again from the same draws with the act
+made there (`StaffOverride`): the clean history until the call, and the
+contact center's own rules from there. That is the life generator's choice
+for a vendor's or a system's error, for the same reason: a twin whose
+differences are the error's alone can be labeled by difference, root apart
+from symptoms. The root is the call's missing record (the row's
+`promise_id`, its `complaint_logged`); the symptoms the rules make are a
+dialer not ceased for the promise, a kept promise never marked, a broken one
+never followed up, no case, no acknowledgment and no written answer for the
+complaint, and the borrower calling about it again.
+
+**Four things the first build got wrong.**
+
+- The contact center keeps a call from taking a promise when one is pending
+  within three weeks, and it decides that in the order calls are drawn, not
+  the order they happen. So an unrecorded promise let a call five days before
+  it take a promise of its own, and the twin moved before its root. A
+  promise nobody recorded still stops a call made before it, which is what
+  the clean history did, and stops nothing after it.
+- The twin named what it added off the root (`<root>-S01-1`), which is right
+  for labels and would have told a reviewer where to look. The desk numbers
+  every contact and note in its log's order instead.
+- A hardship call the day after the promise call took a promise of its own
+  once the first was unrecorded, so it was no longer escalated, and the
+  follow-up S-02 was asked for was never made. S-02 is not made there, and
+  the planter says why.
+- An unlogged complaint's call kept the disposition a logged one gets,
+  "escalated", and so did the call raising it again. "Escalated and not
+  logged" was a tenth of a call in a clean window and one or two in every
+  window with S-02, so a reviewer who read no transcript found the root by
+  its row: reporting it passed 78 of the 200 held-out windows, 32 of the 50
+  with S-02 alone. Nobody escalates what nobody logged: the call is
+  dispositioned as its reason would have it without the complaint, by the
+  same draw, and its issue is left open as an escalation's is, so the
+  follow-ups drawn for it do not move (since the third review, one on a
+  closed row's issue is filed as one after a closed call is: below).
+
+**The review found the floors too high, and why.** On the held-out suite
+then, reporting every promise as an S-01 root passed 46 of the 50 windows
+with S-01 alone, and every complaint as an S-02 root 49 of the 50 with S-02
+alone. Two extra findings were allowed and a window held few promises
+recorded or complaints logged, so blanket reporting cost little; a call
+raising a complaint again reported as a second root counted only as an
+extra, so the rule that tells it from a root had no effect; and a root's
+symptoms were never required.
+
+**The rule now: a root the window does not hold fails it, and a root needs
+its symptoms.** Naming as a staff error a contact that is not one is the
+mistake a QA reviewer must not make, so a finding of kind "root" that no
+label names fails the window whatever else is right: a promise the log holds,
+a complaint logged, a call raising a complaint again, a root's call under the
+other error. A clean window is a control that passes only with no root.
+Extra findings stay allowed for symptoms only, at most two, a second finding
+on one thing among them. Every root's symptoms are required beside it: the
+rulebook asks for them, they are where the calculator and the times matter
+(the payments after the call's day through the pay-by date; an attempt later
+on the call's own day inside the window and one earlier outside), and the
+reference reaches every one on every kept draw. Without the symptoms the
+roots alone would already tell a recorded promise from an unrecorded one;
+with them a pass is the whole audit, and the roots alone pass the 50 clean
+windows and nothing else.
+
+**The draw now: promises recorded and complaints logged beside every root.**
+The audit's loan falls behind every two to four months, half the time with
+the scenario's promise, and seven profile pins make its borrower the kind a
+desk audits: irritated, voicing a complaint on 35 % of the inbound calls an
+agent handles whatever the call is about (0.352 of them on 400 training
+keys' books), calling fourteen times as often as the calibration's borrower
+in the same status, calling again 3 to 60 days later about seven in ten of
+the matters an agent handled, paying within three weeks of a conversation
+without having promised to on it 85 % of the time, naming, when promising, a
+day up to a week past the one the payment then comes, and whose promise
+ceases the dialer from the call, not from the start of its day. The window
+holds what one pair of anchors needs and 90 to 210 days more, split at
+random, and the anchors are drawn again from every pair it holds, so neither
+where they sit nor how far apart says which they are; a draw whose window
+holds no promise recorded or no complaint logged beside its roots is turned
+away. A window averages 252 days and 89.5 contacts, with 4.2 promises
+recorded and 13.2 complaints logged beside the roots; 186 of 200 hold two
+promises or more, 200 two complaints or more.
+Blanket reporting names a false root in every one. (The first rework's pins,
+a complaint five times as likely and calls six times as often, with every
+delinquency carrying the scenario's promise, made windows of 252 days and
+48.8 contacts; the second review below is why they moved.)
+
+**Five tells the twin carried, and what removed each.** With blanket
+reporting failing, the floors became the policies that read the logs'
+structure, and five of them found the root without reading a note or a
+transcript:
+
+- a scripted promise call (purpose `promise_to_pay`) with no `promise_id`
+  and "information provided", which no clean history holds: half of S-01's
+  roots were scripted calls. S-01 is no longer made on one, because a twin
+  keeps every row's purpose;
+- a hardship call "information provided", which a clean hardship call never
+  is: a hardship call whose promise nobody recorded was referred to loss
+  mitigation, as it would have been without the promise (the second review
+  found the referral a tell of its own: it is now transferred or referred
+  by the same draw as any hardship call);
+- a written request on an issue no logged call has: a written request
+  followed 15 % of complaints, logged or not, and on a clean history every
+  complaint is logged. A logged complaint's borrower is told how to write
+  (§1024.38(b)(5)); nobody tells the borrower whose complaint nobody
+  logged, so none follows it now;
+- the call raising a complaint again, 16 to 35 days after it on the root's
+  own issue, which in a clean history only a follow-up within 15 days
+  shares: it now comes 3 to 60 days later, under the issue any call about
+  its reason gets that day (no case links it to the first), and the rule
+  ties the two by their reason. On the reworked draw before the lag moved,
+  the first unlogged call another for its reason followed within 16 to 36
+  days passed 40 of the 50 windows with S-02 alone;
+- a kept promise's call: in the calibration's center every conversation a
+  payment follows within three weeks takes a promise, unless another blocks
+  it, so a kept promise nobody recorded was the only conversation of its
+  kind: on the reworked draw before the pin, finding it passed 19 of the 25
+  windows on S-01's kept arm with no clean window lost. The pinned borrower
+  pays without having promised to three times in five (85 % since the
+  second review), so such conversations are ordinary on the audit's books.
+
+Two more things the rework found and fixed. The twin dialed on the morning
+of an inbound promise call, which the clean history had ceased for the whole
+day, so the twin moved before its root; it now keeps that day quiet (since
+the fourth review the audit's centers cease the dialer from the call itself,
+and the twin dials that day as any other: below). And the
+audit's busier books reached a call the writer had never written, a payment
+taken on a call with nothing left to quote, which threw rather than wrote
+it; it now quotes nothing, which changes no call written before.
+
+**The second review found the logs' structure still told.** A reviewer's
+cheap policies that read only the rows, the promise log's dates, the
+payments and the comment log's areas and counts, never a word, and gave
+their roots the symptoms a structure can (an S-02 root no acknowledgment, no
+response and every later unlogged call for its reason raised again; an
+S-01 root its promise guessed as the next payment, which a kept promise
+is), passed far past the clean share on the first rework's suite, which
+this entry and docs/environments.md had said nothing passed by more than
+four points:
+
+- V1, the first unlogged hardship or escrow-analysis call as an S-02 root,
+  73 of 200 (50 clean, 23 S-02, 13 of 25 on one arm): five times as likely,
+  a complaint rode on nearly every hardship and escrow call, so an unlogged
+  one was nearly always the root. The pin is now a chance, 35 % on every
+  handled inbound call whatever its reason (`complaint_chance`), so a reason
+  says nothing of whether its calls carry one, and every reason's calls go
+  unlogged without a complaint as often as any other's;
+- V8, the first unlogged hardship call referred to loss mitigation, 66: the
+  twin referred a hardship call nobody logged, or whose promise nobody
+  recorded, because a transfer would change its words; a clean one is
+  transferred half the time. It now takes the same draw: the root's words
+  change, and nothing grades them;
+- V2, the only conversation with no promise, "information provided", a
+  payment within 21 days and no promise near, its promise guessed as that
+  payment, 53 (13 of 25 on S-01's kept arm): the twin's dialer conversation
+  was always "information provided", where a clean one that took no promise
+  is referred half the time, and few clean conversations a payment followed
+  took none. The twin draws the disposition half and half on a stream of its
+  own, half the scenario's delinquencies carry its promise call (so the
+  contact center draws the others' from what the borrower did), and the
+  borrower pays without having promised to 85 % of the time
+  (`kept_promise_share` 0.15), so such conversations are many in a window.
+  V6, V1 and V2 together, passed 83, and V7, V1 or else V2, 76;
+- the call raising a complaint again was always the borrower, by phone, with
+  no promise, drawn after the dialer, and the only call in a clean window
+  that came weeks after another of its reason under an issue of its own. It
+  is now drawn as any call of its reason reaching an agent is (whoever the
+  agent can verify, its disposition, a promise, a follow-up and the letters
+  after it), before the dialer so a promise it takes ceases it, on sequence
+  numbers of its own so no other stream moves, and its promise keeps no
+  earlier call from taking one. That left the pair: with every other fix
+  made, the first unlogged call another for its reason followed within 3 to
+  61 days passed 19 of the 50 S-02 windows (14 of one arm's 25) with the
+  call raising it again read off the transcripts. So the pinned borrower
+  calls again about two in five of the matters an agent closed (seven in
+  ten since the third review, of the matters an agent handled since the
+  fourth), 3 to 60 days later and filed the same way (`closed_follow_up`),
+  and calls nine times as often (fourteen since the fourth review): a clean
+  window holds such pairs with no complaint as a twin holds one with.
+
+Two things the planter learned on the way. S-02's twin can now leave out the
+call S-01 was asked for, when a promise on the call raising the complaint
+again ceases the dialer and the dialer's conversation falls on another day:
+S-01 is then not made, the planter says so, and the draw is turned away, as
+S-01's twin already could leave out S-02's call. And an anchor is a call no
+other contact on the loan shares a key with, which the busier books made
+possible; neither suite moved for it.
+
+**The third review found the anchors' zone, and an issue left open.** Its
+structural policies, tried against the suite the second review left, held
+the bounds but one, and one more found the root nearly without error. An
+unlogged complaint left its issue open, so its call's follow-up was filed
+under the call's own issue: one landing in a later month on a closed call's
+issue, or on a closed call's fee or analysis, was nearly always the root's,
+which found 2 and 3 S-02 roots and lost one clean window of 325 on four
+suites. And naming as an S-02 root, whenever a window had one, the last
+unlogged call in the anchors' zone (from ten days after the window opens to
+61 before it closes, where an S-02 root always is) that a later unlogged
+call for its reason followed 3 to 61 days on in another month, with a
+recorded promise call within 120 days, failed 44 of the 50 clean windows and
+passed 27, but 21 of the 50 S-02 windows, 14 of one arm's 25: a majority of
+an arm, the bound it broke, on a draw that took a quarter of S-02 roots out
+of sample (24 and 26 % on two fresh suites of 400). The cause was the call
+raising a complaint again: the borrower always makes it, and called again
+about two in five of the matters an agent closed, so a root was nearly
+always the first of such a pair and a clean call seldom. Two changes, each
+where it starts. The pinned borrower calls again about seven in ten of the
+matters an agent closed (`closed_follow_up` 0.7), a pin read only where it
+is set. And the follow-up drawn on an unlogged complaint's issue, which the
+twin draws as the clean history does for the escalation, was filed, where
+the root's row is closed, as one after a closed call is: under the issue its
+own day gives its reason, since nothing in the log holds the issue open. It
+was the clean history's call by the same draws, under another issue, so the
+twin stayed the clean history until the root (a test now holds that for S-02
+as it did for S-01). Dropping that follow-up instead, which was tried first,
+moved the twin before its root: every call is numbered in the order it is
+drawn, a letter after a call is drawn off its number, and a follow-up not
+drawn renumbered the follow-ups drawn after it, some of them months before
+the root (the fourth review drops it by drawing it and undoing it, which
+keeps every number: below). The zone's policy then passed 15 of the
+held-out windows (4 clean, 11 S-02, 5 and 6 by arm) and found 17 and 20 % of
+S-02 roots on the two fresh suites; the open issue's tell found none.
+
+**The fourth review found the window's extent, the dialer's quiet day, and
+the follow-ups around a root.** Its policies (G1 to G10, and two naive Bayes
+rankers fitted on fresh draws) read what the tables did not. The window was
+drawn about the pair of anchors, so a pair fit it only when the days before
+it (past the ten the anchors need) and after it added up to 90 to 210, and a
+closer fit was a likelier pair; read beside how many unlogged calls a
+candidate's reason has in the window (a root's call raising it again is
+certain, a look-alike's later call is not, and chance favors a reason the
+borrower calls about often), that passed 13 of the 25 windows on S-02's kept
+arm, a majority of an arm. A recorded promise ceased the dialer from the
+start of its call's day, and the twin kept that day quiet to stay the clean
+history, so no root's day held another attempt where 13 % of the
+look-alikes' did, and the twin dialed the next day: a policy reading both
+passed 18 of the kept arm's 38 on the training suite and 26 to 31 of 50 on
+three of four fresh suites. And the twin's follow-ups around an S-02 root
+were not a clean row's: the escalation's follow-up refiled on a closed row's
+issue, on a Sunday as often as any day, which no closed call's follow-up is;
+the call raising the complaint again beside the borrower's call again about
+the matter; and an open row, which a clean window followed up only within
+two weeks on its issue, called about again for certain. Each removed where
+it starts, and nothing a clean center draws moved for any of them. The
+window is drawn about one pair, and the anchors drawn again from every pair
+it holds as it holds that one, so given the window they are any pair it
+holds. A pinned promise ceases the dialer from the call's minute
+(`cease_from_call`): an attempt earlier that day is made in the clean
+history too, and the twin dials that day as any other. The pinned borrower
+calls again about the matters an agent handled, open or closed; about a
+complaint nobody logged that call is the one raising it again, and the one
+the clean history drew is not made; where the twin's row is closed, the
+escalation's follow-up is not made either (each drawn and undone, so every
+later call keeps its number). What is left is the reason count, which the
+call raising a complaint again carries by being certain; two pins thin what
+it buys. The borrower calls fourteen times as often (`call_multiplier`, nine
+before), so a window holds about thirteen calls that look like an S-02 root
+where it held seven. And a promise's date is the borrower's: the pinned
+borrower names a day up to a week past the payment's (`kept_promise_slack`),
+so an S-01 root's promise is no longer the payment that kept it and only the
+note says the date; before it, a random pick among the conversations a kept
+promise could be found 35 % of the kept arm's roots, and the ranker 26 of 50
+on a fresh held-out draw. Now on the held-out suite the fourth review's
+policies pass at most 9 of the S-02 windows (6 of an arm's 25) and 3 of the
+S-01 ones; out of sample, on four fresh suites of 400, none of them passes
+more than 18 of 100 S-02 windows or 11 of an arm's 50, nor 9 of the kept
+arm's 50.
+
+**The fifth review found no tell.** Its policies read the redraw itself (a
+candidate is as likely as its share of the pairs the window holds, and the
+zone gives most candidates the largest), what follows the call raising a
+complaint again (a call of its own at the pin's chance, which a look-alike's
+call again about the matter never has and the borrower's calling makes common
+by chance), a window whose recorded promises fit no logged complaint (a sign
+of S-01 that says nothing of the call or the date), the comment log's counts
+and users, and the payments around a call; and it fitted logistic rankers on
+about seventy features of a candidate. The window and the anchors are drawn
+before the plan is made, and the root's row is a clean row's, so nothing
+tells an S-02 window from a clean one: the most any of them found was 15 of
+the 50 S-02 windows held out (10 of an arm's 25), 22 of 75 in training (12 of
+an arm's 38), and out of sample 26 of 100 (15 of an arm's 50), and abstaining
+where unsure, 51 and 78 windows in all against bounds of 58 and 87. An S-01
+root's date stays the note's: on the right call, a date guessed from the
+payment is right about one time in eight. Nothing changed. Its ten
+hand-written policies and its smallest ranker, written out, are a fifth
+table, which the test holds.
+
+**The floors now.** Each cheap policy chooses its roots. The first table's
+are given every symptom the rules give them, so a floor is the roots' alone;
+the second table's read only the logs' structure, V1 to V8 among them; the
+third holds the third review's and the rework's own after it, the fourth the
+fourth review's and the rework's own after that, and the fifth the fifth
+review's. On the held-out suite submitting nothing passes the 50 clean
+windows (mean 0.546), and no policy in the five tables passes more than 50.
+Of the ones that pass an error's window the most is 49 (47 clean and 2 S-02),
+and by reason 48, the only pair for a payoff request; V1 passes 1, V2 and V2'
+39, V3 24, V4 35, V5 1, V6 and V7 none, and V8 8 and 7. On the training suite
+(seed 11, 300 windows, 75 clean) the most is 77 (75 clean, one S-02 window
+and one both), then 74 (67 clean and 7 S-02). None passes a majority of any
+error's windows or of either promise arm within one: on the held-out suite
+the most is 16 S-01 windows (the promise note nearest the window's middle,
+which reads the notes; 8 of the kept arm's 25) and 3 structurally, 12 S-02
+windows and 7 of an arm's 25; on the training suite 24 of 75 S-01 windows
+(the same note; 17 of the kept arm's 38) and 4 structurally, 17 of 75 S-02
+windows, and 12 of an arm's 38. The third review's searches of filter
+combinations, run again, pass at most 51 and 75 for S-01, 52 and 77 for S-02,
+and the fifth review's larger rankers, beyond the tables, 15 and 22 S-02
+windows. The tables are in docs/environments.md, and a test holds every row
+and the bounds on both suites, every structural policy by reason too.
+
+**The complaint log is a view, so no clean center moved.** Spec 4.5 puts
+complaints in a case-management system beside the contact log, acknowledged
+on the call (`SM_COMPLAINT_ACK_1BD`) and answered in writing within 15 days
+(`SM_COMPLAINT_RESOLVE_15`). The contact center logged a complaint but held
+no case and wrote no answer. Writing the answer as a contact row would have
+renumbered every later contact, redrawn their words and moved call-qa;
+`complaintLog` reads the cases off the logged complaints instead, a function
+of the center that stores nothing. The override and `unrecorded_promises`
+are absent from every clean history, the profile pins (`style`,
+`complaint_multiplier`, `complaint_chance`, `call_multiplier`,
+`closed_follow_up`, `kept_promise_share`, `kept_promise_slack`,
+`cease_from_call`) take no draw where they are unset, a written request
+after a complaint is drawn as it was wherever every complaint is logged, and
+the writer's fix changes only a call that threw. A clean center built by the
+reworked code and by the commit before it hashes the same, rows, notes,
+every transcript and C-01 to C-08 planted at 5 %, on 120 loans over 48
+months (seed 11), 60 over 120 (seed 7), and 80 over 72 (seed 13) with the
+escrow call pinned on every loan and a third of them Spanish-speaking; after
+the second review it hashes the same again on those three books and on 60
+loans over 36 months (seed 5) pinned irritated, and after the third and
+fourth reviews again on all four. So neither `CONTACTS_VERSION` nor
+`LIFE_VERSION` moved, and call-qa 1.0.0's held-out pin (`4e175948…`) passes
+as it was, as does every other suite's.
+
+**The suite, and what it measures.** Four plans in turn (clean, S-01, S-02,
+both), 50 of each in the held-out suite (seed 1, 200 windows), pinned at
+`23ec82a1…` (`a0dc825e…` after the first rework, `c8238169…` after the
+second review, `a221ff6e…` after the third). A draw is kept only when the
+reference finds exactly the labels; 144 of 200 held-out windows are first
+draws, the longest took 6, and the redraws are 72 books with no pair of
+anchors, 5 windows with too few promises recorded or complaints logged, and
+10 where the recognizer hid a complaint. The reference passes the held-out
+suite, 300 training tasks and fifteen hand-built histories in at most three
+turns and seven tool calls. Five of those histories are the rework's: a
+clean window beside promises and complaints handled, an unrecorded promise
+beside recorded ones, an unlogged complaint beside logged ones and raised
+again under an issue of its own, one raised again four days later, and a
+promise on a hardship call referred to loss mitigation. No model has run on
+it, so the rework keeps its version: the rulebook changed (its hash
+`be03388e…` → `084e33d8…`; the tools did not), and under the precedent in
+"Life 1.2.0" it is re-pinned in place, `contact-audit/1.0.0` stays in
+`HELDOUT_SUITES`, and nothing is retired. The second review changed neither
+the rulebook nor the tools, only the draw and the twin, and still no model
+had run: it is re-pinned in place again, after the third review, which
+changed a pin and the twin, once more, and after the fourth, which changed
+the draw, the twin and three pins and added two, once more.
+
+**Not in 1.0.0:** other staff errors; interpreted calls; a complaint by
+letter or e-mail; a promise or complaint the recognizer hid, which only the
+label could tell; and a staff error on the scenario's own promise call.
+
+## The escrow call and the staff errors carry one contacts version, and contact-audit is re-pinned
+
+**Decided 24 October 2026,** when the two entries above were integrated.
+Each was built on contacts 1.1.0 and neither saw the other.
+
+**One version, 1.2.0.** The escrow call changed what the contact center
+draws and writes, so it took 1.2.0. The staff errors change nothing a clean
+center draws, and that was checked again on the integrated tree, side by
+side against the escrow call's own: the rows, the notes, every transcript
+and C-01 to C-08 planted at 5 %, on 120 loans over 48 months (seed 11), 60
+over 120 (seed 7), and 80 over 72 with the escrow call pinned on every loan
+and a third of them Spanish-speaking. Each hashed the same. So the center
+stays at 1.2.0, and the version's comment in `contacts/center.ts` lists the
+staff errors beside the escrow call. The two conflicts in the code were the
+inbound call's options, the escrow call's `answered` beside the twin's
+`again`, and the profile pins, `escrow_call` beside `style` and
+`complaint_multiplier`; both sides of each are kept.
+
+**call-qa holds.** Its held-out pin, `4e175948…`, passes as the escrow call
+left it, so none of its figures moves.
+
+**contact-audit 1.0.0 is re-pinned in place.** Its suite is drawn through
+the contact center, whose every stream hangs off its version, so every
+window is drawn again. Its rulebook and tools are unchanged (the test that
+pins what a model is told passes) and no model has run on it, so, under the
+precedent in "Life 1.2.0", it keeps its version, `contact-audit/1.0.0`
+stays in `HELDOUT_SUITES` with nothing retired, and its fingerprint names
+contacts 1.2.0 over life 1.2.0.
+
+The rework of 25 October, the second review the same day, and the third
+and fourth reviews' fixes the next (the entry above) re-pinned it in place
+again, each under the same precedent, so its row is as the fourth left it:
+
+| Suite         | Version | Held-out pin                                                                      | Reference, held-out | Spec cases | Training (seed 11) |
+| ------------- | ------- | --------------------------------------------------------------------------------- | ------------------- | ---------- | ------------------ |
+| contact-audit | 1.0.0   | `710237c2…` → `9722ef26…` → `a0dc825e…` → `c8238169…` → `a221ff6e…` → `23ec82a1…` | 200 of 200          | 15 of 15   | 300 of 300         |
+| call-qa       | 1.0.0   | `4e175948…`, unchanged                                                            | 210 of 210          | 17 of 17   | 300 of 300         |
+
+The figures this integration measured on contact-audit's suite (its first
+draws, its windows, its floors) describe a suite the rework replaced; the
+entry above and docs/environments.md, "contact-audit", have the reworked
+suite's. The planter's named example of S-02 not made, because S-01's twin
+does not make its call, moved with the streams, from `train/3/11#1` to
+`train/3/1779#2`, with the rework to `train/3/7843#2`, and with the second
+review to `train/3/2295#1`, where the third review left it, and with the
+fourth to `train/3/2263#2`: the same mechanism, a hardship call after the
+promise call (two days after it, then thirteen, then three, then five)
+taking a promise of its own, so it is no longer escalated and its follow-up,
+the call S-02 was asked for, is never made (since the fourth review, the
+borrower's call again about it, 28 days later). Its
+counterpart, S-01 not made because S-02's twin does not make its call, was
+`train/3/267#2` after the second review: a promise taken on the call raising
+the complaint again ceases the dialer, and the dialer's conversation S-01
+was asked for falls on another day. The third review's pin moved it to
+`train/3/87#1`: 57 days after the call raising the complaint again, the
+borrower calls about the same payment arrangement once more and takes a
+promise, whose window holds the day of the dialer's conversation S-01 was
+asked for, so the dialer is ceased and that conversation is never made. The
+fourth review's twin moved it to `train/3/115#2`, by a mechanism the review
+made: the call S-01 was asked for is the borrower's call again about the
+complaint's hardship 57 days on, which the clean history drew where the
+complaint was logged; nobody logged it in S-02's twin, so the call raising
+it again, 46 days on, takes that call's place, and the call S-01 was asked
+for is never made.
+
+The complaint share the docs give for the audit's loans is of the inbound
+calls an agent handles, the only calls that carry one. Under the fourth
+review's pins, a chance of 35 % on every one whatever its reason, it is
+0.352 of them on the books of 400 training keys (seed 11), kept or turned
+away, and 0.323 of every handled call; on the held-out suite's books it is
+0.357 (0.350, 0.302 and 0.355 under the third review's, before the borrower
+called fourteen times as often and again about open matters too; 0.349,
+0.295 and 0.354 under the second review's, before the borrower called again
+about more of what an agent closed). (Under the first rework's
+pins it was 0.419, 0.335 and 0.438, higher on the held-out books because a
+window is kept only where a complaint call fits; at this integration, under
+the first pins, 0.316, 0.195 and 0.364.)
+
+**Not yet.** No model has run on contact-audit, call-qa or the escrow call,
+so all three baselines are pending. The floors that passed most of their own
+error's quarter of contact-audit's suite are closed: the blanket ones by the
+rework, the structural ones by the second review, the one that took a
+majority of an arm by the third, and the ones that took one again, reading
+the window's extent, by the fourth.

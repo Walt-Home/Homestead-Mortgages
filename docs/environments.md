@@ -5331,10 +5331,20 @@ every promise or every complaint fails on a false root; on every history
 raising a complaint again, so does leaving the raised-again clause out; and
 on every history with an error, the roots alone fail on their symptoms.
 
-DeepSeek-V4.1-Flash's held-out baseline (thinking, 16,000 output tokens a
-turn) is 160 of 200 (80.0 %); 37 of its 40 misses ran out of tokens
+**The output budget** is 32,000 tokens a turn, reasoning included, where
+the policies' default is 16,000 (`outputBudget` in
+`src/contact-audit/index.ts`, decided 26 October 2026). A window averages
+89.5 contacts and 53.8 recorded calls, and most of a model's misses at
+16,000 were the budget, not the answer. The budget is in no fingerprint:
+the tasks and the grading are the same at any budget, and a run's policy id
+says the budget it ran at.
+
+DeepSeek-V4.1-Flash's held-out baseline at 16,000 (thinking) is 160 of 200
+(80.0 %, 73.9 to 85.0), which stands as what the smaller budget measured.
+160 of the 162 answers it submitted passed; 37 of its 40 misses ran out of
+tokens and 1 refused. Its run at 32,000 is recorded here when it finishes
 (docs/decisions.md, "DeepSeek's held-out baselines on the newest suites, and
-two corrected").
+two corrected", and "contact-audit runs at 32,000 tokens a turn").
 
 Not in 1.0.0:
 
@@ -5441,7 +5451,7 @@ scored on both sides is left out by name. `--resume --out FILE` runs exactly
 those two kinds again, and the Gym's held-out counts skip them the same way.
 A resume refuses a file recorded under another policy id, so a run made at
 one budget is never finished at another: resuming a 16,000 run on
-boarding-triage or tape-intake takes `--max-tokens 16000`.
+boarding-triage, tape-intake or contact-audit takes `--max-tokens 16000`.
 Phase 2's gate is read from it.
 
 The default is the reference policy on the held-out suite. A model run
@@ -5451,12 +5461,13 @@ spends real money, and it is never the default.
 included, and every model policy runs at the same one: `--max-tokens` if
 the run asks, else the environment's own (`outputBudget` on its
 `Environment`), else the policies' default of 16,000 (`outputBudgetFor` in
-`src/episode.ts`). boarding-triage and tape-intake declare 32,000 (decided
-26 October 2026; their sections say why); no other environment declares
-one. Each policy's id names any budget but 16,000, `…:max-tokens-32000`
-after the Vertex policy's thinking mode or the Claude policies' effort, so
-a run record always says its budget, and a run on boarding-triage with no
-flag is recorded at 32,000. Pricing reads the id by its prefix, so the
+`src/episode.ts`). boarding-triage, tape-intake and contact-audit declare
+32,000 (decided 26 October 2026, contact-audit in a second decision that
+day; their sections say why); no other environment declares one. Each
+policy's id names any budget but 16,000, `…:max-tokens-32000` after the
+Vertex policy's thinking mode or the Claude policies' effort, so a run
+record always says its budget, and a run on boarding-triage with no flag is
+recorded at 32,000. Pricing reads the id by its prefix, so the
 suffix costs nothing. The budget is in no fingerprint, because the tasks
 and the grading do not change with it.
 
@@ -5487,7 +5498,8 @@ There are three model policies, and none falls back to another model:
   - Thinking is on (`--thinking off` turns it off), and the reasoning goes
     back with its assistant turn.
   - Each turn may write the episode's output budget, reasoning included
-    (above): 32,000 on boarding-triage and tape-intake, 16,000 elsewhere.
+    (above): 32,000 on boarding-triage, tape-intake and contact-audit,
+    16,000 elsewhere.
     The policy id names any budget but 16,000
     (`…:thinking:max-tokens-32000`). An episode that spends its budget
     mid-turn ends `max_tokens` and fails.

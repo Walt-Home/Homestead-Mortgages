@@ -9624,3 +9624,28 @@ on 93 tasks at 32,000, so its score is partly the budget too; a larger
 budget is a later decision, made on a run, not assumed here. contact-audit,
 whose 37 of 40 misses at 16,000 ran out of tokens, has no run at 32,000
 and stays at the default.
+
+## contact-audit runs at 32,000 tokens a turn
+
+**Decided 26 October 2026.** contact-audit runs at an output budget of
+32,000 tokens a turn, reasoning included, by default, as boarding-triage
+and tape-intake do ("boarding-triage and tape-intake run at 32,000 tokens a
+turn"). Every other environment stays at the policies' 16,000.
+
+**Why.** contact-audit failed the way those two did. DeepSeek's held-out
+baseline on 1.0.0 at 16,000 ("DeepSeek's held-out baselines on the newest
+suites, and two corrected") passed 160 of 200 (80.0 %, 73.9 to 85.0): 160
+of the 162 answers it submitted passed, and 37 of its 40 misses ran out of
+tokens. That entry left contact-audit at the default because it had no run
+at 32,000; one was started the same day.
+
+**What changed.** `outputBudget: 32000` on contact-audit's `Environment`
+(`src/contact-audit/index.ts`), and nothing else. No fingerprint, rulebook,
+tool, version or held-out pin moved. A run with no flag is recorded at
+`…:max-tokens-32000`, and resuming the 16,000 file takes
+`--max-tokens 16000`. A Gym built from it labels the 16,000 score
+"DeepSeek, 16k budget".
+
+**The baseline.** The run at 32,000 is recorded in its own entry when it
+finishes, and becomes the headline baseline as boarding-triage's and
+tape-intake's did. 160 of 200 is kept as what the smaller budget measured.

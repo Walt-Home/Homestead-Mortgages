@@ -7,20 +7,22 @@
 
 import { describe, expect, it } from "vitest";
 import { BOARDING_FINGERPRINT, boardingTriage } from "../boarding/index.js";
+import { CONTACT_AUDIT_FINGERPRINT, contactAudit } from "../contact-audit/index.js";
 import { DEFAULT_OUTPUT_BUDGET, outputBudgetFor, parseMaxTokens } from "../episode.js";
 import { refiReview } from "../refi/index.js";
 import { INTAKE_FINGERPRINT, tapeIntake } from "../tape-intake/index.js";
 
 describe("the output budget", () => {
-  it("is 32,000 on boarding-triage and tape-intake, and unset where the default serves", () => {
+  it("is 32,000 on boarding-triage, tape-intake and contact-audit, and unset where the default serves", () => {
     expect(DEFAULT_OUTPUT_BUDGET).toBe(16000);
     expect(boardingTriage.outputBudget).toBe(32000);
     expect(tapeIntake.outputBudget).toBe(32000);
+    expect(contactAudit.outputBudget).toBe(32000);
     expect(refiReview.outputBudget).toBeUndefined();
   });
 
   it("is in no fingerprint: the task and its grading are the same at any budget", () => {
-    for (const f of [BOARDING_FINGERPRINT, INTAKE_FINGERPRINT])
+    for (const f of [BOARDING_FINGERPRINT, INTAKE_FINGERPRINT, CONTACT_AUDIT_FINGERPRINT])
       expect(JSON.stringify(f)).not.toMatch(/budget|max.?tokens/i);
   });
 
@@ -29,6 +31,8 @@ describe("the output budget", () => {
     expect(outputBudgetFor(64000, tapeIntake)).toBe(64000);
     expect(outputBudgetFor(undefined, boardingTriage)).toBe(32000);
     expect(outputBudgetFor(undefined, tapeIntake)).toBe(32000);
+    expect(outputBudgetFor(undefined, contactAudit)).toBe(32000);
+    expect(outputBudgetFor(16000, contactAudit)).toBe(16000);
     expect(outputBudgetFor(24000, refiReview)).toBe(24000);
     expect(outputBudgetFor(undefined, refiReview)).toBeUndefined();
     expect(outputBudgetFor(undefined, {})).toBeUndefined();

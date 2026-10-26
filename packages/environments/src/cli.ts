@@ -35,8 +35,9 @@
  *
  * `--max-tokens` is a model episode's output budget per turn, reasoning
  * included, for every model policy. Unasked, it is the environment's own
- * (`outputBudget`: 32,000 on boarding-triage and tape-intake), else the
- * policies' 16,000; a run at any budget but 16,000 says so in its policy id.
+ * (`outputBudget`: 32,000 on boarding-triage, tape-intake and contact-audit),
+ * else the policies' 16,000; a run at any budget but 16,000 says so in its
+ * policy id.
  *
  * The default is the held-out suite, the one every reported score is
  * measured on. A model run spends real money: it is never the default, and

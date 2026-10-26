@@ -146,10 +146,10 @@ describe("the playground", () => {
 
   it("says each environment's output budget, which the page labels its runs by", () => {
     const budgets = Object.fromEntries(environments.map((e) => [e.key, e.outputBudget]));
-    expect(budgets["boarding-triage"]).toBe(32000);
-    expect(budgets["tape-intake"]).toBe(32000);
+    const wide = ["boarding-triage", "tape-intake", "contact-audit"];
+    for (const key of wide) expect(budgets[key], key).toBe(32000);
     for (const [key, budget] of Object.entries(budgets))
-      if (key !== "boarding-triage" && key !== "tape-intake") expect(budget, key).toBe(16000);
+      if (!wide.includes(key)) expect(budget, key).toBe(16000);
   });
 
   it("solves three train tasks per environment with the reference, through the episode loop", async () => {

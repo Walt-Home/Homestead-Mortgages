@@ -40,6 +40,10 @@ export const contactAudit: Environment<ContactAuditTask, ContactAuditAnswer> = {
   execute: executeContactAuditTool,
   parseAnswer: parseContactAuditSubmission,
   grade: gradeContactAudit,
+  // Decided 26 October 2026: DeepSeek's held-out run passed 160 of 200 at
+  // 16,000 tokens, 160 of the 162 answers it submitted passing; 37 of its 40
+  // misses spent the budget before it answered.
+  outputBudget: 32000,
 };
 
 export const CONTACT_AUDIT_FINGERPRINT = {

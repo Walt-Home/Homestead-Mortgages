@@ -5339,12 +5339,14 @@ the policies' default is 16,000 (`outputBudget` in
 the tasks and the grading are the same at any budget, and a run's policy id
 says the budget it ran at.
 
-DeepSeek-V4.1-Flash's held-out baseline at 16,000 (thinking) is 160 of 200
-(80.0 %, 73.9 to 85.0), which stands as what the smaller budget measured.
-160 of the 162 answers it submitted passed; 37 of its 40 misses ran out of
-tokens and 1 refused. Its run at 32,000 is recorded here when it finishes
-(docs/decisions.md, "DeepSeek's held-out baselines on the newest suites, and
-two corrected", and "contact-audit runs at 32,000 tokens a turn").
+DeepSeek-V4.1-Flash's held-out baseline at 32,000 (thinking) is 190 of 200
+(95.0 %, 91.0 to 97.3), at 9.4¢ an episode: every answer it submitted
+passed, and its 10 misses ran out of tokens. At 16,000 it was 160 of 200
+(80.0 %, 73.9 to 85.0), which stands as what the smaller budget measured:
+160 of the 162 answers it submitted passed, 37 of its 40 misses ran out of
+tokens and 1 refused. On the same 200 tasks, 31 passed only at 32,000 and 1
+only at 16,000 (docs/decisions.md, "contact-audit at 32,000 tokens: 190 of
+200").
 
 Not in 1.0.0:
 

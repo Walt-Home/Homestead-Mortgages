@@ -9877,3 +9877,22 @@ repository (the environments document, docs/testing.md, and the page's own
 link), so who can read the transcripts on it is whoever its sharing setting
 admits; a setting of "anyone with the link" publishes them as surely as a
 commit would. That setting is part of the same open decision.
+
+## contact-audit at 32,000 tokens: 190 of 200
+
+**Measured 26 October 2026,** DeepSeek-V4.1-Flash on Vertex with thinking
+on, every held-out task scored, at contact-audit's 32,000-token output
+budget (the entry "contact-audit runs at 32,000 tokens a turn"): 190 of 200
+(95.0 %, 95 % interval 91.0 to 97.3), at 9.4¢ an episode. Every answer it
+submitted passed; its 10 misses ran out of tokens. Every episode ran on the
+policy after the stream-cut fix (the entry "A Vertex stream cut mid-turn was
+scored as the model's miss"), so no miss hides a cut turn.
+
+At 16,000 the same suite scored 160 of 200 (80.0 %, 73.9 to 85.0). Paired
+on the same 200 tasks, 31 passed only at 32,000 and 1 only at 16,000
+(McNemar exact p below 0.0001). 190 of 200 is contact-audit's headline
+baseline from here, as 95 and 175 are boarding-triage's and tape-intake's;
+160 of 200 stands as what the smaller budget measured. The run file is
+`runs/contact-audit/heldout-vertex-deepseek-v4.1-flash-max-tokens-32000-2026-10-26.jsonl`,
+its policy id `vertex:deepseek-ai/deepseek-v4.1-flash-maas:thinking:max-tokens-32000`.
+The Gym's committed scores snapshot carries it.

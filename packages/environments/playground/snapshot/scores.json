@@ -1,5 +1,5 @@
 {
-  "built_at": "2026-10-26T21:13:49.541Z",
+  "built_at": "2026-10-26T23:06:44.116Z",
   "about": "Held-out scores: for each environment, version and model, how many held-out tasks the newest scored episode of each passed, and the tokens spent. No task, prompt or transcript is in this file.",
   "scores": [
     {
@@ -121,6 +121,21 @@
         "output_tokens": 3610524
       },
       "last_finished_at": "2026-10-26T18:43:35.494Z"
+    },
+    {
+      "env": "contact-audit",
+      "version": "1.0.0",
+      "policy": "vertex:deepseek-ai/deepseek-v4.1-flash-maas:thinking:max-tokens-32000",
+      "scored": 200,
+      "passed": 190,
+      "unscored": 0,
+      "usage": {
+        "input_tokens": 42819913,
+        "cache_read_input_tokens": 4972288,
+        "cache_creation_input_tokens": 0,
+        "output_tokens": 4867969
+      },
+      "last_finished_at": "2026-10-26T23:04:49.615Z"
     },
     {
       "env": "ei-clocks",

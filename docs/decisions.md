@@ -9650,3 +9650,25 @@ takes `--max-tokens 16000`. A Gym built from it labels the 16,000 score
 **The baseline.** The run at 32,000 is recorded in its own entry when it
 finishes, and becomes the headline baseline as boarding-triage's and
 tape-intake's did. 160 of 200 is kept as what the smaller budget measured.
+
+## The Claude policies stream every turn
+
+**Found and fixed 26 October 2026.** The Claude policy (`--policy anthropic`
+and `anthropic-vertex`, `src/anthropic.ts`) sent each turn unstreamed, with
+`messages.create`. The SDK refuses to send an unstreamed request whose
+`max_tokens` could take more than ten minutes to write, anything above
+about 21,333 tokens, so since boarding-triage, tape-intake and contact-audit
+declared 32,000 (the two entries above), every Claude episode on them ended
+`error` with no request sent. Such episodes are not scored, and `--resume`
+runs them again.
+
+Every turn now streams through `messages.stream`, read whole with
+`finalMessage()`. The request gains `stream: true` and nothing else. The
+stop reasons, usage and id are unchanged, and the Vertex wrapper keeps its
+one fresh-token retry on a 401. Streaming also keeps a long turn clear of
+Node fetch's wait for headers. A stream that ends before its `message_stop`
+has no final message, so the episode ends `error` rather than reading as a
+turn the model ended, as the open-model policy's do ("A Vertex stream cut
+mid-turn was scored as the model's miss"), without its retries. The tests
+run both SDK clients over a stand-in network: one streamed request at
+32,000 each, and four cut streams each ending `error`.

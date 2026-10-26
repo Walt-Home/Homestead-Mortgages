@@ -7,6 +7,21 @@
  * the assistant turn, every tool result for a turn goes back in one user
  * message — which is what the API's thinking and caching both assume.
  *
+ * Every turn streams, read whole through the SDK's `finalMessage()`. The SDK
+ * refuses to send a request it is not streaming when its `max_tokens` could
+ * take longer than ten minutes to write (above about 21,333 tokens), so at
+ * the 32,000-token budget boarding-triage, tape-intake and contact-audit
+ * declare, every unstreamed episode ended in an error without a request
+ * leaving the machine. Streamed, the response's headers come at once, so a
+ * long turn is not left to Node fetch's wait for them either, which is why
+ * the open-model policy (`src/vertex.ts`) streams too.
+ *
+ * A turn is the stream's final message, and a stream that ends before its
+ * `message_stop` has none: `finalMessage()` rejects, and the episode ends
+ * `error`, a transport error that `--resume` runs again, never a turn the
+ * model ended. Nothing is appended to the history until a turn has arrived
+ * whole.
+ *
  * No refusal fallback: a fallback would answer with a different model and
  * the score would be credited to the one that refused. A refusal is an
  * outcome of the episode, recorded as such and scored as a miss.
@@ -26,9 +41,21 @@ import type {
 export type Effort = "low" | "medium" | "high" | "xhigh" | "max";
 export const DEFAULT_MODEL = "claude-opus-5-5";
 
+/**
+ * What the policy asks of a client: the SDK's `messages.stream`, read whole.
+ * Anthropic's client and its Vertex client both have it as they stand; the
+ * Vertex wrapper (`vertexClaudeClient`) and a test stand one in.
+ */
+export interface ClaudeClient {
+  readonly messages: {
+    stream(params: Anthropic.MessageStreamParams): {
+      finalMessage(): Promise<Anthropic.Message>;
+    };
+  };
+}
+
 export interface AnthropicPolicyOptions {
-  /** Anything with the SDK's `messages.create`, so a test can stand one in. */
-  readonly client?: Pick<Anthropic, "messages">;
+  readonly client?: ClaudeClient;
   readonly model?: string;
   readonly effort?: Effort;
   /** Output tokens per turn, thinking included; `DEFAULT_OUTPUT_BUDGET` unless asked. */
@@ -48,7 +75,7 @@ const stopOf = (reason: Anthropic.Message["stop_reason"]): TurnStop =>
 
 export class AnthropicPolicy implements Policy {
   readonly id: string;
-  private readonly client: Pick<Anthropic, "messages">;
+  private readonly client: ClaudeClient;
   private readonly model: string;
   private readonly effort: Effort;
   private readonly maxTokens: number;
@@ -91,17 +118,19 @@ export class AnthropicPolicy implements Policy {
             })),
           });
         }
-        const response = await this.client.messages.create({
-          model: this.model,
-          max_tokens: this.maxTokens,
-          // The conversation grows by one turn at a time, so the history
-          // up to the newest block is cached too, not only the rulebook.
-          cache_control: { type: "ephemeral" },
-          system,
-          tools,
-          messages,
-          output_config: { effort: this.effort },
-        });
+        const response = await this.client.messages
+          .stream({
+            model: this.model,
+            max_tokens: this.maxTokens,
+            // The conversation grows by one turn at a time, so the history
+            // up to the newest block is cached too, not only the rulebook.
+            cache_control: { type: "ephemeral" },
+            system,
+            tools,
+            messages,
+            output_config: { effort: this.effort },
+          })
+          .finalMessage();
         messages.push({ role: "assistant", content: response.content });
         return {
           calls: response.content

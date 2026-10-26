@@ -5469,7 +5469,8 @@ Vertex policy's thinking mode or the Claude policies' effort, so a run
 record always says its budget, and a run on boarding-triage with no flag is
 recorded at 32,000. Pricing reads the id by its prefix, so the
 suffix costs nothing. The budget is in no fingerprint, because the tasks
-and the grading do not change with it.
+and the grading do not change with it. Every model policy streams its turns,
+which a budget of 32,000 needs from the Claude policies (below).
 
 There are three model policies, and none falls back to another model:
 
@@ -5477,8 +5478,24 @@ There are three model policies, and none falls back to another model:
   `ANTHROPIC_EVAL_API_KEY` first, then the SDK's usual credentials. Keep the
   eval key under that name: the API's refi analyst calls Claude whenever
   `ANTHROPIC_API_KEY` is set, and the API's tests load the root `.env`.
+  - Every turn streams, through the SDK's `messages.stream`, read whole with
+    `finalMessage()`. The SDK refuses to send a request it is not streaming
+    when its `max_tokens` could take more than ten minutes to write, which
+    is anything above about 21,333 tokens. Until 26 October the policy did
+    not stream, so at the 32,000 that boarding-triage, tape-intake and
+    contact-audit declare, every Claude episode on them ended `error`
+    before a request was sent. Streamed, the headers also come at once, so
+    a long turn is not left to Node fetch's wait for them, which is why the
+    `vertex` policy streams.
+  - A turn is taken only when its stream reaches `message_stop`. A stream
+    that ends before it has no final message, so the episode ends `error`,
+    which `--resume` runs again and `env:compare` does not score. It is never
+    read as a turn the model ended. The SDK retries a failed connection, a
+    429 or a 5xx twice before a stream begins; nothing retries a stream once
+    it has begun.
 - **`anthropic-vertex`** runs the same Claude loop through Anthropic's Vertex
-  SDK (pinned at 0.20.2), billed to our project.
+  SDK (pinned at 0.20.2), billed to our project. Its turns stream the same
+  way, to the model's `streamRawPredict`.
   - That SDK version ignores its `accessToken` option and reads the machine's
     application-default credentials instead, which are stale on Joe's Mac.
     So the policy gives it an auth client that returns the gcloud token on

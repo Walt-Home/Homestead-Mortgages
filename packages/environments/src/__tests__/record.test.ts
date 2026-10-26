@@ -97,4 +97,32 @@ describe("the run record", () => {
     expect([...ran].sort()).toEqual(["t-missed", "t-rerun", "t-stopped", "t-submitted"]);
     expect([...again].sort()).toEqual(["t-errored", "t-never-ran"]);
   });
+
+  it("says which policy ids a run file was run as, at this version, so a resume can refuse another", () => {
+    const line = (policy: string, version = "1.1.0") =>
+      JSON.stringify({
+        environment: { name: "boarding-triage", version },
+        policy: { id: policy },
+        task: { id: `t-${policy.length}-${version}` },
+        result: {
+          outcome: "submitted",
+          tool_calls: 3,
+          usage: NO_USAGE,
+          transcript: [],
+          answer: null,
+        },
+      });
+    const sixteen = "vertex:deepseek-ai/deepseek-v4.1-flash-maas:thinking";
+    const wide = `${sixteen}:max-tokens-32000`;
+    expect([...recordedTasks(line(sixteen), "1.1.0").policies]).toEqual([sixteen]);
+    expect(
+      [
+        ...recordedTasks(
+          [line(sixteen), line(wide), line("reference", "1.0.0")].join("\n"),
+          "1.1.0",
+        ).policies,
+      ].sort(),
+    ).toEqual([sixteen, wide]);
+    expect(recordedTasks("", "1.1.0").policies.size).toBe(0);
+  });
 });

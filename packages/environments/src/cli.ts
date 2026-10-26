@@ -828,10 +828,19 @@ function unrecorded<T extends TaskCoordinates>(
   tasks: readonly T[],
   out: string,
   version: string,
+  policyId: string,
 ): T[] {
   if (values.out === undefined) throw new Error("--resume needs --out, the file to resume");
   if (!existsSync(out)) return [...tasks];
-  const { ran, again } = recordedTasks(readFileSync(out, "utf8"), version);
+  const { ran, again, policies } = recordedTasks(readFileSync(out, "utf8"), version);
+  // A file is one policy's run. Its budget is in the id, and an environment's
+  // own budget is the default now, so resuming a run made at another budget
+  // without its --max-tokens would append episodes at a second one.
+  const others = [...policies].filter((id) => id !== policyId);
+  if (others.length > 0)
+    throw new Error(
+      `--resume: ${out} was run as ${others.join(", ")}, and this run is ${policyId}; pass the flags it was run with (--max-tokens among them)`,
+    );
   const left = tasks.filter((t) => !ran.has(t.id));
   const rerun = left.filter((t) => again.has(t.id)).length;
   console.log(
@@ -845,7 +854,9 @@ async function run<T extends TaskCoordinates, A>(bench: Bench<T, A>): Promise<vo
   const policy = policyOf(bench.reference, env);
   const runId = `${new Date().toISOString().replace(/[:.]/g, "-")}-${randomUUID().slice(0, 8)}`;
   const out = values.out ?? `runs/${env.name}/${runId}.jsonl`;
-  const tasks = values.resume ? unrecorded(suite(bench), out, env.version) : suite(bench);
+  const tasks = values.resume
+    ? unrecorded(suite(bench), out, env.version, policy.id)
+    : suite(bench);
   const recorder = new RunRecorder(out);
   const concurrency = Math.max(1, Number(values.concurrency));
   console.log(

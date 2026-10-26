@@ -81,19 +81,26 @@ export function neverRan(result: {
 /**
  * What a run file already holds for `--resume`: the tasks with an episode
  * that ran on this version, which it leaves out, and the tasks it runs again
- * because their only episodes ended in a transport error or never ran. It
- * reads a line's coordinates, outcome and counts, never its transcript.
+ * because their only episodes ended in a transport error or never ran, and
+ * the policy ids it was run as, which a resume must match. It reads a line's
+ * coordinates, policy id, outcome and counts, never its transcript.
  */
 export function recordedTasks(
   text: string,
   version: string,
-): { readonly ran: ReadonlySet<string>; readonly again: ReadonlySet<string> } {
+): {
+  readonly ran: ReadonlySet<string>;
+  readonly again: ReadonlySet<string>;
+  readonly policies: ReadonlySet<string>;
+} {
   const ran = new Set<string>();
   const tried = new Set<string>();
+  const policies = new Set<string>();
   for (const line of text.split("\n")) {
     if (!line.trim()) continue;
     let r: {
       environment?: { version?: string };
+      policy?: { id?: string };
       task: { id: string };
       result: { outcome: string; tool_calls?: number; usage?: Partial<Usage> };
     };
@@ -103,8 +110,9 @@ export function recordedTasks(
       continue; // a run still being written ends mid-line
     }
     if (r.environment?.version !== version) continue;
+    if (typeof r.policy?.id === "string") policies.add(r.policy.id);
     tried.add(r.task.id);
     if (r.result.outcome !== "error" && !neverRan(r.result)) ran.add(r.task.id);
   }
-  return { ran, again: new Set([...tried].filter((id) => !ran.has(id))) };
+  return { ran, again: new Set([...tried].filter((id) => !ran.has(id))), policies };
 }

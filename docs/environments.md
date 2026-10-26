@@ -2967,8 +2967,8 @@ DeepSeek-V4.1-Flash's held-out baseline on 1.1.0 (thinking) is 95 of 200
 stands as what the smaller budget measured. Every answer it submitted
 passed at both, and most misses ran out of tokens: 165 at 16,000, 93 at
 32,000, so the 32,000 score is partly the budget too. Part of each run was
-on the Vertex policy before the stream-cut check, so both are lower bounds,
-at most 107 and 35. 1.0.0, retired, passed 65 of the 150 tasks its run
+on the Vertex policy before the stream-cut check, so both are lower bounds:
+at most 107 at 32,000 and 35 at 16,000. 1.0.0, retired, passed 65 of the 150 tasks its run
 scored (docs/decisions.md, "DeepSeek's held-out baselines on the newest
 suites, and two corrected", and "boarding-triage and tape-intake run at
 32,000 tokens a turn").
@@ -5439,6 +5439,9 @@ called and not one token spent, `neverRan` in `src/record.ts`), is not
 scored. The newest scored episode for each task counts, and a task not
 scored on both sides is left out by name. `--resume --out FILE` runs exactly
 those two kinds again, and the Gym's held-out counts skip them the same way.
+A resume refuses a file recorded under another policy id, so a run made at
+one budget is never finished at another: resuming a 16,000 run on
+boarding-triage or tape-intake takes `--max-tokens 16000`.
 Phase 2's gate is read from it.
 
 The default is the reference policy on the held-out suite. A model run

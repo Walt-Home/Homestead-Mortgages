@@ -9603,6 +9603,9 @@ alone. It is the environment's now.
   so every record says its budget. An id at 16,000 is unchanged, and so is
   pricing, which reads an id by its prefix. A run on boarding-triage with no
   flag is recorded at `…:max-tokens-32000`.
+- `--resume` refuses a file recorded under another policy id. The default
+  budget moved under the two files run at 16,000 today, and resuming one
+  without `--max-tokens 16000` would otherwise have finished it at 32,000.
 - The budget is in no fingerprint. The tasks and the grading are unchanged,
   and no environment's version, rulebook, tools or held-out pin moved; every
   pin test passes as it did.

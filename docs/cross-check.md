@@ -223,7 +223,7 @@ charges.
 | ---------------------------------- | ------------- | ------ | ------------- |
 | `receipt.posted`                   | 3,237 / 3,240 | 99.9 % | 2,431 / 2,431 |
 | `receipt.outcome`                  | 3,212 / 3,240 | 99.1 % | 2,431 / 2,431 |
-| `receipt.installments`             | 3,018 / 3,240 | 93.2 % | 2,431 / 2,431 |
+| `receipt.installments`             | 3,018 / 3,240 | 93.1 % | 2,431 / 2,431 |
 | `receipt.interest`                 | 3,012 / 3,240 | 93.0 % | 2,431 / 2,431 |
 | `receipt.principal`                | 3,012 / 3,240 | 93.0 % | 2,431 / 2,431 |
 | `receipt.escrow`                   | 3,202 / 3,240 | 98.8 % | 2,431 / 2,431 |
@@ -235,8 +235,8 @@ charges.
 | `installment.status`               | 3,468 / 3,500 | 99.1 % | 2,619 / 2,619 |
 | `installment.satisfied_on`         | 3,282 / 3,500 | 93.8 % | 2,619 / 2,619 |
 | `installment.credited_as_of`       | 3,282 / 3,500 | 93.8 % | 2,619 / 2,619 |
-| `late_charge.assessed`             | 3,291 / 3,503 | 94.0 % | 2,603 / 2,603 |
-| `late_charge.assessed_on`          | 3,291 / 3,503 | 94.0 % | 2,603 / 2,603 |
+| `late_charge.assessed`             | 3,291 / 3,503 | 93.9 % | 2,603 / 2,603 |
+| `late_charge.assessed_on`          | 3,291 / 3,503 | 93.9 % | 2,603 / 2,603 |
 | `month.upb`                        | 3,275 / 3,503 | 93.5 % | 2,603 / 2,603 |
 | `month.suspense`                   | 3,352 / 3,503 | 95.7 % | 2,603 / 2,603 |
 | `month.late_charges_owed`          | 1,230 / 3,503 | 35.1 % | 1,225 / 2,603 |
@@ -540,7 +540,7 @@ ever moves it later (below).
 | ---------------------------------- | ------------- | ------ | ------------- | ---------- | ------------- |
 | `receipt.posted`                   | 3,920 / 3,925 | 99.9 % | 2,400 / 2,400 | 99.9 %     | 2,431 / 2,431 |
 | `receipt.outcome`                  | 3,876 / 3,925 | 98.8 % | 2,400 / 2,400 | 99.1 %     | 2,431 / 2,431 |
-| `receipt.installments`             | 3,613 / 3,925 | 92.1 % | 2,400 / 2,400 | 93.2 %     | 2,431 / 2,431 |
+| `receipt.installments`             | 3,613 / 3,925 | 92.1 % | 2,400 / 2,400 | 93.1 %     | 2,431 / 2,431 |
 | `receipt.interest`                 | 3,579 / 3,925 | 91.2 % | 2,400 / 2,400 | 93.0 %     | 2,431 / 2,431 |
 | `receipt.principal`                | 3,579 / 3,925 | 91.2 % | 2,400 / 2,400 | 93.0 %     | 2,431 / 2,431 |
 | `receipt.escrow`                   | 3,871 / 3,925 | 98.6 % | 2,400 / 2,400 | 98.8 %     | 2,431 / 2,431 |
@@ -552,8 +552,8 @@ ever moves it later (below).
 | `installment.status`               | 4,203 / 4,262 | 98.6 % | 2,619 / 2,619 | 99.1 %     | 2,619 / 2,619 |
 | `installment.satisfied_on`         | 3,956 / 4,262 | 92.8 % | 2,619 / 2,619 | 93.8 %     | 2,619 / 2,619 |
 | `installment.credited_as_of`       | 3,956 / 4,262 | 92.8 % | 2,619 / 2,619 | 93.8 %     | 2,619 / 2,619 |
-| `late_charge.assessed`             | 3,967 / 4,250 | 93.3 % | 2,589 / 2,589 | 94.0 %     | 2,603 / 2,603 |
-| `late_charge.assessed_on`          | 3,967 / 4,250 | 93.3 % | 2,589 / 2,589 | 94.0 %     | 2,603 / 2,603 |
+| `late_charge.assessed`             | 3,967 / 4,250 | 93.3 % | 2,589 / 2,589 | 93.9 %     | 2,603 / 2,603 |
+| `late_charge.assessed_on`          | 3,967 / 4,250 | 93.3 % | 2,589 / 2,589 | 93.9 %     | 2,603 / 2,603 |
 | `month.upb`                        | 3,896 / 4,250 | 91.7 % | 2,589 / 2,589 | 93.5 %     | 2,603 / 2,603 |
 | `month.suspense`                   | 4,002 / 4,250 | 94.2 % | 2,589 / 2,589 | 95.7 %     | 2,603 / 2,603 |
 | `month.late_charges_owed`          | 1,410 / 4,250 | 33.2 % | 1,393 / 2,589 | 35.1 %     | 1,225 / 2,603 |
@@ -573,12 +573,12 @@ ever moves it later (below).
 
 What moved, and why:
 
-- **The money fields fell one to two points** because two logged defects
+- **The money fields fell by up to two points** because two logged defects
   reach more of these books. cashiering-18 reaches 23 of the 25 loans
   scripted with a repayment plan, against 17 of 26. And 63 of the 92
   transfers carried late charges on the tape, which boarding-6 reaches,
-  against 32 of 82; these transfers come later in their loans' lives (the
-  median boarding is November 2031, against October 2028).
+  against 32 of 82; these transfers come later in their loans' lives (half
+  boarded by October 2031 and half from November, against October 2028).
 - **The late-charge ledger rose three points**, though the other defects
   reach more: under 1.0.0, 316 of its 551 disagreements named cashiering-11,
   and none does now.
@@ -641,10 +641,10 @@ Under 1.0.0, 178 installments due in a transfer's first 60 days had a late
 charge run on one side or the other. The generator charged none of them,
 because it set the engine's blanket shield, and the servicing app charged 18,
 on 16 loans. Under 1.2.0, 192 do, and the two sides charge the same 13, on 11
-loans, to the cent: each an installment paid to us after its grace or not
-paid, which §2.7 charges and the blanket shield spared. b4 LN-6b492a9c-00011,
-boarded 1 September 2026, paid September's installment on 6 October and
-October's on 4 November, and both sides charged $199.81 for each.
+loans, to the cent: each an installment paid to us after its grace, which
+§2.7 charges and the blanket shield spared. b4 LN-6b492a9c-00011, boarded 1
+September 2026, paid September's installment on 6 October and October's on 4
+November, and both sides charged $199.81 for each.
 
 What this run does not reach is the half of cashiering-11 that remains: the
 runtime never sets the shield for a payment the prior servicer received on
@@ -668,10 +668,10 @@ The origination books stopped in July to October 2028, so 40 of their 96
 loans were compared for less than their 24 months (all reached the servicing
 app); the transfer books stopped between November 2034 and December 2035.
 Cost per loan-day rose as the records grew, as under 1.0.0: in the origination
-books, with all 24 loans live, from 0.19 to 0.31 seconds in the first months
-all were live to 0.45 to 0.55 about a year later. That growth is perf-1, logged
-since the first run: each unit's book-wide reads. The generator drew each
-book in 0.36 to 1.0 seconds.
+books, from 0.18 to 0.25 seconds in January 2027, the first month all 24 loans
+were live throughout, to 0.46 to 0.48 a year later, on a lighter load. That
+growth is perf-1, logged since the first run: each unit's book-wide reads. The
+generator drew each book in 0.36 to 1.0 seconds.
 
 ### What it changes
 

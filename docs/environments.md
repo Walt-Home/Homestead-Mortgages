@@ -5381,6 +5381,27 @@ Republish both files after an environment changes:
 npm run env:gym -w @hm/environments     # build, and serve at http://localhost:8765
 ```
 
+**In the app.** The same page is in the ops console, for staff only: the
+"Gym" link in the console's navigation, or `/console/hm/gym/` on the
+servicing host (`staging.servicing.supermortgage.com` on staging). It sits
+behind the tape desk's gate, the servicing app's own staff session; a
+servicer's team never sees it, and the consumer host does not serve it. The
+API image builds the page and the bundle from source
+(`build-playground.mjs --site-only`, which reads no `runs/`), and the
+held-out scores beside them are a committed snapshot of counts,
+`playground/snapshot/scores.json`. That copy carries no recorded attempts:
+`runs.json` is model transcripts, and it is not committed, so the attempts
+tab, the overview and the footer say the build carries none and link the
+claude.ai page, where they are. Refresh the snapshot after a held-out run:
+
+```bash
+npm run env:playground -w @hm/environments     # gathers playground/dist/scores.json from runs/
+npm run env:gym-snapshot -w @hm/environments   # copies its counts to playground/snapshot/, refusing anything else
+```
+
+See docs/decisions.md, "The Gym is in the ops console, without its recorded
+attempts".
+
 ## Commands
 
 ```bash

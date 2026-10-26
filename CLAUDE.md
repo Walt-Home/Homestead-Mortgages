@@ -737,7 +737,10 @@ the console's calls to the servicing app as `/console/api/*` → its `/ops/api/*
 (`apps/api/src/console-host.ts`), and answers the tape desk's own calls at
 `/console/hm/tape/*` itself. Those are all of the servicing app this host serves:
 its own console at `/ops`, its `/api` and its sign-in links were forwarded "for
-comparison" until 5 October and are closed. The console's sign-in is the servicing app's own: a code to the
+comparison" until 5 October and are closed. The host serves the
+Supermortgage Gym too, at `/console/hm/gym/`, for staff behind the tape
+desk's gate and without the model's recorded attempts
+(`routes/console-gym.ts`). The console's sign-in is the servicing app's own: a code to the
 person's e-mail, then a password. The servicing app's mailer is a FAKE and it
 runs as non-production even in production, so it hands the code back in its
 answer; **since 5 October that code never crosses our proxy where our mailer

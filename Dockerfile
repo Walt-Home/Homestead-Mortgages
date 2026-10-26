@@ -27,6 +27,12 @@ RUN npm ci
 
 COPY . .
 RUN npm run db:generate && npm run build
+# The Supermortgage Gym, which the API serves to staff on the servicing host
+# at /console/hm/gym/: its page and its bundle, built from source. --site-only
+# reads no runs and writes no runs.json (model transcripts never enter the
+# image; .dockerignore keeps runs/ out of the context too). The held-out counts
+# served beside them are committed: packages/environments/playground/snapshot.
+RUN npm run env:playground -w @hm/environments -- --site-only
 
 FROM node:22-alpine AS runtime
 WORKDIR /app

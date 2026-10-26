@@ -9809,3 +9809,65 @@ September tape back (245 loans; no claim, offer or closed month rests on
 them), then run `book:renumber` dry and with `--apply` for Grander, which
 should find 1,621 numbers to rewrite and no collisions, leaving 1,866 loans
 on the book.
+
+## The Gym is in the ops console, without its recorded attempts
+
+**Decided 26 October 2026.** The Supermortgage Gym (docs/environments.md,
+"The Supermortgage Gym") is served inside the ops console, at
+`/console/hm/gym/` on the servicing host, to staff and nobody else. The
+copy there carries the page, its bundle and the held-out counts, and no
+recorded attempts by a model. The claude.ai page stays the Gym's home and
+keeps showing them.
+
+**Why it is in the app.** The claude.ai page is private and shared by
+link, one person at a time, from its owner's account. The team already
+signs in to the console, every loan in the Gym is synthetic, and the page
+runs entirely in the browser and sends nothing anywhere, so the console is
+the cheapest place for everyone on staff to try it, on staging and in
+production alike, with no account but the one they have.
+
+**How it is served.** `routes/console-gym.ts`, mounted by `console-host.ts`
+beside the tape desk and behind the same gate: the servicing app's own
+staff session, asked of the servicing app (`services/console-staff.ts`),
+any of the four staff roles. A servicer's member is refused, because their
+session is ours and the gate asks the servicing app's; a request with no
+session gets the 401 every `/console/hm` door gives; the consumer host does
+not mount it. A browser holding a staff session and a member's session
+together opens it as staff, as it opens every `/console/hm` door; the
+console signs out the staff session it finds beside a member's. Three files
+are served by name, and everything else under the path is a 404:
+
+- `index.html` and `environments.js`, built from source in the API image by
+  `build-playground.mjs --site-only`, which reads no `runs/` and writes no
+  `runs.json`. `.dockerignore` keeps `runs/` out of the build context too.
+- `scores.json`, the committed snapshot at
+  `packages/environments/playground/snapshot/scores.json`: for each
+  environment, version and model, the held-out tasks scored and passed, the
+  ones that could not be scored, the tokens spent and when the newest
+  finished. No task, prompt or transcript; `npm run env:gym-snapshot`
+  refuses a file with anything else, and `playground.test.ts` holds the
+  committed one to the same. It is as current as its last refresh:
+  `npm run env:playground -w @hm/environments`, then
+  `npm run env:gym-snapshot -w @hm/environments`, and commit.
+
+The host's Content-Security-Policy admits no inline script, and the page is
+one inline script. On that page alone the policy is the host's with
+`script-src` replaced by `'self'` and the `sha256` of that script, computed
+from the bytes served, so it cannot go stale
+(`gymContentSecurityDirectives` in `security-policy.ts`). Nothing else is
+relaxed: the page's one inline `<style>` is already admitted by the host's
+`style-src`, and the Google and Plaid script sources the borrower app needs
+are not carried to it. The bundle, the scores and every other page on the
+host keep the host's policy; `console-gym.test.ts` holds both.
+
+**Why `runs.json` is not committed.** It is model transcripts: every turn a
+model took on a training task, its tool calls and what they returned. The
+repository is public, so committing them to it publishes them, and whether
+to publish a model's transcripts is a decision of its own, not a side
+effect of putting a page in the console. That decision is left open. Until
+it is made, the in-app build carries no recorded attempts, and the page
+says so where they would show (the attempts tab, the overview's note and
+the footer) and links the claude.ai page; a `runs.json` that answers 404 is
+read as such a build rather than as a failure (`gym-page.test.ts`). The
+held-out counts are a different thing: numbers this document and the
+environments document already report.

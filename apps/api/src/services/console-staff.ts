@@ -36,6 +36,9 @@ declare global {
   }
 }
 
+/** The four roles the servicing app spells; the console grants them together. */
+export const STAFF_ROLES = ["ops_analyst", "officer", "compliance", "admin"] as const;
+
 /** The roles that may load a tape and mail a claim. Compliance reads; it does not load. */
 export const TAPE_ROLES = ["ops_analyst", "officer", "admin"] as const;
 

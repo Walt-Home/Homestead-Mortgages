@@ -54,6 +54,7 @@ import { fileURLToPath } from "node:url";
 import express, { type Express, type Request, type Response, type Router } from "express";
 import { config } from "./config.js";
 import { consoleBillingRouter } from "./routes/console-billing.js";
+import { consoleGymRouter } from "./routes/console-gym.js";
 import { consoleStaffRouter } from "./routes/console-staff.js";
 import { consoleTapeRouter } from "./routes/console-tape.js";
 import { connectors } from "./services/connectors.js";
@@ -118,14 +119,16 @@ export interface ConsoleHostOptions {
   readonly identityToken?: IdentityTokenProvider;
   /**
    * The prefixes on this host our API answers itself: the tape desk, at
-   * `/console/hm/tape`, billing, at `/console/hm/billing`, and staff, at
-   * `/console/hm/staff`, each gated by the servicing app's own session. Unset in a test that is only about
+   * `/console/hm/tape`, billing, at `/console/hm/billing`, staff, at
+   * `/console/hm/staff`, and the Gym, at `/console/hm/gym`, each gated by the servicing app's own session. Unset in a test that is only about
    * the forwarding.
    */
   readonly tape?: Router;
   readonly billing?: Router;
   /** Our own staff door, at `/console/hm/staff`: the invitation sent again. */
   readonly staff?: Router;
+  /** The Supermortgage Gym, at `/console/hm/gym/`, for staff (`routes/console-gym.ts`). */
+  readonly gym?: Router;
   /**
    * Set where our mailer is real. Then no answer carries an echoed code
    * across, and the staff door's code is mailed through this. Unset — in
@@ -393,10 +396,11 @@ export function consoleHostRouter(opts: ConsoleHostOptions): Router {
   router.get("/", (_req, res) => res.redirect(302, "/console/"));
   router.get(/^\/console$/, (_req, res) => res.redirect(302, "/console/"));
 
-  // Ours, before anything forwarded: the tape desk and billing answer here.
+  // Ours, before anything forwarded: the tape desk, billing, staff and the Gym answer here.
   if (opts.tape) router.use("/console/hm/tape", opts.tape);
   if (opts.billing) router.use("/console/hm/billing", opts.billing);
   if (opts.staff) router.use("/console/hm/staff", opts.staff);
+  if (opts.gym) router.use("/console/hm/gym", opts.gym);
 
   // The console's calls, to the servicing app's console API and its document reads.
   router.use(
@@ -514,9 +518,20 @@ export function consoleHost(app: Express): "not-configured" | "proxy-only" | "co
   const upstream = config.servicing.apiUrl;
   if (!upstream) return "not-configured";
   const identityToken = identityTokenFor(upstream);
+  const here = dirname(fileURLToPath(import.meta.url));
   const tape = consoleTapeRouter({ upstream, identityToken });
   const billing = consoleBillingRouter({ upstream, identityToken });
   const staff = consoleStaffRouter({ upstream, identityToken });
+  // src/ or dist/ → the environments package, which the image carries whole.
+  const playground = resolve(here, "../../../packages/environments/playground");
+  const gym = consoleGymRouter(
+    { upstream, identityToken },
+    {
+      site: join(playground, "dist"),
+      scores: join(playground, "snapshot", "scores.json"),
+      plaidEnvironment: config.plaid.environment,
+    },
+  );
   const codes = signInCodeMail();
   if (!host) {
     // No servicing hostname: development, where the console's dev server
@@ -525,9 +540,9 @@ export function consoleHost(app: Express): "not-configured" | "proxy-only" | "co
     app.use("/console/hm/tape", tape);
     app.use("/console/hm/billing", billing);
     app.use("/console/hm/staff", staff);
+    app.use("/console/hm/gym", gym);
     return "not-configured";
   }
-  const here = dirname(fileURLToPath(import.meta.url));
   // dist/index.js → ../../console/dist in the image; src/ → the same in the repo.
   const dist = resolve(here, "../../console/dist");
   const built = existsSync(join(dist, "index.html"));
@@ -539,6 +554,7 @@ export function consoleHost(app: Express): "not-configured" | "proxy-only" | "co
     tape,
     billing,
     staff,
+    gym,
     ...(codes ? { codes } : {}),
   });
   app.use((req, res, next) => {

@@ -19,7 +19,11 @@ import { z } from "zod";
 import { AppError, asyncRoute } from "../middleware/error-handler.js";
 import { config } from "../config.js";
 import { connectors } from "../services/connectors.js";
-import { consoleStaffGate, type ConsoleStaffGateOptions } from "../services/console-staff.js";
+import {
+  consoleStaffGate,
+  STAFF_ROLES,
+  type ConsoleStaffGateOptions,
+} from "../services/console-staff.js";
 import {
   heldInvitation,
   rememberInvitation,
@@ -28,9 +32,6 @@ import {
   type InvitationMail,
 } from "../services/console-staff-invitations.js";
 import { IDENTITY_HEADER } from "../services/google-identity.js";
-
-/** The four roles the servicing app spells; the console grants them together. */
-const STAFF_ROLES = ["ops_analyst", "officer", "compliance", "admin"] as const;
 
 const ResendBody = z
   .object({

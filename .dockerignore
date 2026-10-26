@@ -16,3 +16,7 @@
 .env.local
 **/.DS_Store
 infra/.terraform
+# Model transcripts from the environments' runs. Never in an image: the Gym the
+# API serves carries no recorded attempts (docs/decisions.md, "The Gym is in
+# the ops console, without its recorded attempts").
+packages/environments/runs

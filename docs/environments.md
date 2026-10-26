@@ -5484,7 +5484,7 @@ There are three model policies, and none falls back to another model:
   - Thinking is on (`--thinking off` turns it off), and the reasoning goes
     back with its assistant turn.
   - Each turn may write the episode's output budget, reasoning included
-    (below): 32,000 on boarding-triage and tape-intake, 16,000 elsewhere.
+    (above): 32,000 on boarding-triage and tape-intake, 16,000 elsewhere.
     The policy id names any budget but 16,000
     (`…:thinking:max-tokens-32000`). An episode that spends its budget
     mid-turn ends `max_tokens` and fails.

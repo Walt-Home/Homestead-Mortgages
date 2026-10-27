@@ -10,6 +10,7 @@ data only**: no real Social Security number, no real ID, no real bank.
 | The borrower app     | https://staging.app.supermortgage.com                                                |
 | The ops console      | https://staging.servicing.supermortgage.com/console                                  |
 | What is real today   | https://staging.app.supermortgage.com/api/health, under `providers`                  |
+| What is deployed     | the same page, under `commit`; the console shows it under your name                  |
 | The engine's view    | add `?debug=1` to any file URL (requirement ids, blocked roots; never for borrowers) |
 | The property vendors | https://staging.app.supermortgage.com/demo/property, as anyone signed in             |
 

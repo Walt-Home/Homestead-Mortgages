@@ -26,6 +26,12 @@ COPY apps/servicing/package.json apps/servicing/
 RUN npm ci
 
 COPY . .
+# The commit this image is built from, which deploy.yml passes as
+# `--build-arg BUILD_COMMIT=<sha>`. The console's bundle reads it while it is
+# built (apps/console/vite.config.ts), and the runtime stage below keeps it
+# for /api/health. A build that passes none, like a developer's own, reports
+# none rather than a guess.
+ARG BUILD_COMMIT=""
 RUN npm run db:generate && npm run build
 # The Supermortgage Gym, which the API serves to staff on the servicing host
 # at /console/hm/gym/: its page and its bundle, built from source. --site-only
@@ -49,6 +55,13 @@ COPY --from=build /app/packages ./packages
 COPY --from=build /app/apps/api/dist ./apps/api/dist
 COPY --from=build /app/apps/web/dist ./apps/web/dist
 COPY --from=build /app/apps/console/dist ./apps/console/dist
+
+# What /api/health reports as `commit` and `builtAt` (config.ts, `build`).
+# Production promotes this image rather than building its own, so the commit
+# it reports is the one staging built and tested.
+ARG BUILD_COMMIT=""
+ARG BUILT_AT=""
+ENV BUILD_COMMIT=$BUILD_COMMIT BUILT_AT=$BUILT_AT
 
 EXPOSE 8080
 CMD ["node", "apps/api/dist/index.js"]

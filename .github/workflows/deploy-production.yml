@@ -13,6 +13,13 @@ name: Deploy to production
 # Order: the servicing app first (the API is told where its door is), then
 # the API. Both read `_PROD` secrets; both connect to the production
 # instance; the jobs are pointed at the same image.
+#
+# Before the approval, `resolve` writes what ships to the run's summary:
+# every commit since the `production` tag, the areas they touch, and any new
+# migration or change to infra/ or a workflow. After the deploy, health must
+# report the promoted commit, and `tag` moves the `production` tag to it.
+# See docs/decisions.md, "Production says what it runs, and the approver
+# sees what ships".
 
 on:
   workflow_dispatch:
@@ -21,6 +28,14 @@ on:
         description: "The commit to promote. It must have deployed to staging, so its image exists."
         required: false
         default: ""
+
+# One promotion at a time. The `production` tag says what production runs
+# only if promotions finish in the order they started, and two runs would
+# migrate one database at once besides. A second run waits for the first,
+# including while the first waits for its approval.
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
 
 env:
   GCP_PROJECT: homestead-mortgages
@@ -43,6 +58,7 @@ jobs:
       sha: ${{ steps.pick.outputs.sha }}
       image: ${{ steps.pick.outputs.image }}
       servicing_image: ${{ steps.pick.outputs.servicing_image }}
+      reports_commit: ${{ steps.pick.outputs.reports_commit }}
     permissions:
       contents: read
       id-token: write
@@ -61,12 +77,15 @@ jobs:
       # staging deploy is what builds one, so a commit staging never deployed
       # cannot reach production. The servicing image is built only when its
       # tree changed, so its tag is the newest commit at or before this one
-      # that has one.
+      # that has one. The input reaches the shell through the environment,
+      # never spliced into the script.
       - id: pick
+        env:
+          REQUESTED: ${{ github.event.inputs.sha }}
         run: |
-          SHA="${{ github.event.inputs.sha }}"
+          SHA="$REQUESTED"
           if [ -z "$SHA" ]; then SHA=$(git rev-parse HEAD); fi
-          SHA=$(git rev-parse "$SHA")
+          SHA=$(git rev-parse --verify --quiet "$SHA^{commit}") || { echo "::error::'$REQUESTED' is not a commit"; exit 1; }
           git merge-base --is-ancestor "$SHA" origin/main || { echo "::error::$SHA is not on main"; exit 1; }
           REPO=${{ env.REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT }}/${{ env.ARTIFACT_REPO }}
           IMAGE="$REPO/${{ env.STAGING_SERVICE }}:$SHA"
@@ -80,10 +99,75 @@ jobs:
             fi
           done
           test -n "$SERVICING_IMAGE" || { echo "::error::no servicing image at or before $SHA"; exit 1; }
+          # Whether the API image says which commit it is: staging bakes the
+          # commit in since the Dockerfile set BUILD_COMMIT, and an image built
+          # before that reports none, which the deploy's check then says
+          # rather than fails on.
+          DOCKERFILE=$(git show "$SHA:Dockerfile")
+          if grep -qE '^ENV .*BUILD_COMMIT=' <<< "$DOCKERFILE"; then REPORTS=true; else REPORTS=false; fi
           echo "sha=$SHA" >> "$GITHUB_OUTPUT"
           echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
           echo "servicing_image=$SERVICING_IMAGE" >> "$GITHUB_OUTPUT"
+          echo "reports_commit=$REPORTS" >> "$GITHUB_OUTPUT"
           echo "promoting $IMAGE and $SERVICING_IMAGE"
+
+      # What ships, said where the approver reads it. This job names no
+      # environment, so it runs before the `production` gate, and the run's
+      # page carries this summary while the approval is being asked for.
+      # What production runs is the `production` tag, which the `tag` job
+      # moves after every promotion that succeeds. Beside it, what the
+      # service says: the commit its /api/health reports, or for an image
+      # too old to report one, the commit its image is tagged with. Before
+      # the first promotion that stands in for the tag, and when the two
+      # disagree (a revision rolled back by hand) the summary says so.
+      # scripts/promotion-summary.mjs writes the range, the areas it touches
+      # and what deserves a second look (a new migration, infra/, a
+      # workflow), each also an annotation; its Markdown goes straight to
+      # the summary and never through the log.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Say what ships
+        env:
+          SHA: ${{ steps.pick.outputs.sha }}
+          IMAGE: ${{ steps.pick.outputs.image }}
+          SERVICING_IMAGE: ${{ steps.pick.outputs.servicing_image }}
+          REPOSITORY: ${{ github.server_url }}/${{ github.repository }}
+        run: |
+          set -euo pipefail
+          TAG=""
+          LISTED=$(git ls-remote origin refs/tags/production)
+          if [ -n "$LISTED" ]; then
+            git fetch --no-tags --force origin "+refs/tags/production:refs/tags/production"
+            TAG=$(git rev-parse "refs/tags/production^{commit}")
+          fi
+          describe() {
+            gcloud run services describe "$1" \
+              --region ${{ env.REGION }} --project ${{ env.GCP_PROJECT }} \
+              --format="value($2)" 2>/dev/null || true
+          }
+          RUNNING_IMAGE=$(describe ${{ env.SERVICE }} "spec.template.spec.containers[0].image")
+          SERVICING_RUNNING=$(describe ${{ env.SERVICING_SERVICE }} "spec.template.spec.containers[0].image")
+          URL=$(describe ${{ env.SERVICE }} "status.url")
+          RUNNING=""
+          if [ -n "$URL" ]; then
+            RUNNING=$(curl -fsS --max-time 30 "$URL/api/health" 2>/dev/null \
+              | python3 -c 'import json,sys; print(json.load(sys.stdin).get("commit") or "")' 2>/dev/null || true)
+          fi
+          SOURCE="production's /api/health"
+          if [ -z "$RUNNING" ]; then
+            RUNNING=$(sed -nE 's/^.*:([0-9a-f]{40})$/\1/p' <<< "$RUNNING_IMAGE")
+            SOURCE="the image Cloud Run's production service was last deployed with"
+          fi
+          echo "production tag: ${TAG:-none}; ${SOURCE}: ${RUNNING:-none}"
+          node scripts/promotion-summary.mjs "$SHA" \
+            --production-tag "$TAG" \
+            --running "$RUNNING" \
+            --running-source "$SOURCE" \
+            --api-image "$IMAGE" \
+            --servicing-image "$SERVICING_IMAGE" \
+            --servicing-running "$SERVICING_RUNNING" \
+            --repository "$REPOSITORY" >> "$GITHUB_STEP_SUMMARY"
 
   deploy-servicing:
     needs: resolve
@@ -474,3 +558,67 @@ jobs:
             *'"coversThisWeek":true'*) echo "ok: the APOR series covers this week" ;;
             *) echo "::error::the APOR series does not cover this week"; exit 1 ;;
           esac
+      # Production says what it runs: /api/health reports the commit its
+      # image was built from, baked in when staging built it, and this run
+      # promoted the image staging built for the commit `resolve` chose. The
+      # two must be one commit; anything else (an older revision still
+      # answering, an image that is not the one resolved) fails here, before
+      # the tag moves. An image staging built before the commit was baked in
+      # reports none, and promoting one is said out loud rather than failed.
+      - name: Confirm production runs the commit it promoted
+        env:
+          EXPECTED: ${{ needs.resolve.outputs.sha }}
+          REPORTS_COMMIT: ${{ needs.resolve.outputs.reports_commit }}
+        run: |
+          set -euo pipefail
+          URL=$(gcloud run services describe ${{ env.SERVICE }} \
+            --region ${{ env.REGION }} --project ${{ env.GCP_PROJECT }} \
+            --format="value(status.url)")
+          reported() {
+            curl -fsS --max-time 30 "$URL/api/health" \
+              | python3 -c 'import json,sys; print(json.load(sys.stdin).get("commit") or "")'
+          }
+          COMMIT=$(reported || true)
+          if [ "$REPORTS_COMMIT" != "true" ] && [ -z "$COMMIT" ]; then
+            echo "::warning::$EXPECTED was built before the image carried its commit, so production's health names none; a promotion of a newer commit will"
+            exit 0
+          fi
+          for attempt in 1 2 3 4 5 6; do
+            [ "$COMMIT" = "$EXPECTED" ] && break
+            echo "attempt $attempt: health reports ${COMMIT:-no commit}; retrying"
+            sleep 10
+            COMMIT=$(reported || true)
+          done
+          if [ "$COMMIT" != "$EXPECTED" ]; then
+            echo "::error::production's health reports commit ${COMMIT:-none}, not $EXPECTED, which this run promoted"
+            exit 1
+          fi
+          echo "ok: production runs $EXPECTED"
+
+  # The record of what production runs: the `production` tag, moved to the
+  # commit just promoted once health has reported it. The next promotion's
+  # summary measures from here. A job of its own because it is the one that
+  # writes to this repository — `contents: write` here and on no other job —
+  # and it names no environment: each job naming `production` asks for an
+  # approval of its own, and this one only follows the two that were
+  # approved. It installs nothing and holds no secret. A tag and never a
+  # branch: nothing is built from it, and a rollback moves it back.
+  tag:
+    needs: [resolve, deploy]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.resolve.outputs.sha }}
+      - name: Move the production tag to the promoted commit
+        env:
+          SHA: ${{ needs.resolve.outputs.sha }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$SHA"
+          git tag --force production "$SHA"
+          git push --force origin refs/tags/production
+          echo "production -> $SHA"
+          echo "The \`production\` tag names \`$SHA\`, which production now runs." >> "$GITHUB_STEP_SUMMARY"

@@ -557,10 +557,19 @@ jobs:
       # Artifact Registry returns a transient 502 on the manifest push often
       # enough to fail a deploy that was otherwise fine — seen once already,
       # with every layer pushed and only the manifest rejected.
+      #
+      # The image carries the commit it is built from, and when: the
+      # Dockerfile keeps both in the runtime's environment for /api/health
+      # and hands the commit to the console's bundle. The tag is the same
+      # commit, and production promotes this very image, so production
+      # reports the commit staging tested.
       - name: Build and push
         run: |
           IMAGE=${{ env.REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT }}/${{ env.ARTIFACT_REPO }}/${{ env.SERVICE }}:${{ github.sha }}
-          docker build -t "$IMAGE" .
+          docker build \
+            --build-arg BUILD_COMMIT=${{ github.sha }} \
+            --build-arg BUILT_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            -t "$IMAGE" .
           for attempt in 1 2 3; do
             if docker push "$IMAGE"; then
               echo "IMAGE=$IMAGE" >> $GITHUB_ENV
@@ -1046,6 +1055,36 @@ jobs:
             *'"database":"ok"'*) echo "database reachable from the deployed revision" ;;
             *) echo "::error::deployed service cannot reach its database"; exit 1 ;;
           esac
+
+      # And the revision answering is the image this run built: /api/health
+      # reports the commit baked into it, which must be the commit pushed.
+      # Anything else — a revision that never took traffic, a push that
+      # landed beside this one and deployed after it — fails here, rather
+      # than reading as this commit tested on staging.
+      - name: Confirm the service runs the commit that was pushed
+        env:
+          EXPECTED: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          URL=$(gcloud run services describe ${{ env.SERVICE }} \
+            --region ${{ env.REGION }} --project ${{ env.GCP_PROJECT }} \
+            --format="value(status.url)")
+          reported() {
+            curl -fsS --max-time 30 "$URL/api/health" \
+              | python3 -c 'import json,sys; print(json.load(sys.stdin).get("commit") or "")'
+          }
+          COMMIT=$(reported || true)
+          for attempt in 1 2 3 4 5 6; do
+            [ "$COMMIT" = "$EXPECTED" ] && break
+            echo "attempt $attempt: health reports ${COMMIT:-no commit}; retrying"
+            sleep 10
+            COMMIT=$(reported || true)
+          done
+          if [ "$COMMIT" != "$EXPECTED" ]; then
+            echo "::error::the service reports commit ${COMMIT:-none}, not $EXPECTED, which this run built and deployed"
+            exit 1
+          fi
+          echo "ok: staging runs $EXPECTED"
 
       # And the live read reaches his door, through Cloud Run's gate: the
       # Grander persona signs in with no credential (DEMO_PERSONAS is on

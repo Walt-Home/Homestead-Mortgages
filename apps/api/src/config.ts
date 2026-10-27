@@ -22,9 +22,38 @@ function parseTrustProxy(v: string | undefined): number | boolean {
   return Number.isFinite(n) && n >= 0 ? n : false;
 }
 
+/**
+ * The commit this image was built from, and when it was built.
+ *
+ * Baked in, not configured: deploy.yml passes both to `docker build` and the
+ * Dockerfile keeps them in the runtime's environment, so a revision cannot be
+ * told a commit at deploy time that it was not built from. Production runs
+ * the image staging built for the same commit, so the two report the commit
+ * staging tested, and each deploy fails unless /api/health names the commit
+ * it deployed. Anything but a full commit id, or a UTC timestamp to the
+ * second, reads as unknown — locally, in tests, in an image built before
+ * either was passed — and unknown is null, never a guess.
+ */
+export function buildIdentity(env: Record<string, string | undefined>): {
+  commit: string | null;
+  builtAt: string | null;
+} {
+  const commit = env.BUILD_COMMIT?.trim() ?? "";
+  const builtAt = env.BUILT_AT?.trim() ?? "";
+  return {
+    commit: /^[0-9a-f]{40}$/.test(commit) ? commit : null,
+    builtAt:
+      /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/.test(builtAt) && !Number.isNaN(Date.parse(builtAt))
+        ? builtAt
+        : null,
+  };
+}
+
 export const config = {
   port: parseInt(process.env.PORT ?? "8080", 10),
   nodeEnv: process.env.NODE_ENV ?? "development",
+  /** The commit the running image was built from, and when; see `buildIdentity`. */
+  build: buildIdentity(process.env),
   /**
    * The state gallery at /states — every state and its copy, side by side.
    *

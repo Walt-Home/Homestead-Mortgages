@@ -5,7 +5,8 @@
  * behind a menu button in a slim top bar; from `md` it is a 60px rail of
  * icons; from `lg` (1024px) the rail widens to 248px with labels, section
  * headings and counts. The account and the acting role live at the bottom
- * of the nav in every form.
+ * of the nav in every form, and under the account where there is room, the
+ * commit the console was built from.
  */
 
 import { useEffect, useState, type ReactNode } from "react";
@@ -14,6 +15,7 @@ import clsx from "clsx";
 import { Icon } from "./Icon.js";
 import { Count, IconButton } from "./ui.js";
 import { rolesWord, useAuth } from "../lib/auth.js";
+import { BUILD_COMMIT, commitLink } from "../lib/build.js";
 import { useHome, type QueueKind } from "../lib/home.js";
 import { isPage, navGroups, type NavGroup, type NavItem } from "../lib/nav.js";
 
@@ -145,7 +147,25 @@ function Account({ compact }: { compact?: boolean }) {
           className="-mr-1"
         />
       </div>
+      <Build />
     </div>
+  );
+}
+
+/** The commit this console was built from, linked to it; nothing when no build named one. */
+function Build() {
+  if (!BUILD_COMMIT) return null;
+  const { label, href } = commitLink(BUILD_COMMIT);
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noreferrer"
+      title={`Built from ${BUILD_COMMIT}`}
+      className="mt-2 block pl-12 text-xs text-fg-3 hover:text-fg-2"
+    >
+      Build <span className="font-mono">{label}</span>
+    </a>
   );
 }
 

@@ -9906,3 +9906,98 @@ baseline from here, as 95 and 175 are boarding-triage's and tape-intake's;
 `runs/contact-audit/heldout-vertex-deepseek-v4.1-flash-max-tokens-32000-2026-10-26.jsonl`,
 its policy id `vertex:deepseek-ai/deepseek-v4.1-flash-maas:thinking:max-tokens-32000`.
 The Gym's committed scores snapshot carries it.
+
+## Production says what it runs, and the approver sees what ships
+
+**Decided 27 October 2026.** The promotion of 4ef79e7 on 26 October shipped
+194 commits — production had last been promoted on 21 October — and nothing
+on the run page showed the approver the list: the approval asked about a
+commit id and nothing else. And `/api/health` named no commit, so "what is
+production running?" meant finding the last green run of
+`deploy-production.yml` in the Actions history. Promotion stays by commit,
+from main, and two things are built around it.
+
+**Production says what it runs.**
+
+- The API image carries the commit it was built from. `deploy.yml` passes it
+  to `docker build` (`BUILD_COMMIT`, with `BUILT_AT`), the Dockerfile keeps
+  both in the runtime's environment, and `/api/health` reports them as
+  `commit` and `builtAt` (`buildIdentity` in `config.ts`). Anything but a
+  full commit id is null — locally, in tests, in an image built before this
+  — never a guess. Production promotes the image staging built for the
+  commit, so it reports the commit staging tested; a variable set at deploy
+  time could have been told anything.
+- The ops console shows it under the staff member's name, "Build" and the
+  short id, linked to the commit. The console is built in the same image
+  from the same argument, as a Vite `define`. Turbo hands a task only the
+  variables its configuration names, so `turbo.json` names `BUILD_COMMIT`
+  for `build`; without it the footer would be empty in every image, and a
+  test holds the line. The shared sign-in page and the partner portal do
+  not show it.
+- Both deploys fail unless health reports the commit they deployed:
+  staging's "Confirm the service runs the commit that was pushed", against
+  the pushed commit, and production's "Confirm production runs the commit
+  it promoted", against the one `resolve` chose. An image built before the
+  commit was baked in reports none; promoting one warns rather than fails,
+  and `resolve` tells which by reading that commit's Dockerfile.
+- After a promotion succeeds, the `tag` job moves the git tag `production`
+  to the promoted commit, by force-pushing the tag; no branch is ever made
+  or pushed. It is the only job in either workflow with `contents: write`,
+  and it names no environment, because each job naming `production` asks
+  for an approval of its own. Promotions now run one at a time
+  (`concurrency: deploy-production`), so the tag moves in the order the
+  deploys finish. Staging has no tag: its deploys are not serialized, so a
+  `staging` tag could name a commit staging no longer runs, and its health
+  already says exactly which it does.
+- The servicing app reports nothing new. Its health endpoint is in the
+  vendored tree, which is not edited here; its image is tagged with the
+  commit at which its tree last changed, and the summary names that image.
+
+**The approver sees what ships.** `resolve` names no environment, so it runs
+before the gate, and it now writes the run's summary through
+`scripts/promotion-summary.mjs`. The summary gives the commit being
+promoted, and what production runs: the `production` tag, checked against
+the commit production's health reports (or, for an image too old to report
+one, the commit its image is tagged with). Before the first promotion that
+reading stands in for the tag; when the two disagree, as after a revision
+rolled back by hand, the summary says so; with neither, it says nothing here
+knows and lists the last fifty commits. Then both images, a compare link,
+the count of commits, how many commits and files fall in each app, package
+and top-level folder, and `git log --oneline --no-merges` over the range,
+three hundred lines at most, with the number cut. A new migration, a change
+to a migration production has already applied, anything under `infra/` and
+anything under `.github/workflows/` are listed under "Look closely" and
+raised as annotations. A redeploy and a rollback are named as such; a
+rollback lists the commits that leave and the migrations that stay applied.
+The Markdown is written straight to the summary and never echoed into the
+log, where the runner would read a commit subject for commands. `resolve`
+still refuses a commit that is not on main, and the requested commit now
+reaches the shell through the environment rather than spliced into the
+script.
+
+**Why not a production branch.** One build, promoted: the image production
+runs is the image staging tested, byte for byte, because nothing is built
+for production. A branch is either built again, which is a second build
+that can differ from the first (a base image moved, a dependency resolved on
+another day), or it is only a pointer, and a pointer that can also carry
+commits of its own can drift from main. The tag is the pointer without the
+drift.
+
+**What keeps a rollback possible.** A rollback is traffic sent back to the
+previous Cloud Run revision, or an older commit promoted. Either way the
+database stays where the newer release left it, because nothing rolls a
+migration back. So a migration only adds — a new table, a new column that
+is nullable or carries a default — in the release that introduces it, and
+the revision before it still runs against the schema it leaves. Dropping or
+renaming comes a release later, once no revision that could take traffic
+reads what goes. The summary lists every new migration with that rule
+beside it, which is where the approver checks it.
+
+**Once, after this lands.** Nothing is required: the first promotion finds
+no tag, measures from the commit Cloud Run's production service was last
+deployed with (4ef79e7 today; its image predates the commit in health), and
+sets the tag when it succeeds. To have the tag before then:
+`git tag production 4ef79e7cf019d78673dca626f3cde293e0073b9b` and
+`git push origin refs/tags/production`. The repository has no ruleset
+today; one that protects tags would have to let the workflow's token move
+`production`.

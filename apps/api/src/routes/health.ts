@@ -46,6 +46,12 @@ healthRouter.get("/", async (_req, res) => {
     status: database === "ok" ? "ok" : "degraded",
     service: "homestead-mortgages-api",
     version: "0.1.0",
+    // What this revision runs: the commit its image was built from, baked in
+    // at build time, and when. Production promotes staging's image, so it
+    // names the commit staging tested, and both deploys fail unless this is
+    // the commit they deployed. Null where no build named one.
+    commit: config.build.commit,
+    builtAt: config.build.builtAt,
     database,
     databaseError,
     requirementCount: REQUIREMENTS.length,

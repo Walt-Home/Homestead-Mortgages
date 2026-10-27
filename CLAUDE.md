@@ -684,8 +684,13 @@ hand with local state and always `-target`. Staging deploys on every push
 to main (`deploy.yml`); production deploys by `deploy-production.yml`, a
 manual run behind the `production` GitHub environment's approval, which
 promotes the image staging built for that commit and refuses sample data.
-Production's secrets are `_PROD`. See `docs/decisions.md`, "Two
-environments, one configuration".
+`/api/health` reports the `commit` its image was built from (the console
+shows it under the staff member's name), each deploy fails unless that is
+the commit it deployed, and a promotion moves the `production` tag to it;
+before the approval, the run's summary lists what ships since that tag
+(`scripts/promotion-summary.mjs`, "Production says what it runs, and the
+approver sees what ships"). Production's secrets are `_PROD`. See
+`docs/decisions.md`, "Two environments, one configuration".
 
 **The servicing app deploys beside the API, in our project and
 nowhere else**, as `homestead-mortgages-staging-servicing` and

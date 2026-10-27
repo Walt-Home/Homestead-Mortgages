@@ -588,6 +588,22 @@ describe("the Gym's page", () => {
     expect(page.errors).toEqual([]);
   });
 
+  it("writes a list of amounts as dollars, and a case's codes and records in words", async () => {
+    const page = await load({ status: 404 });
+    // A list in cents is a list of amounts: $141,168.22, never 14116822.
+    await open(page, "qualifying-income");
+    expect(page.text("case-body")).toMatch(/Account balances\$[\d,]+\.\d\d/);
+    expect(page.text("case-body")).not.toMatch(/Account balances\d/);
+    // A ledger's own descriptions, a contact's channel and a record's name read as words.
+    for (const key of ["escrow-review", "ei-clocks"]) {
+      await open(page, key);
+      expect(page.text("case-body"), key).not.toMatch(/[a-z]_[a-z]/);
+    }
+    await open(page, "escrow-review");
+    expect(page.text("case-body")).toContain("Analysis 1");
+    expect(page.errors).toEqual([]);
+  });
+
   it("opens each findings job on a case that has findings, and names worked examples without spec references", async () => {
     const page = await load({ status: 404 });
     for (const key of ["boarding-triage", "tape-intake", "contact-audit", "call-qa"]) {

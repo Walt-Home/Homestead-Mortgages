@@ -427,13 +427,17 @@ td.long { min-width: 18rem; white-space: normal; overflow-wrap: anywhere; }
 .cmp-row .cmp-mark svg { width: 16px; height: 16px; margin-top: 2px; }
 .diff { color: var(--danger); font-weight: 600; }
 .cmp-val { overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
-.cmp-tag { display: none; color: var(--muted); font-size: var(--fs-xs); }
+/* Which value is whose: said to a screen reader everywhere, and shown on a phone, where the column heads are gone. */
+.cmp-tag {
+  position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap;
+  color: var(--muted); font-size: var(--fs-xs);
+}
 @media (max-width: 560px) {
   .cmp-head { display: none; }
   .cmp-row { grid-template-columns: 1.5rem minmax(0, 1fr); }
   .cmp-row .cmp-item { grid-column: 2; font-weight: 600; }
   .cmp-row .cmp-ai, .cmp-row .cmp-right { grid-column: 2; }
-  .cmp-tag { display: inline; margin-right: 6px; }
+  .cmp-tag { position: static; width: auto; height: auto; margin: 0 6px 0 0; overflow: visible; clip: auto; white-space: normal; }
 }
 .inline-kv { display: grid; gap: 1px; }
 .inline-kv .k { color: var(--muted); }
@@ -947,6 +951,10 @@ pre {
       answer: [{ path: "flag_stands", always: true }, "decision", "shortage_cents", "surplus_cents", "deficiency_cents", "repayment_months",
         "new_payment_cents", "effective_on", "anomalies"],
       labels: ESCROW_LABELS, caseFirst: ["lines", "ledger", "history"], codes: { anomalies: escrowCodes(true) },
+      text: [
+        [/^([a-z][a-z0-9_]*) bill$/, (m) => sentence(codeLabel(m[1])) + " bill"],
+        [/^installment due (\d{4}-\d{2}-\d{2}), escrow share$/, (m) => "Escrow share of the installment due " + fmtDate(m[1])]
+      ],
       sentence: "Re-check a yearly escrow analysis before approval, and say if it needs a second look." },
     "arm-adjustment": { group: "servicing", name: "Adjustable-rate change",
       answer: ["new_rate_pct", "new_pi_cents", "first_new_payment_due", "bound", "notice_kind", "notice_window_open", "notice_due_by", "send_outcome", "days_late"],
@@ -1123,7 +1131,8 @@ pre {
     payment_deferral: "Payment deferral", ge_90: "90 days or more", lt_90: "Under 90 days", le_37: "37 days or fewer",
     board_as_is: "Board as is", load_after_correction: "Load after correcting", satisfied_live: "Met by live contact",
     satisfied_by_prior_180: "Covered by a notice in the last 180 days", cancelled_paid: "Canceled: paid",
-    voicemail_left: "Voicemail left", no_answer: "No answer", co_borrower: "Co-borrower", housing_counselor: "Housing counselor",
+    voicemail_left: "Voicemail left", no_voicemail: "No voicemail left", no_answer: "No answer", ai_voice: "AI voice",
+    ei_written_notice: "The early-intervention written notice", form_1098: "Form 1098", co_borrower: "Co-borrower", housing_counselor: "Housing counselor",
     borrower_inquiry: "Borrower inquiry", payment_arrangement: "Payment arrangement", information_provided: "Information provided",
     no_contact: "No contact", paid_in_full: "Paid in full", paid_in_full_tolerance_expense: "Paid in full, shortfall absorbed as an expense",
     paid_in_full_overage_refund_10bd: "Paid in full, overage refunded in 10 business days",
@@ -1244,15 +1253,19 @@ pre {
     const words = t.map((w) => (Object.prototype.hasOwnProperty.call(WORDS, w) ? WORDS[w] : w)).filter(Boolean);
     return sentence(words.join(" ").replace(/\s+%/g, "%"));
   }
-  /** One row's name from a list's key: "receipts" → "receipt". */
+  /** One row's name from a list's key: "receipts" → "receipt", "analyses" → "analysis", "cases" → "case". */
   function singular(k) {
     k = String(k);
+    if (/series$/.test(k)) return k;
     if (/ies$/.test(k)) return k.slice(0, -3) + "y";
-    if (/(ss|us)$/.test(k)) return k;
-    if (/ses$/.test(k)) return k.slice(0, -2);
+    if (/yses$/.test(k)) return k.slice(0, -2) + "is";
+    if (/(ss|us|is)$/.test(k)) return k;
+    if (/(ss|us|x|ch|sh)es$/.test(k)) return k.slice(0, -2);
     if (/s$/.test(k)) return k.slice(0, -1);
     return k;
   }
+  /** The key one item of a list is read by: a list in cents is a list of amounts in cents. */
+  function itemKey(k) { k = String(k || ""); return unitOf(k) ? k : singular(k); }
   function codeLabel(v) {
     const s = String(v);
     if (has(JOB_VALUES, s)) return JOB_VALUES[s];
@@ -1322,7 +1335,7 @@ pre {
 
   /** A list of plain values: "a, b, c", with the rest behind a button when it is long. */
   function scalarList(key, list, verbatim) {
-    const k = singular(key || "");
+    const k = itemKey(key);
     const out = h("span");
     const draw = (all) => {
       clear(out);
@@ -1979,7 +1992,7 @@ pre {
   }
   function listControl(item, key, title) {
     const id = fid();
-    const kind = textKind(item, singular(key || ""));
+    const kind = textKind(item, itemKey(key));
     const inp = h("input", { type: "text", id: id, autocomplete: "off", spellcheck: "false", "aria-describedby": id + "-hint" });
     const el = h("div", { class: "f" }, h("label", { for: id }, title || label(key)), inp, h("p", { class: "f-hint", id: id + "-hint" }, kind === "text" ? "Separate several with commas, in words or as the rules' codes. Leave blank for none." : "Separate several with commas. Leave blank for none."));
     return {
@@ -2582,7 +2595,7 @@ pre {
     const head = h("div", { class: "cmp-head", "aria-hidden": "true" }, h("span"), h("span", null, "Item"), h("span", null, who === "Claude" ? "Claude" : "The AI"), h("span", null, "Right answer"));
     const row = (f) => {
       const pair = gradePair(env, f);
-      return h("div", { class: "cmp-row" + (f.ok ? "" : " is-bad") },
+      return h("div", { class: "cmp-row" + (f.ok ? "" : " is-bad"), role: "listitem" },
         h("span", { class: "cmp-mark" }, mark(f.ok ? "ok" : "bad")),
         h("span", { class: "cmp-item" }, fieldLabel(f.field)),
         h("span", { class: "cmp-val cmp-ai" }, h("span", { class: "cmp-tag" }, who === "Claude" ? "Claude:" : "The AI:"), pair[0]),
@@ -2624,7 +2637,7 @@ pre {
       const ai = headline(k, "DeepSeek");
       list.append(h("a", { href: "#" + k },
         h("span", { class: "v-name" }, k === main ? "The main version" : j.short || j.name),
-        h("span", { class: "v-sentence" }, k === main ? j.sentence : j.sentence),
+        h("span", { class: "v-sentence" }, j.sentence),
         ai ? h("span", { class: "v-figure" }, "AI right " + share(ai.passed, ai.scored) + " of the time") : null));
     });
   }
@@ -2761,8 +2774,10 @@ pre {
       log.insertBefore ? log.insertBefore(logLine(entry), log.firstChild) : log.append(logLine(entry));
       say(entry.error ? "Error: " + entry.error : "Done.");
     };
+    const clearLog = () => { s.toolLog = []; clear(log); say("The tool log is clear."); };
     wrap.append(h("div", { class: "f" }, h("label", { for: id }, "Run a tool"), sel), fields,
-      h("div", { class: "form-actions" }, h("button", { type: "button", class: "btn", onclick: run }, "Run it")), log);
+      h("div", { class: "form-actions" }, h("button", { type: "button", class: "btn", onclick: run }, "Run it"),
+        h("button", { type: "button", class: "link-btn", onclick: clearLog }, "Clear the log")), log);
     s.toolLog.slice().reverse().forEach((e) => log.append(logLine(e)));
     return wrap;
   }
@@ -2823,8 +2838,17 @@ pre {
       } else {
         specBox.append(h("button", { type: "button", class: "link-btn", onclick: () => { specsOf(current); renderEng(); renderExamplesButton(); } }, "List the spec cases"));
       }
+      // A model that was recorded on this very task: its result, and its transcript a click away.
+      const tried = RUNS.status === "ready" ? recordsFor(current).filter((r) => r.task.id === task.id) : [];
+      const triedLine = tried.length ? h("p", { class: "facts" }, h("span", null, "Recorded on this task:"),
+        tried.map((r) => h("span", null, policyName(r.policy, true, env) + " ", resultMark(r))),
+        h("button", { type: "button", class: "link-btn", id: "eng-tried-open", onclick: () => {
+          s.att.open = RUNS.records.indexOf(tried[0]); s.att.policy = "all"; s.att.result = "all";
+          renderEng(); scrollToEl($("att-detail"));
+        } }, "Read the transcript")) : null;
       wrap.append(h("section", null, h("h3", null, "The task"),
         h("p", null, task.split === "spec" ? "Spec case " + (task.index + 1) + (task.name ? ": " + task.name : "") : "Training task, seed " + task.suite_seed + ", index " + task.index, " ", h("code", null, task.id)),
+        triedLine,
         h("div", { class: "row" },
           h("div", { class: "f" }, h("label", { for: "eng-seed" }, "Training seed"), seedIn),
           h("div", { class: "f" }, h("label", { for: "eng-index" }, "Index"), indexIn),
@@ -3012,6 +3036,16 @@ pre {
       h("span", null, plural(r.result.turns, "turn")), h("span", null, plural(r.result.tool_calls, "tool call")), h("span", null, usd(c) + " at list price"),
       h("span", null, "version " + r.env.version), r.result.finished_at ? h("span", null, "finished " + utc(r.result.finished_at)) : null,
       h("span", null, ((u.input_tokens || 0) + (u.cache_read_input_tokens || 0) + (u.cache_creation_input_tokens || 0)).toLocaleString("en-US") + " tokens in, " + (u.output_tokens || 0).toLocaleString("en-US") + " out")));
+    // The task it was given, opened above as the case, when today's rules still draw the same one.
+    if (r.env.version === env.version && r.task.split === "train") {
+      let same = null;
+      try { same = env.draw("train", r.task.suite_seed, r.task.index); } catch (e) { same = null; }
+      if (same && same.id === r.task.id) {
+        box.append(h("p", null, h("button", { type: "button", class: "btn", id: "att-work", onclick: () => { setTask(same); scrollToEl($("case")); say("That task is now the case above."); } }, "Open this task as the case")));
+      }
+    } else {
+      box.append(h("p", { class: "quiet" }, "Recorded on version " + r.env.version + "; the task at these coordinates may differ today, so it is not offered as the case."));
+    }
     if (r.result.error) box.append(h("p", { class: "err" }, "The run stopped before the model submitted: ", h("code", null, r.result.error)));
     if (!stopped(r)) box.append(gradeTable(r.result.fields || [], "The model's answer"));
     box.append(h("p", { class: "quiet" }, "The task as the model saw it:"), h("pre", { tabindex: "0" }, r.task.rendered || ""));

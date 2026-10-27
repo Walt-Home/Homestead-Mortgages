@@ -25,8 +25,9 @@
  *   `npm run env:gym-snapshot`: counts, no task, prompt or transcript.
  *
  * `runs.json`, the model's recorded attempts on training tasks, is not
- * committed and not served: a 404 here, which the page reads as "this build
- * carries no recorded attempts" and says where they are. See
+ * committed and not served: a 404 here. The page built for this route is
+ * marked as carrying none and never asks for it, and says where they are;
+ * a page that did ask would read the 404 the same way. See
  * docs/decisions.md, "The Gym is in the ops console, without its recorded
  * attempts".
  *
@@ -137,8 +138,9 @@ export function consoleGymRouter(gate: ConsoleStaffGateOptions, files: GymFiles)
   router.get("/environments.js", sendNamed(files.site && join(files.site, "environments.js")));
   router.get("/scores.json", sendNamed(files.scores));
 
-  // Everything else, `runs.json` among it: not here. The page reads that 404
-  // as a build that carries no recorded attempts.
+  // Everything else, `runs.json` among it: not here. The page this route
+  // serves never asks for it, and one that did would read the 404 as a build
+  // that carries no recorded attempts.
   router.use((_req, res) => {
     res.status(404).json({ error: { message: "No such page.", code: "NOT_FOUND" } });
   });

@@ -1622,7 +1622,7 @@ pre {
   function recordsFor(key) { return RUNS.records.filter((r) => r.env && r.env.name === key); }
   function stopped(r) { return !!(r.result && (r.result.error || r.result.outcome === "error")); }
   /** The claude.ai page is private to those it is shared with, so the link says to ask. */
-  function runsLink(text) { return h("a", { href: RUNS_PAGE, target: "_blank", rel: "noopener noreferrer" }, text || "the Gym's claude.ai page (ask for access)"); }
+  function runsLink(text) { return h("a", { href: RUNS_PAGE, target: "_blank", rel: "noopener noreferrer" }, text || "the Gym's claude.ai page"); }
   function failRuns(err) { RUNS = { status: "failed", records: [], builtAt: null, error: err && err.message ? err.message : String(err) }; }
   function loadRuns() {
     /* The in-app build says it carries none (`build-playground.mjs --site-only`), so nothing is asked for. */

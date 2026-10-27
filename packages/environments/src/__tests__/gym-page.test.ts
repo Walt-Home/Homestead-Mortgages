@@ -446,7 +446,7 @@ describe("the Gym's page", () => {
     // How the AI did: the score, and where its recorded attempts are.
     expect(page.text("ai-body")).toContain("193 of 200 test cases");
     expect(page.text("ai-elsewhere")).toBe(
-      "The AI's recorded attempts are not in this copy. They are on the Gym's claude.ai page (ask for access).",
+      "The AI's recorded attempts are not in this copy. They are on the Gym's claude.ai page.",
     );
     const [a] = links(page.byId("ai-elsewhere"));
     expect(a?.getAttribute("href")).toBe(RUNS_PAGE);
@@ -485,7 +485,7 @@ describe("the Gym's page", () => {
     expect(page.text("eng-rulebook").length).toBeGreaterThan(1000);
     expect(page.text("eng-prompt")).toContain("submit_triage");
     expect(page.text("eng-attempts")).toContain(
-      "This build carries no recorded attempts by a model on training tasks. They are on the Gym's claude.ai page (ask for access).",
+      "This build carries no recorded attempts by a model on training tasks. They are on the Gym's claude.ai page.",
     );
     const [a] = links(page.byId("eng-attempts"));
     expect(a?.getAttribute("href")).toBe(RUNS_PAGE);

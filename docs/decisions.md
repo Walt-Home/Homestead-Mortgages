@@ -9804,11 +9804,18 @@ Measured read-only the same day:
   and `--by` it runs the same `removeTape`, and the removal row names the
   person under the id `cli`.
 
-What production needs is two acts, in this order: take the re-exported
-September tape back (245 loans; no claim, offer or closed month rests on
-them), then run `book:renumber` dry and with `--apply` for Grander, which
-should find 1,621 numbers to rewrite and no collisions, leaving 1,866 loans
-on the book.
+**Done on production (27 October 2026, by Joe's word).** The re-exported
+September tape (import 46188449) was taken back with `book:remove-tape`: 245
+loans, their 245 observations, 490 reviews and 245 provisional parties,
+$66,024,686.13 of balance, recorded in `partner_book_removals`. The September
+tape of 5 October could not have been taken instead — September closed with
+its loans — and is the copy that stays. `book:renumber --apply` then rewrote
+1,621 loan numbers to their digits, with no collisions. The book is 1,866
+loans, every number digits and distinct, $389,393,880.02 of balance; the
+tapes add up (2,111 made, 245 removed). October reads $81,123.49 for the
+whole month, the run rate $973,481.88 a year; September's closed $13,755.22
+is unchanged. Still open: loan 1023991155, refused for a blank term, is on
+no tape until its batch is loaded again with the term filled in.
 
 ## The Gym is in the ops console, without its recorded attempts
 

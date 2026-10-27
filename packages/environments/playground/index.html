@@ -97,7 +97,7 @@ body {
   margin: 0 auto;
   padding: 48px var(--gutter) 112px;
 }
-h1, h2, h3, h4 { margin: 0; font-weight: 400; text-wrap: balance; }
+h1, h2, h3, h4, h5, h6 { margin: 0; font-weight: 400; text-wrap: balance; }
 p, ul, ol, dl, dd { margin: 0; }
 ul, ol { padding: 0; list-style: none; }
 a { color: inherit; }
@@ -110,6 +110,8 @@ code, .mono { font-family: var(--font-mono); font-size: 0.88em; overflow-wrap: a
   overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
 }
 :focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; border-radius: 4px; }
+/* A heading takes focus when its page opens, for a screen reader; it is not a control, so it shows no ring. */
+h1[tabindex="-1"]:focus { outline: none; }
 [hidden] { display: none !important; }
 
 .view { animation: arrive 260ms var(--ease) both; }
@@ -126,6 +128,7 @@ code, .mono { font-family: var(--font-mono); font-size: 0.88em; overflow-wrap: a
 .display { font-family: var(--font-display); font-weight: 400; letter-spacing: -0.015em; }
 h1 { font-family: var(--font-display); font-size: var(--fs-h1); line-height: 1.05; letter-spacing: -0.015em; }
 .lede { margin-top: 18px; font-size: var(--fs-lede); line-height: 1.5; max-width: 34em; }
+.lede-note { margin-top: 12px; color: var(--muted); font-size: var(--fs-sm); line-height: 1.5; max-width: 40em; }
 .eyebrow {
   margin-bottom: 14px;
   font-size: var(--fs-xs);
@@ -135,9 +138,9 @@ h1 { font-family: var(--font-display); font-size: var(--fs-h1); line-height: 1.0
 }
 
 /* ── Home ─────────────────────────────────────────────────────────────── */
-.group { margin-top: 64px; }
-.group > h2 {
-  padding-bottom: 10px;
+.group { margin-top: 56px; }
+.group-head { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; padding-bottom: 10px; }
+.group-head h2, .group-head .col {
   font-family: var(--font-text);
   font-size: var(--fs-xs);
   font-weight: 600;
@@ -145,16 +148,20 @@ h1 { font-family: var(--font-display); font-size: var(--fs-h1); line-height: 1.0
   letter-spacing: 0.14em;
   color: var(--muted);
 }
+.group-head .col { font-weight: 400; letter-spacing: 0.1em; }
 .job-row {
   position: relative;
   display: grid;
-  gap: 4px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  column-gap: 24px;
+  align-items: baseline;
   margin-inline: -16px;
-  padding: 20px 48px 22px 16px;
+  padding: 15px 16px 16px;
   border-radius: var(--radius);
   text-decoration: none;
   transition: background-color 200ms var(--ease);
 }
+.job-main { display: grid; gap: 2px; min-width: 0; }
 .job-row::before {
   content: "";
   position: absolute;
@@ -168,24 +175,14 @@ h1 { font-family: var(--font-display); font-size: var(--fs-h1); line-height: 1.0
 .job-row:hover { background: var(--raised); }
 .job-row:hover::before, .jobs-list > li:hover + li > .job-row::before { opacity: 0; }
 .job-name { font-family: var(--font-display); font-size: var(--fs-row); line-height: 1.25; letter-spacing: -0.01em; }
-.job-sentence { color: var(--muted); font-size: 1.0625rem; line-height: 1.5; }
-.job-figure { margin-top: 6px; font-size: var(--fs-sm); font-variant-numeric: tabular-nums; min-height: 1.5em; }
-.job-figure .second { color: var(--muted); }
-.job-row .go {
-  position: absolute;
-  right: 16px;
-  top: 50%;
-  width: 18px;
-  height: 18px;
-  margin-top: -9px;
-  color: var(--muted);
-  opacity: 0;
-  transform: translateX(-4px);
-  transition: opacity 200ms var(--ease), transform 200ms var(--ease);
-}
-.job-row:hover .go, .job-row:focus-visible .go { opacity: 1; transform: none; }
-.home-foot { margin-top: 64px; padding-top: 20px; border-top: 1px solid var(--rule-soft); display: grid; gap: 10px; color: var(--muted); font-size: var(--fs-sm); }
-.home-foot a, .ai-elsewhere a { color: var(--ink); }
+.job-sentence { color: var(--muted); font-size: var(--fs-sm); line-height: 1.45; }
+.job-sentence .more-v { white-space: nowrap; }
+.job-figure { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; min-width: 3.5em; }
+.job-figure .pct { font-family: var(--font-display); font-size: var(--fs-row); line-height: 1.25; letter-spacing: -0.01em; }
+.job-figure .second { display: block; color: var(--muted); font-size: var(--fs-xs); line-height: 1.6; }
+.home-foot { margin-top: 56px; padding-top: 20px; border-top: 1px solid var(--rule-soft); display: grid; gap: 10px; color: var(--muted); font-size: var(--fs-sm); }
+.home-foot:empty, .home-foot.empty { display: none; }
+.home-foot a, .ai-elsewhere a, .lede-note a { color: var(--ink); }
 
 /* ── A job ────────────────────────────────────────────────────────────── */
 .back {
@@ -203,6 +200,7 @@ h1 { font-family: var(--font-display); font-size: var(--fs-h1); line-height: 1.0
 .back svg { width: 16px; height: 16px; }
 .variant-of { margin-top: 14px; color: var(--muted); font-size: var(--fs-sm); }
 .variant-of a { color: var(--ink); }
+.variant-of .link-btn { padding: 0; }
 .how-does { margin-top: 28px; font-size: var(--fs-body); }
 .how-does .second { display: block; color: var(--muted); font-size: var(--fs-sm); margin-top: 2px; }
 .how-does strong, .ai-score strong { font-weight: 600; }
@@ -212,18 +210,10 @@ h1 { font-family: var(--font-display); font-size: var(--fs-h1); line-height: 1.0
 .part h3 { font-family: var(--font-display); font-size: 1.3125rem; letter-spacing: -0.01em; }
 .intro { margin-bottom: 22px; }
 .note { margin-top: 8px; color: var(--muted); font-size: var(--fs-sm); }
-.case-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 16px; margin-bottom: 10px; }
+.case-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 0 26px; margin: -6px 0 6px; }
+.case-actions .text-btn svg { width: 15px; height: 15px; color: var(--muted); }
 .case-which { margin-bottom: 26px; color: var(--muted); font-size: var(--fs-sm); }
-.case-body.clipped { max-height: 34rem; overflow: hidden; position: relative; }
-.case-body.clipped::after {
-  content: "";
-  position: absolute;
-  left: 0; right: 0; bottom: 0;
-  height: 7rem;
-  background: linear-gradient(to bottom, transparent, var(--paper));
-  pointer-events: none;
-}
-.case-more { margin-top: 8px; }
+.case-more { margin-top: 18px; padding-top: 6px; border-top: 1px solid var(--rule-soft); }
 .examples-list { margin: 4px 0 26px; padding: 6px 0; border-top: 1px solid var(--rule-soft); border-bottom: 1px solid var(--rule-soft); max-height: 22rem; overflow: auto; }
 .examples-list button {
   appearance: none;
@@ -355,12 +345,25 @@ h1 { font-family: var(--font-display); font-size: var(--fs-h1); line-height: 1.0
 .kv-group > .kv-title .count { color: var(--muted); font-weight: 400; font-size: var(--fs-sm); }
 .kv-group .kv-group { margin-top: 18px; padding-left: 16px; border-left: 1px solid var(--rule-soft); }
 .kv-group .kv-group > .kv-title { font-size: var(--fs-sm); }
+/* A record that would not sit in a table: a small titled card of its own. */
+.cards { display: grid; gap: 10px; margin-top: 4px; }
+.kv-card { padding: 10px 16px 4px; border: 1px solid var(--rule-soft); border-radius: 10px; min-width: 0; }
+.kv-card > .kv-title { font-size: var(--fs-sm); font-weight: 600; padding: 2px 0 4px; }
+.kv-card .kv-row { grid-template-columns: minmax(0, 12rem) minmax(0, 1fr); padding: 5px 0; line-height: 1.45; }
+.kv-card .kv-row dd { font-size: var(--fs-sm); }
+.kv-card .kv-group { margin-top: 14px; }
+.kv-group .kv-card .kv-group { padding-left: 12px; }
 .kv-verbatim .kv-row dd, .kv-verbatim td { font-family: var(--font-mono); font-size: 0.875rem; }
 @media (max-width: 560px) {
-  .kv-row { grid-template-columns: minmax(0, 1fr); gap: 0; }
+  .kv-row, .kv-card .kv-row { grid-template-columns: minmax(0, 1fr); gap: 0; }
 }
 
 .table-wrap { overflow-x: auto; max-width: 100%; margin-top: 4px; }
+/* A table wider than the column fades at its right edge until it is scrolled there. */
+.table-wrap.scrolls:not(.at-end) {
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 48px), transparent);
+  mask-image: linear-gradient(to right, #000 calc(100% - 48px), transparent);
+}
 table { border-collapse: collapse; width: 100%; font-size: var(--fs-sm); line-height: 1.45; }
 th {
   text-align: left;
@@ -385,7 +388,10 @@ td.long { min-width: 18rem; white-space: normal; overflow-wrap: anywhere; }
 
 /* The right answer, and the steps that get there. */
 .waiting { color: var(--muted); }
-.steps-toggle { margin-top: 18px; }
+.answer-rest { margin-top: 14px; }
+.answer-rest-body { margin-top: 4px; }
+.answer-held { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 20px; padding: 18px 20px; border: 1px dashed var(--rule-strong); border-radius: var(--radius); color: var(--muted); }
+.steps-toggle { margin-top: 6px; }
 .steps { margin-top: 10px; counter-reset: step; display: grid; }
 .steps li {
   counter-increment: step;
@@ -399,8 +405,10 @@ td.long { min-width: 18rem; white-space: normal; overflow-wrap: anywhere; }
 .steps .step-what { overflow-wrap: anywhere; }
 .steps .step-got { font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .steps .step-err { color: var(--danger); }
-.steps .calc .step-what { color: var(--muted); }
+.steps .calc .step-what, .steps .calc-run .step-what { color: var(--muted); }
+.steps .calc .step-what { font-variant-numeric: tabular-nums; }
 .steps-note { margin-top: 8px; color: var(--muted); font-size: var(--fs-xs); }
+.steps-more { margin-top: 6px; }
 
 /* How the AI did: its answer beside the right one. */
 .ai-score { margin-bottom: 6px; }
@@ -446,6 +454,11 @@ td.long { min-width: 18rem; white-space: normal; overflow-wrap: anywhere; }
 .f-group > legend { padding: 0 0 4px; float: left; width: 100%; }
 .f-group > legend + * { clear: both; }
 .f-checks { margin: 0; padding: 0; border: 0; display: grid; gap: 8px; min-width: 0; }
+.f-checks > legend { padding: 0 0 4px; }
+.checks-group { display: grid; gap: 8px; min-width: 0; }
+.checks-group + .checks-group { margin-top: 10px; }
+.checks-group > p { color: var(--muted); font-size: var(--fs-xs); }
+.checks-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 17rem), 1fr)); gap: 8px 20px; }
 .check { display: flex; align-items: flex-start; gap: 10px; font-size: var(--fs-sm); cursor: pointer; }
 .check input { margin-top: 3px; }
 input[type="text"], input[type="date"], select, textarea {
@@ -480,7 +493,11 @@ input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--ink); fl
 .results .r-item { font-weight: 600; }
 .results .r-detail { grid-column: 2; color: var(--muted); overflow-wrap: anywhere; }
 .results .r-detail b { color: var(--ink); font-weight: 600; }
+.results .r-detail code, .cmp-val code { font-size: 0.8125rem; }
+.results-more { margin-top: 6px; }
+.try-back { margin-bottom: 18px; }
 .tools { margin-top: 44px; }
+.tools > h3 { font-family: var(--font-display); font-size: 1.3125rem; font-weight: 400; letter-spacing: -0.01em; margin-bottom: 4px; }
 .tool-list { display: grid; margin: 10px 0 22px; }
 .tool-list li { padding: 10px 0; border-top: 1px solid var(--rule-soft); font-size: var(--fs-sm); }
 .tool-list b { font-weight: 600; }
@@ -545,18 +562,18 @@ pre {
 }
 </style>
 
-<div class="app">
+<div class="app" id="app">
   <div id="fatal" class="fatal" role="alert" hidden></div>
 
   <main id="home" class="view" aria-labelledby="home-title">
     <header id="home-head">
       <p class="wordmark" aria-label="Supermortgage"><b>Super</b><span>mortgage</span></p>
       <h1>Gym</h1>
-      <p class="lede">Practice jobs from mortgage servicing and lending, each graded exactly by our own systems. Every loan here is made up.</p>
+      <p class="lede">Real mortgage jobs we give an AI to practice on, each answer graded exactly by our own systems. Every loan here is made up.</p>
+      <p class="lede-note" id="home-note"></p>
     </header>
     <div id="jobs"></div>
     <footer class="home-foot" id="home-foot">
-      <p id="home-note"></p>
       <p id="home-runs"></p>
     </footer>
   </main>
@@ -568,6 +585,7 @@ pre {
       <h1 id="job-title" tabindex="-1"></h1>
       <p class="lede" id="job-sentence"></p>
       <p class="variant-of" id="job-variant-of" hidden></p>
+      <p class="variant-of" id="job-versions" hidden><button type="button" class="link-btn" id="versions-link"></button></p>
       <p class="how-does" id="job-score"></p>
     </header>
 
@@ -575,8 +593,9 @@ pre {
       <h2 id="case-title">The case</h2>
       <p class="intro" id="case-intro"></p>
       <div class="case-actions">
-        <button type="button" class="btn btn-primary" id="another">Another case</button>
+        <button type="button" class="text-btn" id="another"><svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M13 8a5 5 0 1 1-1.5-3.6M13 2.5v2.4h-2.4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Another case</span></button>
         <button type="button" class="text-btn" id="examples-toggle" aria-expanded="false" aria-controls="examples-list" hidden><span>Worked examples</span><svg class="chev" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M3.5 6l4.5 4.5L12.5 6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+        <button type="button" class="text-btn" id="try-link"><span>Try it yourself</span><svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M4 8h8M8.5 4.5L12 8l-3.5 3.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
       </div>
       <ul class="examples-list" id="examples-list" hidden></ul>
       <p class="case-which" id="case-which"></p>
@@ -587,6 +606,10 @@ pre {
     <section class="part" id="answer" aria-labelledby="answer-title">
       <h2 id="answer-title">The right answer</h2>
       <div id="answer-body"></div>
+      <div class="answer-rest" id="answer-rest" hidden>
+        <button type="button" class="text-btn" id="rest-toggle" aria-expanded="false" aria-controls="rest-panel"><span>Every other item</span><svg class="chev" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M3.5 6l4.5 4.5L12.5 6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+        <div class="answer-rest-body" id="rest-panel" hidden></div>
+      </div>
       <div class="steps-toggle" id="steps-wrap" hidden>
         <button type="button" class="text-btn" id="steps-toggle" aria-expanded="false" aria-controls="steps-panel"><span>How it's worked out</span><svg class="chev" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M3.5 6l4.5 4.5L12.5 6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
         <div id="steps-panel" hidden></div>
@@ -747,26 +770,28 @@ pre {
     return (neg ? "−" : "") + "$" + grouped(whole) + "." + d.slice(-2);
   }
   function money(x) { return /^-?\d+$/.test(String(x)) ? dollars(x) : String(x); }
-  /** Basis points as a percent, exactly: 313 is 3.13. */
+  /** Basis points as a percent, exactly, by moving the point: 313 is 3.13, 137.5 is 1.375. */
   function bpsPct(n) {
-    const s = String(n);
-    if (!/^-?\d+$/.test(s)) return s;
-    const neg = s.charAt(0) === "-";
-    let d = neg ? s.slice(1) : s;
-    while (d.length < 3) d = "0" + d;
-    const frac = d.slice(-2).replace(/0+$/, "");
-    return (neg ? "−" : "") + d.slice(0, -2).replace(/^0+(?=\d)/, "") + (frac ? "." + frac : "");
+    const m = /^(-?)(\d+)(?:\.(\d+))?$/.exec(String(n));
+    if (!m) return String(n);
+    let whole = m[2];
+    while (whole.length < 3) whole = "0" + whole;
+    const frac = (whole.slice(-2) + (m[3] || "")).replace(/0+$/, "");
+    return (m[1] ? "−" : "") + whole.slice(0, -2).replace(/^0+(?=\d)/, "") + (frac ? "." + frac : "");
   }
-  /** A share as a whole percent, never rounded up to 100 or down to 0. */
+  /**
+   * A share as a percent, one rule everywhere: to one decimal, the ".0" left off (191 of 200 is 95.5%,
+   * 190 of 200 is 95%), and never rounded up to 100 or down to 0.
+   */
   function share(k, n) {
     if (!n) return "—";
     if (k === n) return "100%";
     if (k === 0) return "0%";
     const p = (100 * k) / n;
-    const r = Math.round(p);
-    if (r >= 100) return (Math.floor(p * 10) / 10).toFixed(1) + "%";
-    if (r <= 0) return p < 0.1 ? "under 0.1%" : (Math.ceil(p * 10) / 10).toFixed(1) + "%";
-    return r + "%";
+    const r = Math.round(p * 10) / 10;
+    if (r >= 100) return "over 99.9%";
+    if (r <= 0) return "under 0.1%";
+    return String(r) + "%";
   }
   function pct1(k, n) { return (Math.round((1000 * k) / n) / 10).toFixed(1) + "%"; }
   function wilson(k, n) {
@@ -780,79 +805,240 @@ pre {
   /*
    * Every environment the bundle carries, named for a person. `of` folds a
    * version under its main job; `short` is its name in that job's list of
-   * other versions. `verbatim` names the parts of a case shown exactly as
-   * the task carries them, because reading that text is the job. Correct a
-   * name or a sentence here; the environments' own titles and summaries are
-   * under "For engineers".
+   * other versions. Correct a name or a sentence here; the environments' own
+   * titles and summaries are under "For engineers".
+   *
+   * How a job's case and answer read, each optional, and a version takes its
+   * main job's unless it names its own:
+   * - `answer`: the items of the right answer shown first, as paths into it
+   *   ("final.lpi_date"), or { path, label, cols, always }: `cols` keeps a
+   *   list's columns to those, and `always` shows the item even when empty.
+   *   An empty item is left out, and everything else folds under "Every
+   *   other item".
+   * - `hide`: answer items a person does not need, kept under For engineers.
+   * - `labels`, `values`: the job's own names for keys and for codes.
+   * - `nullAs`: what an empty answer means where it is not "none", such as a
+   *   test that cannot be decided.
+   * - `codes`: the codes a free-text list in the answer can hold, so "Try it
+   *   yourself" offers them as boxes to tick: a list of { title, codes }, or a
+   *   function of the case's data that returns one.
+   * - `caseFirst`: the parts of a case to show first; `verbatim`: the parts
+   *   shown exactly as the task carries them, because reading that text is the
+   *   job; `text`: rewrites of the task's own sentences.
+   * - `start`: the practice case a visit opens on, when case 0 would show
+   *   nothing worth seeing (a findings job whose first case is clean).
    */
   const GROUPS = [
     { key: "refinance", label: "Refinance" },
     { key: "servicing", label: "Servicing" },
     { key: "origination", label: "Lending" }
   ];
+
+  const REFI_CODES = [
+    { title: "Why it is not offered", codes: ["rate_delta_below_floor", "npv_not_positive", "seven_year_not_lower", "prescreen_failed", "state_rule_failed", "reset_costs_more"] },
+    { title: "Why not now", codes: ["marketing_suppression", "cooldown", "frequency_cap", "implausible_value", "value_stale"] },
+    { title: "Why it is offered", codes: ["rate_delta", "npv_positive", "seven_year_delta_positive", "prescreen", "state_rule"] },
+    { title: "When there is no quote", codes: ["not_priceable", "not_priced"] },
+    { title: "Why it is excluded", codes: ["not_active", "bankruptcy_active", "foreclosure_referred", "lossmit_plan_active", "deceased_or_sii_pending", "transfer_out_pending", "delinquent"] }
+  ];
+  const REFI_TAPE_CODES = REFI_CODES.concat([{ title: "Why it cannot be reviewed", codes: ["no_first_payment_date", "no_upb", "no_value"] }]);
+  const REFI = {
+    answer: ["verdict", "reasons", "watch_rate_pct", { path: "offer", label: "The offer" }],
+    caseFirst: ["review_date", "tape_exceptions", "quote"],
+    codes: { reasons: REFI_CODES }
+  };
+
+  /** The anomalies an escrow analysis can flag: two per line it carries, and the payment's. */
+  function escrowCodes(review) {
+    return (data) => {
+      const types = [];
+      (data && Array.isArray(data.lines) ? data.lines : []).forEach((l) => { if (l && l.line_type && types.indexOf(l.line_type) < 0) types.push(l.line_type); });
+      const lines = types.map((t) => t + ":estimate_basis_prior_year_gt_2y");
+      if (types.indexOf("mi_borrower_paid") >= 0) lines.push("mi_borrower_paid:pmi_without_termination");
+      return [
+        { title: "The payment and the surplus", codes: ["payment_change_gt_25pct", "payment_change_gt_150", "surplus_gt_2500"].concat(review ? ["bill_variance_gt_20pct"] : []) },
+        { title: "The bills", codes: lines }
+      ];
+    };
+  }
+  const ESCROW_LABELS = {
+    annual_cents: "Total bills for the year", base_payment_cents: "Monthly escrow before any shortage",
+    required_start_cents: "Starting balance needed", cushion_cents: "Cushion", target_at_start_cents: "Starting balance with cushion",
+    projected_actual_cents: "Projected starting balance", repayment_months: "Repaid over", installment_cents: "Shortage repaid each month",
+    final_installment_cents: "Last shortage repayment", deficiency_installment_cents: "Deficiency repaid each month",
+    deficiency_final_installment_cents: "Last deficiency repayment", lump_sum_option_offered: "Lump sum offered",
+    credit_monthly_cents: "Credit each month", first_month_extra_credit_cents: "Extra credit in the first month",
+    refund_due_on: "Refund due by", new_payment_cents: "New monthly escrow payment", first_month_payment_cents: "First month's payment",
+    final_month_payment_cents: "Last month's payment", effective_on: "Takes effect", anomalies: "Flagged for review",
+    flag_stands: "Held for a second look", current_escrow_payment_cents: "Escrow payment today", year_start: "Year starts",
+    as_of: "As of", statement_sent_on: "Statement sent", prior_year_annual_cents: "Last year's total",
+    prior_disbursed_on: "Paid last year on", comparable_annual_cents: "Comparable total", contract_annual_cents: "Contract total",
+    estimate_basis: "Estimated from", cpi_change_pct: "CPI change", known_bills: "Bills known", terminates_on: "Ends on",
+    prior_year_confirmed_on: "Last year's figure confirmed", lines: "The bills", ledger: "The escrow account"
+  };
+  const ESCROW = {
+    answer: ["decision", "shortage_cents", "surplus_cents", "deficiency_cents", "repayment_months", "installment_cents",
+      "credit_monthly_cents", "refund_due_on", "new_payment_cents", "effective_on", "anomalies"],
+    labels: ESCROW_LABELS, caseFirst: ["lines", "ledger"], codes: { anomalies: escrowCodes(false) }
+  };
+  const REGZ_NULL = {
+    qm_status: "Cannot be decided", is_hpml: "Cannot be decided", is_high_cost: "Cannot be decided",
+    hoepa_apr_trigger: "Cannot be decided", hoepa_fee_trigger: "Cannot be decided", hoepa_prepayment_penalty_trigger: "Cannot be decided",
+    points_and_fees_pass: "Cannot be decided", ntb_satisfied: "Cannot be decided", apr_pct: "None for this loan", apor_pct: "None for this loan"
+  };
+  const REGZ = {
+    answer: ["qm_status", "is_hpml", "is_high_cost", "points_and_fees_pass", "ntb_satisfied", "apr_pct", "apor_pct"],
+    nullAs: REGZ_NULL
+  };
+
   const JOBS = {
-    "refi-review": { group: "refinance", name: "Refinance review",
-      sentence: "Decide whether a loan should get a refinance offer today, and work out its figures." },
+    "refi-review": Object.assign({ group: "refinance", name: "Refinance review",
+      sentence: "Decide whether a loan should get a refinance offer today, and work out its figures." }, REFI),
     "refi-tape": { of: "refi-review", name: "Refinance review from the tape", short: "From the servicer's tape",
+      codes: { reasons: REFI_TAPE_CODES },
       sentence: "The same review, read off our loan record and the servicer's newest monthly tape." },
     "refi-policy": { of: "refi-review", name: "Refinance review, rules as a policy", short: "Rules written as a policy",
+      codes: { reasons: REFI_TAPE_CODES },
       sentence: "The review from the tape, with its rules written as a policy rather than as steps." },
     "refi-hard": { of: "refi-review", name: "Refinance review on the edges", short: "On the edges",
+      codes: { reasons: REFI_TAPE_CODES },
       sentence: "Loans placed just either side of a rule's limit, so one slip changes the answer." },
     "refi-hard-policy": { of: "refi-review", name: "Refinance review on the edges, as a policy", short: "On the edges, rules as a policy",
+      codes: { reasons: REFI_TAPE_CODES },
       sentence: "The loans on the edges, with the rules written as a policy rather than as steps." },
 
-    "boarding-triage": { group: "servicing", name: "Transfer review", verbatim: ["files"],
+    "boarding-triage": { group: "servicing", name: "Transfer review", verbatim: ["files"], start: 1,
       caseNote: "Each file is shown exactly as the prior servicer sent it.",
+      answer: [{ path: "findings", always: true }],
+      labels: { not_shown: "Files not shown here", handling: "What to do" },
+      values: { correct: "Fix it", query: "Ask the prior servicer", hold: "Hold the loan", board_as_is: "Board as is" },
+      text: [
+        [/^(\d+) rows?: read it with read_file$/, (m) => plural(Number(m[1]), "row") + ", which the AI opens with a tool"],
+        [/^(\d+) rows?: restricted, and not read in a boarding review$/, (m) => plural(Number(m[1]), "row") + ": restricted, and not read in a transfer review"]
+      ],
       sentence: "Check a loan transfer for errors the boarding system cannot catch, before it boards." },
-    "tape-intake": { group: "servicing", name: "Monthly tape review", verbatim: ["headers"],
+    "tape-intake": { group: "servicing", name: "Monthly tape review", verbatim: ["headers"], start: 3,
       caseNote: "The column headers are shown exactly as the partner wrote them.",
+      answer: ["verdict", { path: "findings", always: true }],
+      labels: { ask: "What to ask for" },
+      values: { "T-01": "A month missing, or sent again", "T-02": "A header renamed", "T-03": "Codes that lost their leading zeros",
+        "T-04": "Dates in the wrong form", "T-05": "The wrong as-of date", "V-01": "A disbursement the account was never funded for",
+        "V-02": "A hazard renewal never paid", "D-25": "A payment posted to the wrong loan" },
       sentence: "Check a partner's monthly loan tape for problems before it is loaded." },
     "payments-posting": { group: "servicing", name: "Payment posting",
+      answer: [{ path: "final.lpi_date", label: "Paid through" }, { path: "final.upb_cents", label: "Unpaid balance" },
+        { path: "final.suspense_cents", label: "In suspense" }, { path: "final.late_charges_due_cents", label: "Late charges due" },
+        { path: "receipts", label: "Each payment", cols: ["payment_id", "outcome", "late_charge_paid_cents", "curtailment_cents", "to_suspense_cents"] },
+        { path: "late_charge_runs", label: "Late-charge checks", cols: ["installment_due_date", "run_on", "outcome", "amount_cents"] }],
+      labels: { run_on: "Checked on", installment_due_date: "Installment due", late_charge_paid_cents: "Late charge paid" },
       sentence: "Post a loan's payments and late charges over several weeks, as our servicing system does." },
     "catchup-posting": { group: "servicing", name: "Catch-up payment",
+      answer: ["lpi_after", "current_after_posting", "upb_after_cents", "late_charge_paid_cents", "to_suspense_cents",
+        "refund_due_cents", "late_charges_due_after_cents"],
+      labels: { late_charges: "Late charges allowed", allowed_cents: "Allowed" },
       sentence: "Post a late borrower's catch-up payment, and find late charges above the note's cap." },
-    "escrow-analysis": { group: "servicing", name: "Escrow analysis",
-      sentence: "Run a loan's yearly escrow analysis: any shortage or surplus, and the new monthly payment." },
+    "escrow-analysis": Object.assign({ group: "servicing", name: "Escrow analysis",
+      sentence: "Run a loan's yearly escrow analysis: any shortage or surplus, and the new monthly payment." }, ESCROW),
     "escrow-policy": { of: "escrow-analysis", name: "Escrow analysis, rules as a policy", short: "Rules written as a policy",
       sentence: "The same analysis, with its rules written as a policy rather than as steps." },
     "escrow-history": { of: "escrow-analysis", name: "Escrow analysis from the ledger", short: "From the ledger",
       sentence: "The same analysis, starting from the escrow account's ledger of postings." },
     "escrow-review": { group: "servicing", name: "Escrow analysis check",
+      answer: [{ path: "flag_stands", always: true }, "decision", "shortage_cents", "surplus_cents", "deficiency_cents", "repayment_months",
+        "new_payment_cents", "effective_on", "anomalies"],
+      labels: ESCROW_LABELS, caseFirst: ["lines", "ledger", "history"], codes: { anomalies: escrowCodes(true) },
       sentence: "Re-check a yearly escrow analysis before approval, and say if it needs a second look." },
     "arm-adjustment": { group: "servicing", name: "Adjustable-rate change",
+      answer: ["new_rate_pct", "new_pi_cents", "first_new_payment_due", "bound", "notice_kind", "notice_window_open", "notice_due_by", "send_outcome", "days_late"],
+      hide: ["notice_template"],
+      formats: { index_value: "pct", value: "pct" },
+      labels: { bound: "Cap that applies", notice_kind: "Notice window", send_outcome: "The notice as proposed", unrounded_pct: "Index plus margin",
+        rounded_pct: "Rounded to an eighth", midpoint_flag: "On an eighth's midpoint", expected_upb_cents: "Expected balance",
+        index_series: "Index values", effective_date: "Effective", index_effective_date: "Index effective" },
+      values: { none: "No cap", initial: "Initial cap", periodic: "Periodic cap", lifetime: "Lifetime cap", floor: "The floor",
+        blocked: "Too early: before the window opens", on_time: "On time", late: "Late" },
       sentence: "Set an adjustable-rate loan's new rate and payment, and check the notice is on time." },
     "pmi-termination": { group: "servicing", name: "Mortgage insurance removal",
+      answer: [{ path: "termination.effective_on", label: "Insurance ends", always: true }, { path: "request.result", label: "The borrower's request" },
+        { path: "request.reasons", label: "Why the request fails" }, { path: "position.trigger_date", label: "Automatic termination date" },
+        { path: "termination.unearned_premium_cents", label: "Premium to refund" }, { path: "termination.refund_due", label: "Refund due by" }],
+      formats: { lar89_action_date: "mmddyy" },
       sentence: "Decide when a loan's mortgage insurance ends, automatically or at the borrower's request." },
     "payoff-statement": { group: "servicing", name: "Payoff statement",
+      answer: ["total_cents", "valid_until", "per_diem_cents", "governing_due", "payoff_date", "disposition", "variance_cents"],
+      labels: { total_cents: "Payoff total", per_diem_cents: "Daily interest", governing_due: "Statement due by", payoff_date: "Paid off on",
+        variance_cents: "Short or over by", governing: "Deadline that governs" },
       sentence: "Write a payoff statement, reconcile the funds that arrive, and work out Fannie Mae's share." },
     "ei-clocks": { group: "servicing", name: "Early-intervention deadlines",
+      answer: ["regx_days_delinquent", { path: "windows", label: "Each missed payment's deadlines", cols: ["due_date", "live_due", "live", "notice_due", "notice"] }],
+      labels: { live: "Live contact", live_due: "Live contact due", notice: "Written notice", notice_due: "Notice due", live_late: "Live contact late", notice_late: "Notice late" },
       sentence: "Say where each legal deadline to call and write to a late borrower stands." },
     "lossmit-retention": { group: "servicing", name: "Loss mitigation",
+      answer: ["offered", { path: "arrears.arrears_cents", label: "Amount behind" }, { path: "arrears.months_delinquent", label: "Months behind" },
+        { path: "regx.decision_due", label: "Decision due" }, { path: "regx.accept_by", label: "Borrower must accept by" }, { path: "terms", label: "The terms" }],
       sentence: "Pick the right workout for a borrower who is behind, with its terms and deadlines." },
     "flexmod-terms": { group: "servicing", name: "Flex Modification",
+      answer: ["decision", "denial_reason", "rate_pct", "term_months", "pi_cents", "reduction_pct", "trial_months", "trial_payment_cents", "first_trial_due_on", "effective_on"],
+      labels: { rate_pct: "New rate", term_months: "New term", pi_cents: "New monthly P&I", reduction_pct: "Payment reduction",
+        trial_months: "Trial period", trial_payment_cents: "Trial payment", first_trial_due_on: "First trial payment due" },
       sentence: "Decide if a delinquent Fannie Mae loan qualifies for a Flex Modification, and set its terms." },
     "metro2-furnishing": { group: "servicing", name: "Credit reporting", formats: {
       account_status: "metro2Status", amount_past_due: "metro2Dollars", current_balance: "metro2Dollars",
       scheduled_monthly_payment: "metro2Dollars", actual_payment_amount: "metro2Dollars",
       date_closed: "metro2Date", date_of_first_delinquency: "metro2Date", date_of_last_payment: "metro2Date" },
+      answer: [{ path: "records", label: "Each month's report", cols: ["month", "account_status", "amount_past_due", "current_balance", "date_of_first_delinquency"] }],
       sentence: "Write a loan's monthly reports to the credit bureaus, in the standard Metro 2 format." },
-    "call-qa": { group: "servicing", name: "Call review",
+    "call-qa": { group: "servicing", name: "Call review", start: 1,
+      answer: ["fails_outright", { path: "findings", always: true }, { path: "note.matches", label: "The call's note matches the call" }, "options_told"],
+      labels: { line: "Transcript line", item: "What went wrong" },
+      values: { identity: "Identity not verified", ai_disclosure: "AI disclosure", predial_consent: "Before dialing: consent",
+        predial_line_type: "Before dialing: line type", predial_time_zone: "Before dialing: time zone", predial_regf_count: "Before dialing: Reg F call count",
+        predial_cease: "Before dialing: a cease request", predial_bankruptcy: "Before dialing: bankruptcy", predial_attorney: "Before dialing: an attorney",
+        wrong_amount: "Wrong amount", complaint_not_logged: "Complaint not logged", credit_misstatement: "Credit misstatement" },
       sentence: "Review a recorded servicing call against our quality and compliance checklist." },
-    "contact-audit": { group: "servicing", name: "Contact audit",
+    "contact-audit": { group: "servicing", name: "Contact audit", start: 2,
+      answer: [{ path: "findings", always: true }],
+      values: { "S-01": "An unrecorded promise", "S-02": "An unlogged complaint", root: "The root call",
+        dialed_in_window: "Dialed inside the promise window", kept_not_marked: "Kept, not marked kept",
+        broken_not_followed_up: "Broken, not followed up", no_acknowledgment: "No acknowledgment", no_response: "No response", raised_again: "Raised again" },
       sentence: "Audit months of a loan's calls and notes for promises and complaints staff never recorded." },
 
     "qualifying-income": { group: "origination", name: "Qualifying income",
+      answer: ["total_qualifying_cents", { path: "sources", label: "Each source", cols: ["income_id", "method", "monthly_qualifying_cents", "counted", "exclusion_reason"] }, "obligations_from_rental_cents"],
+      labels: { monthly_qualifying_cents: "Monthly qualifying", exclusion_reason: "Why not counted", total_qualifying_cents: "Total qualifying income" },
       sentence: "Work out each borrower's qualifying monthly income under Fannie Mae's rules." },
-    "regz-price-tests": { group: "origination", name: "Price tests",
-      sentence: "Run the federal price tests on a quoted loan: qualified mortgage, higher-priced and high-cost." },
+    "regz-price-tests": Object.assign({ group: "origination", name: "Price tests",
+      sentence: "Run the federal price tests on a quoted loan: qualified mortgage, higher-priced and high-cost." }, REGZ),
     "regz-policy": { of: "regz-price-tests", name: "Price tests, rules as a policy", short: "Rules written as a policy",
       sentence: "The same tests, with their rules written as a policy rather than as steps." },
-    "regz-apr": { of: "regz-price-tests", name: "Price tests, APR found by hand", short: "APR found by hand",
+    "regz-apr": { of: "regz-price-tests", name: "Price tests, APR found without the calculator", short: "APR found without the calculator",
       sentence: "The same tests without the APR calculator: the AI has to search for the APR itself." },
     "aus-decision": { group: "origination", name: "Underwriting decision",
+      caseFirst: ["loan", "property", "product", "income_sources", "lender_estimates"],
+      answer: ["recommendation", "outcome", { path: "findings", always: true }, "blocked", "dti_front_pct", "dti_back_pct", "ltv_pct",
+        "actual_reserve_months", "required_reserve_months", "reserves_satisfied", "qm_status"],
+      labels: { actual_reserve_months: "Reserves on hand", required_reserve_months: "Reserves required", blocked: "Could not be computed",
+        reserves_satisfied: "Reserves met" },
+      nullAs: Object.assign({}, REGZ_NULL, {
+        apr_pct: "Could not be computed", apor_pct: "Could not be computed", apor_week_of: "Could not be computed", spread_pct: "Could not be computed",
+        representative_fico: "Could not be computed", fico_for_minimum: "Could not be computed", monthly_liabilities_cents: "Could not be computed",
+        dti_front_pct: "Could not be computed", dti_back_pct: "Could not be computed", actual_reserve_months: "Could not be computed",
+        reserves_satisfied: "Cannot be decided", bankruptcy_seasoning_months: "No bankruptcy on file",
+        derogatory_seasoning_months: "None on file", transcript_variance_pct: "Not checked" }),
       sentence: "Decide a loan application the way our automated underwriting system does." }
   };
+  /** The parts of a job's configuration a version takes from its main job when it names none of its own. */
+  const INHERITED = ["answer", "hide", "labels", "values", "nullAs", "codes", "caseFirst", "formats", "text"];
+  function conf(key) {
+    const j = JOBS[key] || {};
+    const main = j.of && JOBS[j.of] ? JOBS[j.of] : null;
+    const c = {};
+    INHERITED.forEach((k) => { c[k] = j[k] !== undefined ? j[k] : main ? main[k] : undefined; });
+    c.verbatim = j.verbatim || [];
+    c.start = j.start || 0;
+    c.caseNote = j.caseNote || null;
+    return c;
+  }
   /** The home list's order within each group: a loan's life, roughly. */
   const ORDER = [
     "refi-review",
@@ -881,7 +1067,9 @@ pre {
     deceased_or_sii_pending: "Deceased, or successor pending", refi_do_not_solicit: "Do not solicit",
     lossmit_plan_active: "On a loss-mitigation plan", bankruptcy_active: "In bankruptcy", foreclosure_referred: "Referred to foreclosure",
     transfer_out_pending: "Transfer out pending", arm_first_adjustment_date: "First ARM adjustment", product_code: "Product",
-    property_state: "State", mi_status: "Mortgage insurance", value_estimate: "Value estimate", tape_exceptions: "Tape exceptions",
+    property_state: "Property state", "loan_record.state": "Loan status", mi_status: "Mortgage insurance", value_estimate: "Value estimate", tape_exceptions: "Tape exceptions",
+    refund_due: "Refund due by", refund_due_on: "Refund due by", ytd_months: "Months in year to date", receipts_months: "Months of receipts",
+    history_months: "Months of history", truth: "Should say", says: "Says",
     quote: "Today's quote", offer_history: "Offer history", loan_record: "Our loan record", tape: "The servicer's tape",
     is_hpml: "Higher-priced mortgage", is_high_cost: "High-cost mortgage", qm_status: "Qualified mortgage status",
     ntb_satisfied: "Net tangible benefit met", ntb_recoup_months: "Months to recoup costs", hoepa_apr_trigger: "HOEPA APR trigger",
@@ -945,7 +1133,48 @@ pre {
     cooldown: "Declined an offer in the last 90 days", frequency_cap: "Two offers already in the last year",
     not_priced: "No quote today", rate_delta: "Rate drop clears the floor", npv_positive: "Net present value positive",
     seven_year_delta_positive: "Seven-year cost lower", prescreen: "Prescreen passed", state_rule: "State rule met",
-    implausible_value: "Value looks implausible", value_stale: "Value is out of date"
+    implausible_value: "Value looks implausible", value_stale: "Value is out of date",
+    not_priceable: "Cannot be priced", delinquent: "Behind on payments", bankruptcy_active: "In bankruptcy",
+    foreclosure_referred: "Referred to foreclosure", lossmit_plan_active: "On a loss-mitigation plan",
+    deceased_or_sii_pending: "Deceased, or a successor pending", transfer_out_pending: "Transfer out pending",
+    no_first_payment_date: "No first payment date on the tape", no_upb: "No balance on the tape", no_value: "No value on the tape",
+    monitoring_only: "Monitoring only",
+    tax_county: "County tax", tax_city: "City tax", tax_school: "School tax", tax_special: "Special assessment",
+    tax_supplemental: "Supplemental tax", tax_personal_property_mh: "Personal property tax, manufactured home",
+    hazard: "Hazard insurance", flood: "Flood insurance", mi_borrower_paid: "Borrower-paid mortgage insurance",
+    prior_year_cpi: "Last year's, plus CPI", prior_year: "Last year's",
+    monthly_30_360_partial_365: "Whole months at 30/360, a part month by the day on 365",
+    daily_simple_365: "Daily simple interest, on 365 days",
+    c_60_120: "60 to 120 days before the new payment", c_25_120: "25 to 120 days before the new payment",
+    c_first_25: "At least 25 days before the first new payment", fnma_only: "Fannie Mae's notice only",
+    NTC_REGZ_20C_ARM_ADJ: "The Regulation Z rate-change notice", NTC_FNMA_C2_1_02_RATE_CHANGE: "Fannie Mae's rate-change notice",
+    SOFR_30D_AVG: "30-day average SOFR", nearest_eighth_half_down: "Nearest eighth, a midpoint down", nearest_eighth_half_up: "Nearest eighth, a midpoint up",
+    ei_notice: "The early-intervention notice", day_45: "Day 45",
+    social_security: "Social Security", base_hourly_fixed: "Hourly, fixed hours", variable_base_trending: "Variable base, trended",
+    variable_trending: "Variable, trended", rental_subject: "Rent on the property being bought",
+    history_under_12_months: "Under 12 months of history", not_stabilized: "Falling, with nothing to show it has leveled off",
+    no_agreement: "No agreement on file", receipt_history_insufficient: "Too short or irregular a record of receipts",
+    continuance_assets_insufficient: "Too little in assets to last three years", agency_letter_missing: "No agency letter on file",
+    continuance_3y: "Ends within three years", offset_only: "Only offsets the payment",
+    FNMA_D23206_TRIAL_FAILED_12M: "A trial failed in the last 12 months", FNMA_D23206_THREE_PRIOR_MODS: "Three or more earlier modifications",
+    INV_FNMA_F127_PI_RULE: "Not eligible under the payment rule",
+    BANKRUPTCY_SEASONING: "Bankruptcy too recent", DEROGATORY_SEASONING: "Foreclosure or short sale too recent",
+    TRANSCRIPT_VARIANCE: "Income differs from the tax transcripts", DTI_ELEVATED: "Debt-to-income ratio high",
+    LTV_EXCEEDS_MAXIMUM: "Loan-to-value over the maximum", RESERVES_INSUFFICIENT: "Too little in reserves",
+    IPC_EXCEEDS_LIMIT: "Seller contributions over the limit", HOEPA_HIGH_COST: "A high-cost mortgage",
+    POINTS_AND_FEES_EXCEEDED: "Points and fees over the limit", NTB_NOT_SATISFIED: "No net tangible benefit",
+    LTV_ABOVE_THRESHOLD: "LTV above the threshold", LTV_ABOVE_THRESHOLD_CURRENT: "LTV on today's value above the threshold",
+    SEASONING_INSUFFICIENT: "The loan is too new", NOT_CURRENT: "Not current", PAYMENT_HISTORY_30_12M: "A payment 30 days late in 12 months",
+    PAYMENT_HISTORY_60_24M: "A payment 60 days late in 24 months", VALUE_DECLINED_OR_UNKNOWN: "Value fell, or is not known",
+    VALUATION_REQUIRED: "A valuation is needed", VALUATION_EXPIRED: "The valuation has expired", value_check_needed: "Value check needed",
+    send_missing_month: "Send the missing month", send_this_month: "Send this month's tape", restore_header: "Restore the header",
+    export_codes_as_text: "Export the codes as text", export_dates_in_layout: "Export the dates in the layout's form",
+    write_month_end_as_of: "Write the month's end as the as-of date"
+  };
+  /** The second half of an escrow line's anomaly, "<line type>:<what>". */
+  const LINE_FLAGS = {
+    estimate_basis_prior_year_gt_2y: "estimated from a figure last confirmed over two years ago",
+    pmi_without_termination: "no termination date"
   };
   /** Keys whose text is the record itself (a cell, a quote, an id), shown exactly as it is. */
   const VERBATIM_KEYS = { says: 1, truth: 1, field: 1, column: 1, file: 1, cell: 1, text: 1, id: 1, loan: 1, loan_id: 1,
@@ -963,10 +1192,30 @@ pre {
       if (m[3] === "0000") return { text: "None", none: true };
       return ISO_DATE.test(m[3] + "-" + m[1] + "-" + m[2]) ? { text: fmtDate(m[3] + "-" + m[1] + "-" + m[2]) } : null;
     },
-    metro2Status: (v) => (METRO2_STATUS[String(v)] ? { text: String(v) + ", " + METRO2_STATUS[String(v)] } : null)
+    metro2Status: (v) => (METRO2_STATUS[String(v)] ? { text: String(v) + ", " + METRO2_STATUS[String(v)] } : null),
+    /** A rate a key does not say is one. */
+    pct: (v) => (/^-?\d+(\.\d+)?$/.test(String(v)) ? { text: String(v) + "%" } : null),
+    /** A date written as six digits, month first: "030119" is Mar 1, 2019. */
+    mmddyy: (v) => {
+      const m = /^(\d{2})(\d{2})(\d{2})$/.exec(String(v));
+      const iso = m ? "20" + m[3] + "-" + m[1] + "-" + m[2] : "";
+      return m && ISO_DATE.test(iso) ? { text: fmtDate(iso) } : null;
+    }
   };
-  /** The open job's own field formats, if it names any. */
-  let FORMATS = null;
+  /**
+   * The open job's own field formats, names, codes, empty answers and sentences, if it names any.
+   * Set when a job opens and cleared on the home screen.
+   */
+  let FORMATS = null, JOB_LABELS = null, JOB_VALUES = null, NULL_AS = null, JOB_TEXT = null;
+  function useJob(key) {
+    const c = key ? conf(key) : {};
+    FORMATS = c.formats || null;
+    JOB_LABELS = c.labels || null;
+    JOB_VALUES = c.values || null;
+    NULL_AS = c.nullAs || null;
+    JOB_TEXT = c.text || null;
+  }
+  const has = (o, k) => !!o && Object.prototype.hasOwnProperty.call(o, k);
 
   /** The unit a key's suffix names, if any. */
   function unitOf(key) {
@@ -977,9 +1226,16 @@ pre {
     if (last === "s" && t[t.length - 2] === "duration") return "s";
     return null;
   }
-  function label(key) {
+  /** A key's name for a person; `parent` is the key it sits under, for a name that depends on it ("loan_record.state"). */
+  function label(key, parent) {
     key = String(key);
-    if (Object.prototype.hasOwnProperty.call(LABELS, key)) return LABELS[key];
+    if (parent) {
+      const at = String(parent) + "." + key;
+      if (has(JOB_LABELS, at)) return JOB_LABELS[at];
+      if (has(LABELS, at)) return LABELS[at];
+    }
+    if (has(JOB_LABELS, key)) return JOB_LABELS[key];
+    if (has(LABELS, key)) return LABELS[key];
     if (!/^[a-z0-9_]+$/.test(key)) return key;
     let t = key.split("_").filter(Boolean);
     if (t.length > 1 && /^(cents|pct|bps|months|days|s)$/.test(t[t.length - 1])) t.pop();
@@ -999,15 +1255,31 @@ pre {
   }
   function codeLabel(v) {
     const s = String(v);
-    if (Object.prototype.hasOwnProperty.call(VALUES, s)) return VALUES[s];
+    if (has(JOB_VALUES, s)) return JOB_VALUES[s];
+    if (has(VALUES, s)) return VALUES[s];
+    const line = /^([a-z0-9_]+):([a-z0-9_]+)$/.exec(s);
+    if (line && has(LINE_FLAGS, line[2])) return codeLabel(line[1]) + ": " + LINE_FLAGS[line[2]];
     if (/^[a-z]{3,}(_[a-z]+)*$/.test(s)) return sentence(s.replace(/_/g, " "));
     return s;
+  }
+  /** A person's words for a code read back to the code: "Seven-year cost not lower" is seven_year_not_lower. */
+  function codeFor(text, options) {
+    const t = String(text).trim();
+    const low = t.toLowerCase();
+    const pool = (options || []).concat(Object.keys(JOB_VALUES || {}), Object.keys(VALUES));
+    for (const c of pool) if (c === t) return c;
+    for (const c of pool) if (String(codeLabel(c)).toLowerCase() === low) return c;
+    for (const c of pool) if (String(c).toLowerCase() === low) return c;
+    return /^[A-Za-z][A-Za-z ]*[a-z]$/.test(t) && t.indexOf(" ") >= 0 ? low.replace(/\s+/g, "_") : t;
   }
 
   /** A value, formatted by what its key says it is. Returns text and whether it is a "none". */
   function fmt(key, v, verbatim) {
-    if (v === null || v === undefined) return { text: "None", none: true };
-    if (verbatim || (key && Object.prototype.hasOwnProperty.call(VERBATIM_KEYS, key))) {
+    if (v === null || v === undefined) {
+      if (key && has(NULL_AS, key)) return { text: NULL_AS[key], said: true };
+      return { text: "None", none: true };
+    }
+    if (verbatim || (key && has(VERBATIM_KEYS, key))) {
       if (v === "") return { text: "(blank)", none: true };
       if (typeof v === "boolean") return { text: v ? "Yes" : "No" };
       return { text: String(v) };
@@ -1022,15 +1294,16 @@ pre {
     const numeric = /^-?\d+(\.\d+)?$/.test(s);
     if (unit === "cents" && /^-?\d+$/.test(s)) return { text: dollars(s) };
     if (unit === "pct" && numeric) return { text: s + "%" };
-    if (unit === "bps" && /^-?\d+$/.test(s)) return { text: bpsPct(s) + "%" };
+    if (unit === "bps" && numeric) return { text: bpsPct(s) + "%" };
     if (unit === "s" && numeric) return { text: s + " seconds" };
     if (unit === "months" && numeric) return { text: s + (s === "1" ? " month" : " months") };
     if (unit === "days" && numeric) return { text: s + (s === "1" ? " day" : " days") };
     if (typeof v === "string") {
-      if (v === "") return { text: "Blank", none: true };
+      if (v === "") return { text: "None", none: true };
       if (ISO_DATE.test(v)) return { text: fmtDate(v) };
       if (ISO_INSTANT.test(v)) return { text: fmtInstant(v) };
       if (ISO_MONTH.test(v)) return { text: fmtMonth(v) };
+      if (JOB_TEXT) for (const r of JOB_TEXT) { const m = r[0].exec(v); if (m) return { text: r[1](m) }; }
       return { text: codeLabel(v) };
     }
     return { text: s };
@@ -1091,55 +1364,132 @@ pre {
     const draw = (all) => {
       clear(wrap);
       const shown = all ? rows : rows.slice(0, ROWS_SHOWN);
-      const thead = h("thead", null, h("tr", null, shownCols.map((c) => h("th", { scope: "col" }, verbatim ? c : label(c)))));
+      const thead = h("thead", null, h("tr", null, shownCols.map((c) => h("th", { scope: "col" }, verbatim ? c : label(c, key)))));
       const tbody = h("tbody", null, shown.map((r) => h("tr", null, shownCols.map((c) =>
         h("td", { class: long[c] ? "long" : null },
-          Object.prototype.hasOwnProperty.call(r, c) ? cellNode(c, r[c], verbatim) : h("span", { class: "none" }, "—"))))));
-      wrap.append(h("div", { class: "table-wrap", tabindex: "0", role: "region", "aria-label": label(key || "rows") }, h("table", null, thead, tbody)));
+          has(r, c) ? cellNode(c, r[c], verbatim) : h("span", { class: "none" }, "—"))))));
+      const scroller = h("div", { class: "table-wrap", tabindex: "0", role: "region", "aria-label": label(key || "rows") }, h("table", null, thead, tbody));
+      scroller.addEventListener("scroll", () => fitTable(scroller));
+      wrap.append(scroller);
       if (!all && rows.length > shown.length) {
-        wrap.append(h("p", { class: "more" }, h("button", { type: "button", class: "link-btn", onclick: () => draw(true) }, "Show all " + rows.length)));
+        wrap.append(h("p", { class: "more" }, h("button", { type: "button", class: "link-btn", onclick: () => { draw(true); later(fitTables, 0); } }, "Show all " + rows.length)));
       }
     };
     draw(false);
     return wrap;
   }
+  /** A table wider than its column says so with a fade at the right edge, until it is scrolled there. */
+  function fitTable(el) {
+    if (!el || typeof el.scrollWidth !== "number" || !el.classList) return;
+    const scrolls = el.scrollWidth > el.clientWidth + 2;
+    el.classList.toggle("scrolls", scrolls);
+    el.classList.toggle("at-end", scrolls && el.scrollLeft + el.clientWidth >= el.scrollWidth - 2);
+  }
+  function fitTables() {
+    if (typeof document.querySelectorAll !== "function") return;
+    const all = document.querySelectorAll(".table-wrap");
+    for (let i = 0; i < all.length; i++) fitTable(all[i]);
+  }
+
+  /*
+   * A list of records reads as a table only when it is one: every cell a single value, the rows sharing their
+   * columns, and few enough of them to fit the column. Otherwise each record is a small titled card. A long
+   * list stays a table, which scrolls.
+   */
+  const TABLE_COLS = 5;
+  function tabular(rows) {
+    if (rows.length > ROWS_SHOWN) return true;
+    const flat = rows.every((r) => Object.keys(r).every((k) => {
+      const v = r[k];
+      return !isObj(v) && !(Array.isArray(v) && (v.length > 3 || v.some((x) => isObj(x) || Array.isArray(x))));
+    }));
+    if (!flat) return false;
+    const cols = [];
+    rows.forEach((r) => Object.keys(r).forEach((k) => { if (!isEmpty(r[k]) && cols.indexOf(k) < 0) cols.push(k); }));
+    if (cols.length > TABLE_COLS) return false;
+    const filled = rows.reduce((n, r) => n + cols.filter((c) => !isEmpty(r[c])).length, 0);
+    return filled >= 0.75 * cols.length * rows.length;
+  }
+  const TITLE_KEYS = ["income_id", "payment_id", "party_id", "borrower_id", "loan", "loan_id", "name", "month", "line_type", "due_date",
+    "installment_due_date", "document_type", "type", "kind", "on", "date", "received_on"];
+  const KIND_KEYS = ["type", "kind", "method", "frequency", "document_type", "category", "outcome"];
+  /** A card's title from its own record: its id or name, and what kind of thing it is. */
+  function cardTitle(row, fallback) {
+    const first = TITLE_KEYS.filter((k) => has(row, k) && !isEmpty(row[k]) && !isObj(row[k]) && !Array.isArray(row[k]))[0];
+    const second = KIND_KEYS.filter((k) => k !== first && has(row, k) && typeof row[k] === "string" && row[k] !== "")[0];
+    const used = [first, second].filter(Boolean);
+    const text = used.map((k) => fmt(k, row[k]).text).join(" · ");
+    return { text: text || fallback, used: used };
+  }
+  function cardsOf(key, rows, opts, depth) {
+    const one = sentence(label(singular(String(key || "item"))));
+    const wrap = h("div", { class: "cards" });
+    const draw = (all) => {
+      clear(wrap);
+      const shown = all ? rows : rows.slice(0, ROWS_SHOWN);
+      shown.forEach((r, i) => {
+        const t = cardTitle(r, one + " " + (i + 1));
+        const rest = {};
+        Object.keys(r).forEach((k) => { if (t.used.indexOf(k) < 0) rest[k] = r[k]; });
+        wrap.append(h("section", { class: "kv-card" }, h("h5", { class: "kv-title" }, t.text), dataView(rest, Object.assign({}, opts, { parent: key }), depth + 1)));
+      });
+      if (!all && rows.length > shown.length) wrap.append(h("p", { class: "more" }, h("button", { type: "button", class: "link-btn", onclick: () => draw(true) }, "Show all " + rows.length)));
+    };
+    draw(false);
+    return wrap;
+  }
+  function rowsView(key, rows, opts, verbatim, depth) {
+    if (rows.length === 1 && depth < 2 && Object.keys(rows[0]).length > 3) return dataView(rows[0], Object.assign({}, opts, { verbatim, parent: key }), depth + 1);
+    if (verbatim || tabular(rows)) return tableOf(key, rows, verbatim);
+    return cardsOf(key, rows, Object.assign({}, opts, { verbatim }), depth);
+  }
 
   /**
    * An object as a person reads it: plain values as label and value, a nested
-   * object as a small titled group, a list of records as a table.
+   * object as a small titled group, a list of records as a table or as cards.
+   * `opts.first` names keys to show before everything else; `opts.parent` is
+   * the key the object sits under.
    */
   function dataView(obj, opts, depth) {
     opts = opts || {};
     depth = depth || 0;
     const root = h("div", { class: "kv" });
-    let dl = null;
+    const put = putter(root, opts, depth);
     const grouped = (v) => (isObj(v) && Object.keys(v).length > 0) || (Array.isArray(v) && v.length > 0 && v.every(isObj));
-    const keys = Object.keys(obj);
-    keys.filter((k) => !grouped(obj[k])).concat(keys.filter((k) => grouped(obj[k]))).forEach((k) => {
-      const v = obj[k];
+    const first = depth === 0 && Array.isArray(opts.first) ? opts.first.filter((k) => has(obj, k)) : [];
+    const keys = Object.keys(obj).filter((k) => first.indexOf(k) < 0);
+    first.concat(keys.filter((k) => !grouped(obj[k])), keys.filter((k) => grouped(obj[k]))).forEach((k) => put(k, obj[k]));
+    return root;
+  }
+  /** One item into a view: a row of a list, a titled group, or a table or cards under a title. */
+  function putter(root, opts, depth) {
+    let dl = null;
+    return (k, v, title) => {
       const verbatim = !!opts.verbatim || (opts.verbatimKeys && opts.verbatimKeys.indexOf(k) >= 0);
-      const title = verbatim && depth > 0 && opts.verbatim ? k : label(k);
+      title = title || (verbatim && depth > 0 && opts.verbatim ? k : label(k, opts.parent));
       if (isObj(v) && Object.keys(v).length) {
         dl = null;
         root.append(h("section", { class: "kv-group" + (verbatim ? " kv-verbatim" : "") },
-          h(depth ? "h4" : "h3", { class: "kv-title" }, title), dataView(v, Object.assign({}, opts, { verbatim }), depth + 1)));
+          h(depth ? "h4" : "h3", { class: "kv-title" }, title), dataView(v, Object.assign({}, opts, { verbatim, parent: k, first: null }), depth + 1)));
         return;
       }
       if (Array.isArray(v) && v.length && v.every(isObj)) {
         dl = null;
-        const body = v.length === 1 && depth < 2 && Object.keys(v[0]).length > 3
-          ? dataView(v[0], Object.assign({}, opts, { verbatim }), depth + 1)
-          : tableOf(k, v, verbatim);
         root.append(h("section", { class: "kv-group" + (verbatim ? " kv-verbatim" : "") },
-          h(depth ? "h4" : "h3", { class: "kv-title" }, h("span", null, title), v.length > 1 ? h("span", { class: "count" }, plural(v.length, "row")) : null), body));
+          h(depth ? "h4" : "h3", { class: "kv-title" }, h("span", null, title), v.length > 1 ? h("span", { class: "count" }, String(v.length)) : null),
+          rowsView(k, v, Object.assign({}, opts, { first: null }), verbatim, depth)));
         return;
       }
-      if (!dl) { dl = h("dl", { class: "kv" + (verbatim ? " kv-verbatim" : "") }); root.append(dl); }
+      if (!dl) {
+        dl = h("dl", { class: "kv" + (verbatim ? " kv-verbatim" : "") });
+        // Rows after a titled part would read as that part's: they get a title of their own.
+        if (root.children && root.children.length && !opts.head) root.append(h("section", { class: "kv-group" }, h(depth ? "h4" : "h3", { class: "kv-title" }, "Other details"), dl));
+        else root.append(dl);
+      }
       const dd = Array.isArray(v) ? (v.length ? scalarList(k, v, verbatim) : h("span", { class: "none" }, "None"))
         : isObj(v) ? h("span", { class: "none" }, "None") : valueNode(k, v, verbatim);
       dl.append(h("div", { class: "kv-row" }, h("dt", null, title), h("dd", null, dd)));
-    });
-    return root;
+    };
   }
 
   /* ── The bundle ─────────────────────────────────────────────────────── */
@@ -1258,9 +1608,16 @@ pre {
   }
   function recordsFor(key) { return RUNS.records.filter((r) => r.env && r.env.name === key); }
   function stopped(r) { return !!(r.result && (r.result.error || r.result.outcome === "error")); }
-  function runsLink(text) { return h("a", { href: RUNS_PAGE, target: "_blank", rel: "noopener noreferrer" }, text || "the Gym's claude.ai page"); }
+  /** The claude.ai page is private to those it is shared with, so the link says to ask. */
+  function runsLink(text) { return h("a", { href: RUNS_PAGE, target: "_blank", rel: "noopener noreferrer" }, text || "the Gym's claude.ai page (ask for access)"); }
   function failRuns(err) { RUNS = { status: "failed", records: [], builtAt: null, error: err && err.message ? err.message : String(err) }; }
   function loadRuns() {
+    /* The in-app build says it carries none (`build-playground.mjs --site-only`), so nothing is asked for. */
+    if ($("app").getAttribute("data-runs") === "none") {
+      RUNS = { status: "absent", records: [], builtAt: null, error: null };
+      later(() => { try { renderRuns(); } catch (e) { /* the attempts are a footnote */ } });
+      return;
+    }
     fetch("runs.json").then((res) => {
       /* No such file: this build carries no recorded attempts, which is a build and not a failure. */
       if (res.status === 404) return null;
@@ -1286,9 +1643,32 @@ pre {
     const recs = recordsFor(key).filter((r) => !stopped(r) && Array.isArray(r.result.fields) && r.result.fields.length)
       .sort((a, b) => rank(a) - rank(b) || a.task.suite_seed - b.task.suite_seed || a.task.index - b.task.index);
     const wrong = recs.filter((r) => !r.result.pass).sort((a, b) => rank(a) - rank(b) || wrongCount(a) - wrongCount(b));
-    if (wrong.length) return { rec: wrong[0], wrong: true };
-    return recs.length ? { rec: recs[0], wrong: false } : null;
+    if (wrong.length) return { rec: wrong[0], wrong: true, count: recs.length };
+    return recs.length ? { rec: recs[0], wrong: false, count: recs.length } : null;
   }
+
+  /*
+   * A worked example's name, for a person: its spec references ("20.1-T1", "11.1 rule 3 / 11.1-T1, T2:",
+   * "(D-42)", "(§1006.18(c))") left off, first letter capitalized, dates as dates. The names as written are
+   * under For engineers.
+   */
+  const SPEC_REF = "(?:\\d+\\.\\d+(?:-[A-Z]\\d+)?|[A-Z]-\\d+|[A-Z]\\d+|R\\d+)(?:\\s+(?:rule|design item|item)\\s+\\d+)?";
+  const LEADING_REFS = new RegExp("^(?:" + SPEC_REF + ")(?:\\s*(?:,|\\/)\\s*(?:" + SPEC_REF + "))*(?::\\s*|\\s+)");
+  function exampleName(t, key) {
+    let s = String(t && t.name ? t.name : "Example " + ((t && t.index) + 1));
+    const words = (conf(key || current).values) || {};
+    s = s.replace(/\s*\(§[\d.]+(?:\([a-z0-9]+\))*\)/g, "");
+    s = s.replace(/\s*\((?=[^()]*(?:\b[A-Z]-\d+\b|\b\d+\.\d+-[A-Z]\d+\b|\b[A-Z]\d+\b|[A-Z][A-Z0-9]*_[A-Z0-9_]+|\b[a-z]+_[a-z0-9_]+\b|\b\d+\.\d+'s\b))[^()]*\)/g, "");
+    s = s.replace(/^[a-z]+(?:-[a-z]+)+'s\s+/, "");
+    s = s.replace(LEADING_REFS, (m) => (/:\s*$/.test(m) || !Object.keys(words).some((w) => m.indexOf(w) === 0) ? "" : m));
+    Object.keys(words).filter((w) => /^[A-Z]-\d+$/.test(w)).forEach((w) => {
+      s = s.replace(new RegExp("^" + w + "(?=[\\s']|$)"), words[w]).replace(new RegExp("\\b" + w + "\\b", "g"), words[w].toLowerCase());
+    });
+    s = s.replace(/\b[a-z]+(?:_[a-z0-9]+)+\b/g, (code) => codeLabel(code).toLowerCase());
+    return sentence(datesIn(s.trim()));
+  }
+  /** The line under the case's buttons: "Worked example: …", unless the name already says it is one. */
+  function exampleLine(t) { const n = exampleName(t); return /^worked example\b/i.test(n) ? n : "Worked example: " + n; }
 
   /* ── Steps, said plainly ────────────────────────────────────────────── */
 
@@ -1321,7 +1701,7 @@ pre {
     days_between: (i, o) => ["Days from " + D(i.from) + " to " + D(i.to), String(o.days)],
     end_of_month: (i, o) => ["Last day of the month of " + D(i.date), D(o.date)],
     whole_months_between: (i, o) => ["Whole months from " + D(i.from) + " to " + D(i.to), String(o.months)],
-    calculate: (i, o) => ["Arithmetic: " + prettyExpr(i.expression), prettyExpr(o.value)],
+    calculate: (i, o) => [prettyExpr(i.expression), prettyExpr(o.value)],
     new_york_date: (i, o) => ["The date in New York at " + D(i.instant), D(o.date)],
     apor: (i, o) => ["Average prime offer rate, " + i.term_years + " years, the week of " + D(o.week_of), o.apor_pct + "%"],
     annual_percentage_rate: (i, o) => ["APR on " + money(i.loan_amount_cents) + " at " + i.note_rate_pct + "% over " + i.term_months + " months, with " + money(i.prepaid_finance_charges_cents) + " of prepaid finance charges", o.apr_pct + "%"],
@@ -1407,6 +1787,8 @@ pre {
 
   let fieldSeq = 0;
   const fid = () => "f" + ++fieldSeq;
+  /** While a form is built: the codes a free-text list of the open job's answer can hold, by its key. */
+  let FORM_CODES = null;
 
   function unwrap(s) {
     if (s && Array.isArray(s.anyOf)) {
@@ -1512,6 +1894,8 @@ pre {
     if (s.type === "array") {
       const it = unwrap(s.items || {});
       if (!it.multi && it.s.enum) return checksControl(it.s.enum, key, title);
+      const codes = FORM_CODES ? FORM_CODES(key) : null;
+      if (codes && !it.multi && it.s.type === "string") return checksControl(codes, key, title);
       if (scalarSchema(s.items)) return listControl(it.s, key, title);
       if (flatObject(s.items) && depth < 2) return repeaterControl(it.s, key, depth, title);
       return jsonControl(schema, key, title);
@@ -1529,13 +1913,16 @@ pre {
     if (s.enum || s.type === "boolean") {
       const opts = s.enum ? s.enum.slice() : [true, false];
       const sel = h("select", { id: id });
-      sel.append(h("option", { value: "" }, nullable ? "None" : "Choose…"));
-      opts.forEach((o, i) => sel.append(h("option", { value: String(i) }, s.enum ? (o === "" ? "(blank)" : codeLabel(o)) : o ? "Yes" : "No")));
+      // Every choice starts unmade: an answer left untouched is never a quiet "none".
+      sel.append(h("option", { value: "" }, "Choose…"));
+      if (nullable) sel.append(h("option", { value: "null" }, key && has(NULL_AS, key) ? NULL_AS[key] : "None"));
+      opts.forEach((o, i) => sel.append(h("option", { value: String(i) }, s.enum ? (o === "" ? "None" : codeLabel(o)) : o ? "Yes" : "No")));
       read = (problems) => {
-        if (sel.value === "") { if (nullable) return null; if (required) problems.push(lab + ": choose one."); return undefined; }
+        if (sel.value === "null") return null;
+        if (sel.value === "") { if (required) { problems.push(lab + ": choose one."); return undefined; } return nullable ? null : undefined; }
         return opts[Number(sel.value)];
       };
-      write = (v) => { const i = opts.indexOf(v); sel.value = i < 0 ? "" : String(i); };
+      write = (v) => { if (v === null && nullable) { sel.value = "null"; return; } const i = opts.indexOf(v); sel.value = i < 0 ? "" : String(i); };
       blank = () => sel.value === "";
       input = sel;
     } else {
@@ -1561,13 +1948,32 @@ pre {
     if (hint) (input.tagName === "SPAN" ? input.querySelector("input") : input).setAttribute("aria-describedby", id + "-hint");
     return { el, read, write, blank };
   }
+  /**
+   * A box to tick for each code a list can hold, labeled in words. `options` is the codes, or groups of them
+   * ({ title, codes }); a code written back that is not among them gets a box of its own.
+   */
   function checksControl(options, key, title) {
-    const boxes = options.map((o) => { const id = fid(); const cb = h("input", { type: "checkbox", id: id }); return { o, cb, el: h("label", { class: "check", for: id }, cb, h("span", null, codeLabel(o), String(o) !== codeLabel(o) ? h("span", { class: "quiet" }, "  " + o) : null)) }; });
-    const el = h("fieldset", { class: "f-checks" }, h("legend", null, title || label(key)), boxes.map((b) => b.el));
+    const groups = options.length && isObj(options[0]) ? options.filter((g) => g.codes && g.codes.length) : [{ title: null, codes: options }];
+    const boxes = [];
+    const box = (o) => {
+      const id = fid();
+      const cb = h("input", { type: "checkbox", id: id });
+      const b = { o, cb, el: h("label", { class: "check", for: id }, cb, h("span", null, o === "" ? "None" : codeLabel(o))) };
+      boxes.push(b);
+      return b.el;
+    };
+    const extra = h("div", { class: "checks-grid" });
+    const el = h("fieldset", { class: "f-checks" }, h("legend", null, title || label(key)),
+      groups.map((g) => h("div", { class: "checks-group" }, g.title ? h("p", null, g.title) : null, h("div", { class: "checks-grid" }, g.codes.map(box)))),
+      extra);
     return {
       el,
       read: () => boxes.filter((b) => b.cb.checked).map((b) => b.o),
-      write: (v) => { const on = Array.isArray(v) ? v : []; boxes.forEach((b) => { b.cb.checked = on.indexOf(b.o) >= 0; }); },
+      write: (v) => {
+        const on = Array.isArray(v) ? v : [];
+        on.forEach((x) => { if (!boxes.some((b) => b.o === x)) extra.append(box(x)); });
+        boxes.forEach((b) => { b.cb.checked = on.indexOf(b.o) >= 0; });
+      },
       blank: () => false
     };
   }
@@ -1575,13 +1981,13 @@ pre {
     const id = fid();
     const kind = textKind(item, singular(key || ""));
     const inp = h("input", { type: "text", id: id, autocomplete: "off", spellcheck: "false", "aria-describedby": id + "-hint" });
-    const el = h("div", { class: "f" }, h("label", { for: id }, title || label(key)), inp, h("p", { class: "f-hint", id: id + "-hint" }, kind === "text" ? "Codes as the rules write them, separated by commas. Leave blank for none." : "Separate several with commas. Leave blank for none."));
+    const el = h("div", { class: "f" }, h("label", { for: id }, title || label(key)), inp, h("p", { class: "f-hint", id: id + "-hint" }, kind === "text" ? "Separate several with commas, in words or as the rules' codes. Leave blank for none." : "Separate several with commas. Leave blank for none."));
     return {
       el,
       read: (problems) => {
         const parts = String(inp.value || "").split(",").map((x) => x.trim()).filter(Boolean);
         const out = [];
-        parts.forEach((p) => { try { out.push(readKind(kind, p, item)); } catch (e) { problems.push((title || label(key)) + ": " + e.message + "."); } });
+        parts.forEach((p) => { try { out.push(kind === "text" ? codeFor(p) : readKind(kind, p, item)); } catch (e) { problems.push((title || label(key)) + ": " + e.message + "."); } });
         return out;
       },
       write: (v) => { inp.value = Array.isArray(v) ? v.map((x) => showKind(kind, x)).join(", ") : ""; },
@@ -1722,8 +2128,8 @@ pre {
     const marking = against !== undefined;
     const differ = (a, b) => JSON.stringify(a === undefined ? null : a) !== JSON.stringify(b === undefined ? null : b);
     const wrap = (node, on) => (on ? h("span", { class: "diff" }, node) : node);
-    if (v === null || v === undefined) return wrap(h("span", { class: "none" }, "None"), marking && against !== null && against !== undefined);
     const key = unitKey(env, lastKey(field));
+    if (v === null || v === undefined) return wrap(valueNode(key, null), marking && against !== null && against !== undefined);
     const mine = gradeParse(v);
     const theirs = marking && against !== null ? gradeParse(against) : null;
     if (mine.parsed) {
@@ -1738,6 +2144,18 @@ pre {
     const s = mine.value;
     if (/^[a-z_]+(,[a-z_]+)+$/.test(s)) return wrap(s.split(",").map(codeLabel).join(", "), marking);
     return wrap(valueNode(key, s), marking);
+  }
+  function textOf(n) { return n instanceof Node ? n.textContent : String(n === null || n === undefined ? "" : n); }
+  /**
+   * A wrong item's two values, the given one marked. Two values that read the same in words are shown as
+   * the codes they are, so a wrong item never reads "You said X. Right answer: X."
+   */
+  function gradePair(env, f) {
+    const got = gradeValue(env, f.field, f.got, f.ok ? undefined : f.expected);
+    const exp = gradeValue(env, f.field, f.expected);
+    if (f.ok || textOf(got) !== textOf(exp)) return [got, exp];
+    const raw = (x) => h("code", null, x === null || x === undefined ? "null" : String(x));
+    return [h("span", { class: "diff" }, raw(f.got)), raw(f.expected)];
   }
   /** Every item of a small object, nones included: a grader's item says what each part should be. */
   function inlineAll(o, marked) {
@@ -1755,19 +2173,20 @@ pre {
   const states = {};
   function st(key) {
     key = key || current;
-    if (!states[key]) states[key] = { seed: 1, task: null, sol: null, solFor: null, solError: null, specs: null, form: null, formFor: null, grade: null, coordError: null, att: { policy: "all", result: "all", open: null }, json: null, jsonGrade: null, jsonError: null, toolLog: [] };
+    if (!states[key]) states[key] = { seed: 1, task: null, sol: null, solFor: null, solError: null, specs: null, form: null, formFor: null, grade: null, coordError: null, att: { policy: "all", result: "all", open: null }, json: null, jsonGrade: null, jsonError: null, toolLog: [], held: false };
     return states[key];
   }
   const cur = () => byKey[current];
 
   /* ── Home ───────────────────────────────────────────────────────────── */
 
+  /** A job's figure on the home screen: how often the AI is right, Claude's under it where it has one. */
   function figureText(key) {
     const ai = headline(key, "DeepSeek");
     const claude = headline(key, "Claude");
     const out = [];
-    if (ai) out.push(h("span", null, "AI right " + share(ai.passed, ai.scored) + " of the time"));
-    if (claude) out.push(h("span", { class: "second" }, (ai ? "  ·  " : "") + "Claude " + share(claude.passed, claude.scored)));
+    if (ai) out.push(h("span", { class: "visually-hidden" }, "AI right "), h("span", { class: "pct" }, share(ai.passed, ai.scored)), h("span", { class: "visually-hidden" }, " of the time"));
+    if (claude) out.push(h("span", { class: "second" }, h("span", { class: "visually-hidden" }, ai ? " · " : ""), "Claude " + share(claude.passed, claude.scored)));
     return out;
   }
   function renderHome() {
@@ -1777,14 +2196,15 @@ pre {
       const mine = keys.filter((k) => jobOf(k).group === g.key);
       if (!mine.length) return;
       root.append(h("section", { class: "group", "aria-labelledby": "group-" + g.key },
-        h("h2", { id: "group-" + g.key }, g.label),
+        h("div", { class: "group-head" }, h("h2", { id: "group-" + g.key }, g.label), h("span", { class: "col", "aria-hidden": "true" }, "AI right")),
         h("ul", { class: "jobs-list" }, mine.map((k) => {
           const j = jobOf(k);
+          const n = versionsOf(k).length;
           return h("li", null, h("a", { class: "job-row", href: "#" + k, id: "row-" + k },
-            h("span", { class: "job-name" }, j.name),
-            h("span", { class: "job-sentence" }, j.sentence),
-            h("span", { class: "job-figure", id: "fig-" + k }, figureText(k)),
-            svg(ICON.go, "go")));
+            h("span", { class: "job-main" },
+              h("span", { class: "job-name" }, j.name),
+              h("span", { class: "job-sentence" }, j.sentence, n ? ["\u00a0", h("span", { class: "more-v" }, "· " + plural(n, "more version"))] : null)),
+            h("span", { class: "job-figure", id: "fig-" + k }, figureText(k))));
         }))));
     });
     renderHomeFigures();
@@ -1795,9 +2215,9 @@ pre {
     const note = clear($("home-note"));
     if (SCORES.status === "ready" && SCORES.scores.length) {
       const claudeJobs = ENVS.filter((e) => headline(e.key, "Claude")).length;
-      note.append("“The AI” is DeepSeek V4.1 Flash, an open model." +
-        (claudeJobs ? " Claude is Claude Opus 5.5, tested on " + (claudeJobs === 1 ? "one job" : claudeJobs + " jobs") + " so far." : "") +
-        " Each figure is a score on 200 test cases, kept apart from the practice cases shown here.");
+      note.append("The AI is DeepSeek V4.1 Flash, an open model" +
+        (claudeJobs ? "; Claude is Claude Opus 5.5, scored on " + (claudeJobs === 1 ? "one job" : claudeJobs + " jobs") + " so far" : "") +
+        ". Each figure is how often it is right on 200 test cases, kept apart from the practice cases shown here.");
     } else if (SCORES.status === "failed") {
       note.append("The AI's scores could not be loaded. Everything else works without them.");
     }
@@ -1805,6 +2225,7 @@ pre {
   function renderHomeRuns() {
     const p = clear($("home-runs"));
     if (RUNS.status === "absent") p.append("This copy carries no recorded attempts by the AI. They are on ", runsLink(), ".");
+    $("home-foot").classList.toggle("empty", !p.firstChild);
   }
 
   /* ── A job ──────────────────────────────────────────────────────────── */
@@ -1820,6 +2241,10 @@ pre {
     clear(of);
     of.hidden = main === current;
     if (main !== current) of.append("A version of ", h("a", { href: "#" + main }, jobOf(main).name), ".");
+    // The other versions are far down the page: the header says they are there.
+    const others = [main].concat(versionsOf(main)).filter((k) => k !== current).length;
+    $("job-versions").hidden = !others;
+    $("versions-link").textContent = main === current ? "Also in " + plural(others, "other version") : "See every version";
     document.title = j.name + " · Supermortgage Gym";
     renderJobScore();
   }
@@ -1844,27 +2269,50 @@ pre {
     return datesIn(text);
   }
   function renderCase() {
-    const env = cur(), s = st(), j = jobOf(current);
+    const env = cur(), s = st(), c = conf(current);
     const body = clear($("case-body"));
-    if (!s.task) { $("case-intro").textContent = ""; $("case-which").textContent = ""; body.append(h("p", { class: "waiting" }, "Getting a case ready…")); return; }
+    if (!s.task) { $("case-intro").textContent = ""; $("case-which").textContent = ""; $("case-more").hidden = true; body.append(h("p", { class: "waiting" }, "Getting a case ready…")); return; }
     const intro = clear($("case-intro"));
     intro.append(caseIntro(env, s.task));
-    if (j.caseNote) intro.append(" ", h("span", { class: "quiet" }, j.caseNote));
-    $("case-which").textContent = s.task.split === "spec" ? "Worked example: " + (s.task.name || "case " + (s.task.index + 1)) : "A practice case, made up for this page.";
-    try { body.append(dataView(env.payload(s.task), { verbatimKeys: j.verbatim || [] })); }
+    if (c.caseNote) intro.append(" ", h("span", { class: "quiet" }, c.caseNote));
+    $("case-which").textContent = s.task.split === "spec" ? exampleLine(s.task) : "A practice case, made up for this page.";
+    try { body.append(dataView(env.payload(s.task), { verbatimKeys: c.verbatim, first: c.caseFirst })); }
     catch (e) { body.append(h("p", { class: "quiet" }, "This case could not be shown: " + (e && e.message ? e.message : String(e)))); }
     clipCase(true);
     renderExamplesButton();
+    later(fitTables, 0);
   }
-  /** A long case shows its first screen and a button for the rest. */
+  /**
+   * A long case shows its first screen and a button for the rest. The cut falls between the case's parts,
+   * never inside one: a table is shown whole or not at all.
+   */
+  const FIRST_SCREEN = 1000;
   function clipCase(clip) {
     const body = $("case-body"), more = $("case-more"), btn = $("case-more-btn");
-    body.className = "case-body";
-    const tall = (body.scrollHeight || 0) > 760;
-    if (clip && tall) body.className = "case-body clipped";
-    more.hidden = !tall;
-    btn.setAttribute("aria-expanded", String(!(clip && tall)));
-    btn.querySelector("span").textContent = clip && tall ? "Show the whole case" : "Show less";
+    const root = body.firstChild;
+    const parts = root && root.children ? Array.prototype.slice.call(root.children) : [];
+    parts.forEach((p) => { p.hidden = false; });
+    let cut = parts.length;
+    const measurable = parts.length > 1 && typeof parts[0].offsetTop === "number" && typeof parts[0].offsetHeight === "number";
+    if (measurable) {
+      const top = parts[0].offsetTop;
+      const total = parts[parts.length - 1].offsetTop - top + parts[parts.length - 1].offsetHeight;
+      // Not worth a button when the rest is a short scroll.
+      if (total > FIRST_SCREEN + 280) {
+        for (let i = 1; i < parts.length; i++) {
+          if (parts[i].offsetTop - top + parts[i].offsetHeight <= FIRST_SCREEN) continue;
+          // A first screen that would be only a line or two (a date) takes the next part whole as well.
+          cut = parts[i].offsetTop - top < FIRST_SCREEN / 2 ? i + 1 : i;
+          break;
+        }
+      }
+    }
+    const hiding = cut < parts.length;
+    if (clip && hiding) parts.slice(cut).forEach((p) => { p.hidden = true; });
+    more.hidden = !hiding;
+    btn.setAttribute("aria-expanded", String(!(clip && hiding)));
+    btn.querySelector("span").textContent = clip && hiding ? "Show the whole case (" + plural(parts.length - cut, "more part") + ")" : "Show less";
+    if (!clip) later(fitTables, 0);
   }
   function renderExamplesButton() {
     const s = st();
@@ -1878,7 +2326,8 @@ pre {
     if (!s.specs) { list.append(h("li", { class: "quiet small" }, "Loading the worked examples…")); return; }
     s.specs.forEach((t) => {
       const on = s.task && s.task.split === "spec" && s.task.index === t.index;
-      list.append(h("li", null, h("button", { type: "button", "aria-current": on ? "true" : "false", onclick: () => { setExamples(false); setTask(t); say("Worked example: " + t.name); } }, t.name || "Example " + (t.index + 1))));
+      const name = exampleName(t);
+      list.append(h("li", null, h("button", { type: "button", "aria-current": on ? "true" : "false", onclick: () => { setExamples(false); setTask(t); say(exampleLine(t)); } }, name)));
     });
   }
   /** The worked examples, found when the page is idle: most jobs build them at once, one takes a moment. */
@@ -1913,6 +2362,7 @@ pre {
     s.grade = null; s.jsonGrade = null; s.jsonError = null;
     renderCase();
     solve();
+    renderAi();
     if (tryOpen()) renderTry();
     if (engOpen()) renderEng();
   }
@@ -1948,10 +2398,81 @@ pre {
       if (engOpen()) renderEng();
     });
   }
+  /* The right answer, as a person reads it: the items that decide it first, the rest folded, the empty ones left out. */
+  function entriesOf(c) {
+    return (c.answer || []).map((e) => (typeof e === "string" ? { path: e } : e)).map((e) => {
+      const segs = e.path.split(".");
+      return Object.assign({ key: segs[segs.length - 1], parent: segs.length > 1 ? segs[segs.length - 2] : null, segs: segs }, e);
+    });
+  }
+  function at(obj, segs) { let v = obj; for (const s of segs) { if (!isObj(v) || !has(v, s)) return undefined; v = v[s]; } return v; }
+  /** Nothing to say: no value (unless the job says what that means), a blank, an empty list, or no money. */
+  function blank(key, v, keepZero) {
+    if (v === null || v === undefined) return !has(NULL_AS, key);
+    if (v === "" || (Array.isArray(v) && !v.length) || (isObj(v) && !Object.keys(v).length)) return true;
+    return !keepZero && unitOf(key) === "cents" && /^-?0+$/.test(String(v));
+  }
+  /** A copy without its empty items, and how many top-level ones were left out; `keepZero` keeps $0.00, which a record's row can mean. */
+  function pruned(obj, top, keepZero) {
+    const out = {};
+    let dropped = 0;
+    Object.keys(obj).forEach((k) => {
+      let v = obj[k];
+      if (isObj(v)) v = pruned(v, false, keepZero).value;
+      if (blank(k, v, keepZero)) { dropped++; return; }
+      out[k] = v;
+    });
+    return { value: out, dropped: top ? dropped : 0 };
+  }
+  function splitAnswer(answer, c) {
+    const hide = c.hide || [];
+    const entries = entriesOf(c);
+    const head = [];
+    const rest = JSON.parse(JSON.stringify(answer));
+    hide.forEach((k) => { delete rest[k]; });
+    entries.forEach((e) => {
+      const v = at(answer, e.segs);
+      if (v === undefined || hide.indexOf(e.segs[0]) >= 0) return;
+      if (!e.always && blank(e.key, v)) return;
+      let shown = e.cols && Array.isArray(v) ? v.map((r) => { const o = {}; e.cols.forEach((k) => { if (isObj(r) && has(r, k)) o[k] = r[k]; }); return o; }) : v;
+      // A record shown first says what it holds, not what it leaves empty ("Row: None").
+      if (Array.isArray(shown) && shown.length && shown.every(isObj)) {
+        // A column with nothing in any row goes, $0.00 included; a $0.00 beside other rows' amounts stays.
+        const cols = [];
+        shown.forEach((r) => Object.keys(r).forEach((k) => { if (cols.indexOf(k) < 0) cols.push(k); }));
+        const empty = cols.filter((k) => shown.every((r) => blank(k, r[k])));
+        shown = shown.map((r) => { const o = pruned(r, false, true).value; empty.forEach((k) => { delete o[k]; }); return o; });
+      }
+      else if (isObj(shown)) shown = pruned(shown, false).value;
+      head.push(Object.assign({}, e, { value: shown }));
+      // An item shown whole leaves the rest; one shown by some of its columns stays there in full.
+      if (!e.cols) {
+        let o = rest;
+        for (let i = 0; i < e.segs.length - 1; i++) o = isObj(o) ? o[e.segs[i]] : null;
+        if (isObj(o)) delete o[e.key];
+      }
+    });
+    const p = pruned(rest, true);
+    return { head: head, rest: p.value, empty: p.dropped };
+  }
+  function answerHead(head, c) {
+    const root = h("div", { class: "kv" });
+    const put = putter(root, { verbatimKeys: c.verbatim, head: true }, 0);
+    head.forEach((e) => put(e.key, e.value, e.label || label(e.key, e.parent)));
+    return root;
+  }
   function renderAnswer() {
-    const env = cur(), s = st(), j = jobOf(current);
+    const env = cur(), s = st(), c = conf(current);
     const body = clear($("answer-body"));
     const wrap = $("steps-wrap");
+    const restWrap = $("answer-rest");
+    restWrap.hidden = true;
+    if (s.held) {
+      wrap.hidden = true;
+      body.append(h("div", { class: "answer-held" }, h("span", null, "Folded while you try the case yourself."),
+        h("button", { type: "button", class: "link-btn", id: "answer-show", onclick: () => { s.held = false; renderAnswer(); } }, "Show the right answer")));
+      return;
+    }
     if (!s.task || s.solFor !== s.task.id) { wrap.hidden = true; body.append(h("p", { class: "waiting" }, "Working it out…")); return; }
     if (s.solError || !s.sol) { wrap.hidden = true; body.append(h("p", { class: "quiet" }, "The engine could not work this case: " + s.solError)); return; }
     const sol = s.sol;
@@ -1959,10 +2480,31 @@ pre {
       body.append(h("p", { class: "quiet" }, "The engine's worked solution stopped before it gave an answer, which is a defect in this job's setup."));
     } else {
       if (!sol.grade.pass) body.append(h("p", { class: "note" }, mark("warn"), " The grader does not agree with this answer, which is a defect in this job's setup."));
-      body.append(dataView(isObj(sol.answer) ? sol.answer : { answer: sol.answer }, { verbatimKeys: j.verbatim || [] }));
+      const answer = isObj(sol.answer) ? sol.answer : { answer: sol.answer };
+      const split = splitAnswer(answer, c.answer ? c : Object.assign({}, c, { answer: Object.keys(answer) }));
+      if (!split.head.length) {
+        // Every item that decides it is empty: the first is shown all the same, so the answer is never blank.
+        const e = entriesOf(c)[0] || entriesOf({ answer: [Object.keys(answer)[0]] })[0];
+        if (e) split.head = [Object.assign({}, e, { value: at(answer, e.segs) === undefined ? null : at(answer, e.segs) })];
+      }
+      body.append(answerHead(split.head, c));
+      // The empty items are counted inside the fold; with nothing else to fold, they go unsaid.
+      const n = Object.keys(split.rest).length;
+      if (n) renderRest(split, n);
     }
     wrap.hidden = false;
     renderSteps();
+    later(fitTables, 0);
+  }
+  function restOpen() { return $("rest-toggle").getAttribute("aria-expanded") === "true"; }
+  function renderRest(split, n) {
+    const wrap = $("answer-rest"), btn = $("rest-toggle"), panel = $("rest-panel");
+    wrap.hidden = false;
+    btn.querySelector("span").textContent = "Every other item (" + n + ")";
+    const note = split.empty ? h("p", { class: "note" }, plural(split.empty, "item") + (split.empty === 1 ? " is" : " are") + " empty for this case and not shown.") : null;
+    clear(panel);
+    panel.hidden = !restOpen();
+    panel.append(dataView(split.rest, { verbatimKeys: conf(current).verbatim }), note);
   }
   function stepsOpen() { return $("steps-toggle").getAttribute("aria-expanded") === "true"; }
   function renderSteps() {
@@ -1976,17 +2518,27 @@ pre {
     const calls = [];
     s.sol.steps.forEach((t) => t.calls.forEach((c) => { if (c.name !== env.submitTool) calls.push(c); }));
     if (!calls.length) { panel.append(h("p", { class: "quiet small" }, "It is read straight off the case, with no figures to work out.")); return; }
+    // The named steps say what is worked out; the calculator's arithmetic between them folds into one line a run.
     const list = h("ol", { class: "steps" });
-    let anyCalc = false;
-    calls.forEach((c) => {
-      const line = stepLine(c.name, c.input, c.output, c.is_error);
-      if (line.calc) anyCalc = true;
-      list.append(h("li", { class: line.calc ? "calc" : null }, h("span", { class: "step-what" },
-        line.what, line.error ? h("span", { class: "step-err" }, ": " + line.error) : line.got ? [": ", h("span", { class: "step-got" }, line.got)] : null)));
-    });
+    const lines = calls.map((c) => stepLine(c.name, c.input, c.output, c.is_error));
+    const calcs = lines.filter((l) => l.calc).length;
+    const item = (line) => h("li", { class: line.calc ? "calc" : null }, h("span", { class: "step-what" },
+      line.what, line.error ? h("span", { class: "step-err" }, ": " + line.error) : line.got ? [line.calc ? " = " : ": ", h("span", { class: "step-got" }, line.got)] : null));
+    for (let i = 0; i < lines.length; i++) {
+      if (!lines[i].calc || showArithmetic) { list.append(item(lines[i])); continue; }
+      let j = i;
+      while (j + 1 < lines.length && lines[j + 1].calc) j++;
+      list.append(h("li", { class: "calc-run" }, h("span", { class: "step-what" }, plural(j - i + 1, "calculation"))));
+      i = j;
+    }
     panel.append(list);
-    panel.append(h("p", { class: "steps-note" }, plural(calls.length, "step") + ", each run by the same tools the AI is given." + (anyCalc ? " Dollar amounts in the arithmetic are written in cents." : "")));
+    if (calcs) {
+      panel.append(h("p", { class: "steps-more" }, h("button", { type: "button", class: "link-btn", id: "arith-toggle", "aria-expanded": String(showArithmetic),
+        onclick: () => { showArithmetic = !showArithmetic; renderSteps(); } }, showArithmetic ? "Hide the arithmetic" : "Show the arithmetic (amounts in cents)")));
+    }
+    panel.append(h("p", { class: "steps-note" }, plural(calls.length, "step") + ", each run by the same tools the AI is given."));
   }
+  let showArithmetic = false;
 
   /* How the AI did: the score, and one recorded attempt beside the right answer. */
   function renderAi() {
@@ -2013,25 +2565,43 @@ pre {
     const who = policyOf(r.policy) && policyOf(r.policy).short === "Claude" ? "Claude" : "The AI";
     const fields = r.result.fields || [];
     const bad = fields.filter((f) => !f.ok), good = fields.filter((f) => f.ok);
+    const shownHere = st().task && st().task.id === r.task.id;
+    let lead;
+    if (ex.wrong) {
+      lead = who + "'s answer on " + (shownHere ? "the case above" : "another practice case") + ", beside the right one. It missed " + plural(bad.length, "item") + " of " + fields.length + ".";
+    } else {
+      // Every recorded attempt was right, yet the score is not 100%: say why both are true.
+      const missed = ai ? ai.scored - ai.passed : 0;
+      lead = (ex.count === 1 ? "The one practice attempt we recorded was right." : "All " + ex.count + " practice attempts we recorded were right.") +
+        (missed ? " The " + plural(missed, "test case") + " it missed " + (missed === 1 ? "is" : "are") + " kept apart, so " + (missed === 1 ? "it is" : "they are") + " not shown here." : "");
+    }
     const box = h("div", { class: "compare", id: "ai-example" },
       h("h3", null, ex.wrong ? "One case it got wrong" : "One case it got right"),
-      h("p", { class: "quiet small" }, ex.wrong
-        ? who + "'s answer on a practice case, beside the right one. It missed " + plural(bad.length, "item") + " of " + fields.length + "."
-        : "Every recorded attempt on this job was right. Here is one, item by item."),
+      h("p", { class: "quiet small" }, lead),
       r.env.version !== env.version ? h("p", { class: "note" }, "It was recorded on an earlier version of this job's rules, and is shown as it was graded then.") : null);
     const head = h("div", { class: "cmp-head", "aria-hidden": "true" }, h("span"), h("span", null, "Item"), h("span", null, who === "Claude" ? "Claude" : "The AI"), h("span", null, "Right answer"));
-    const row = (f) => h("div", { class: "cmp-row" + (f.ok ? "" : " is-bad") },
-      h("span", { class: "cmp-mark" }, mark(f.ok ? "ok" : "bad")),
-      h("span", { class: "cmp-item" }, fieldLabel(f.field)),
-      h("span", { class: "cmp-val cmp-ai" }, h("span", { class: "cmp-tag" }, who === "Claude" ? "Claude:" : "The AI:"), f.ok ? gradeValue(env, f.field, f.got) : gradeValue(env, f.field, f.got, f.expected)),
-      h("span", { class: "cmp-val cmp-right" }, h("span", { class: "cmp-tag" }, "Right:"), gradeValue(env, f.field, f.expected)));
-    const cmp = h("div", { class: "cmp", role: "list" }, head, (ex.wrong ? bad : good.slice(0, 6)).map(row));
-    box.append(cmp);
-    const rest = ex.wrong ? good : good.slice(6);
-    if (rest.length) {
-      const more = h("button", { type: "button", class: "link-btn more" }, ex.wrong ? "Show the " + plural(rest.length, "item") + " it got right" : "Show " + rest.length + " more");
-      more.addEventListener("click", () => { rest.forEach((f) => cmp.append(row(f))); more.hidden = true; });
-      box.append(more);
+    const row = (f) => {
+      const pair = gradePair(env, f);
+      return h("div", { class: "cmp-row" + (f.ok ? "" : " is-bad") },
+        h("span", { class: "cmp-mark" }, mark(f.ok ? "ok" : "bad")),
+        h("span", { class: "cmp-item" }, fieldLabel(f.field)),
+        h("span", { class: "cmp-val cmp-ai" }, h("span", { class: "cmp-tag" }, who === "Claude" ? "Claude:" : "The AI:"), pair[0]),
+        h("span", { class: "cmp-val cmp-right" }, h("span", { class: "cmp-tag" }, "Right:"), pair[1]));
+    };
+    if (ex.wrong) {
+      const cmp = h("div", { class: "cmp", role: "list" }, head, bad.map(row));
+      box.append(cmp);
+      if (good.length) {
+        const more = h("button", { type: "button", class: "link-btn more" }, "Show the " + plural(good.length, "item") + " it got right");
+        more.addEventListener("click", () => { good.forEach((f) => cmp.append(row(f))); more.hidden = true; });
+        box.append(more);
+      }
+    } else {
+      // A table of items that all agree says nothing the count does not: it is there on request.
+      const cmp = h("div", { class: "cmp", role: "list", hidden: true }, head, good.map(row));
+      const more = h("button", { type: "button", class: "link-btn more", id: "ai-show-all" }, "It got " + (good.length === 1 ? "the one item" : "all " + good.length + " items") + " right. Show them");
+      more.addEventListener("click", () => { cmp.hidden = false; more.hidden = true; });
+      box.append(more, cmp);
     }
     if (r.env.version === env.version) {
       let same = null;
@@ -2076,10 +2646,17 @@ pre {
     const env = cur(), s = st();
     const panel = clear($("try-panel"));
     if (!s.task) { panel.append(h("p", { class: "waiting" }, "Getting a case ready…")); return; }
-    if (!s.form || s.formFor !== current) {
-      s.form = objectControl(submitSchema(env), null, 0, false, null, true);
-      s.formFor = current;
+    // A new case can hold other codes (an escrow analysis flags its own lines), so its form is its own.
+    if (!s.form || s.formFor !== s.task.id) {
+      const codes = conf(current).codes || {};
+      let data = null;
+      try { data = env.payload(s.task); } catch (e) { data = null; }
+      FORM_CODES = (key) => { const d = key && has(codes, key) ? codes[key] : null; return d ? (typeof d === "function" ? d(data) : d) : null; };
+      try { s.form = objectControl(submitSchema(env), null, 0, false, null, true); }
+      finally { FORM_CODES = null; }
+      s.formFor = s.task.id;
     }
+    panel.append(h("p", { class: "try-back" }, h("button", { type: "button", class: "link-btn", onclick: () => { scrollToEl($("case")); } }, "Back to the case")));
     panel.append(h("p", { class: "fold-lede" }, "Answer the case above yourself, then grade it item by item, exactly as the AI's answers are graded. Nothing you type leaves this page."));
     panel.append(h("div", { class: "form-tools", id: "try-helpers" }));
     panel.append(h("div", { id: "try-form" }, s.form.el));
@@ -2107,6 +2684,8 @@ pre {
     if (!parsed.ok) { s.grade = { refused: parsed.error }; renderTryResult(); return; }
     try { s.grade = { grade: env.grade(s.task, parsed.answer), forTask: s.task.id }; }
     catch (e) { s.grade = { refused: e && e.message ? e.message : String(e) }; }
+    // Graded: the right answer, folded while the case was tried, is shown again.
+    if (s.grade.grade && s.held) { s.held = false; renderAnswer(); }
     renderTryResult();
     const g = s.grade.grade;
     if (g) say(g.fields.filter((f) => f.ok).length + " of " + g.fields.length + " right.");
@@ -2125,14 +2704,25 @@ pre {
     }
     if (g.refused) { box.append(h("div", { class: "problems", role: "alert" }, h("strong", null, "The grader could not read this answer. "), g.refused)); return; }
     if (g.forTask !== s.task.id) return;
-    const right = g.grade.fields.filter((f) => f.ok).length;
-    box.append(h("div", { class: "result" },
-      h("p", { class: "result-head" }, right + " of " + g.grade.fields.length + " right"),
+    const fields = g.grade.fields;
+    const wrong = fields.filter((f) => !f.ok), right = fields.filter((f) => f.ok);
+    // The items to fix come first; the ones that are right fold under a count.
+    const line = (f) => {
+      const pair = gradePair(env, f);
+      return h("li", null, mark(f.ok ? "ok" : "bad"), h("span", { class: "r-item" }, fieldLabel(f.field)),
+        h("span", { class: "r-detail" }, f.ok ? pair[1] : ["You said ", pair[0], ". Right answer: ", h("b", null, pair[1]), "."]));
+    };
+    const list = h("ul", { class: "results" }, (wrong.length ? wrong : right).map(line));
+    const res = h("div", { class: "result" },
+      h("p", { class: "result-head" }, right.length + " of " + fields.length + " right"),
       h("p", { class: "quiet small" }, g.grade.pass ? "That answer passes." : "That answer does not pass: every item has to be right."),
-      h("ul", { class: "results" }, g.grade.fields.map((f) => h("li", null,
-        mark(f.ok ? "ok" : "bad"),
-        h("span", { class: "r-item" }, fieldLabel(f.field)),
-        h("span", { class: "r-detail" }, f.ok ? gradeValue(env, f.field, f.expected) : ["You said ", gradeValue(env, f.field, f.got, f.expected), ". Right answer: ", h("b", null, gradeValue(env, f.field, f.expected)), "."]))))));
+      list);
+    if (wrong.length && right.length) {
+      const more = h("button", { type: "button", class: "link-btn results-more" }, (right.length === 1 ? "1 other right" : right.length + " others right") + ". Show them");
+      more.addEventListener("click", () => { right.forEach((f) => list.append(line(f))); more.hidden = true; });
+      res.append(more);
+    }
+    box.append(res);
   }
 
   function toolsBlock(env) {
@@ -2179,7 +2769,7 @@ pre {
   function logLine(e) {
     const line = e.error ? { what: toolName(e.name), error: e.error } : stepLine(e.name, e.input, e.output, false);
     return h("li", null,
-      h("span", null, line.what, line.error ? h("span", { class: "step-err" }, ": " + line.error) : line.got ? [": ", h("b", null, line.got)] : null),
+      h("span", null, line.what, line.error ? h("span", { class: "step-err" }, ": " + line.error) : line.got ? [line.calc ? " = " : ": ", h("b", null, line.got)] : null),
       e.output !== undefined ? h("code", { class: "quiet" }, String(e.output).length > 400 ? String(e.output).slice(0, 400) + "…" : String(e.output)) : null);
   }
 
@@ -2438,9 +3028,18 @@ pre {
   /* ── Routing: the list, or a job, by the hash ───────────────────────── */
 
   let homeScroll = 0;
+  /** What one page left behind that the next must not show: a worked example's name in the status line, the open list. */
+  function forget() {
+    $("status").textContent = "";
+    clear($("examples-list")).hidden = true;
+    $("examples-toggle").setAttribute("aria-expanded", "false");
+    clear($("rest-panel")).hidden = true;
+    $("rest-toggle").setAttribute("aria-expanded", "false");
+  }
   function showHome(from) {
     current = null;
-    FORMATS = null;
+    useJob(null);
+    forget();
     $("job").hidden = true;
     $("home").hidden = false;
     document.title = "Supermortgage Gym";
@@ -2457,15 +3056,17 @@ pre {
   function showJob(key) {
     if (current === null && typeof window.scrollY === "number") homeScroll = window.scrollY;
     current = key;
-    FORMATS = (JOBS[key] && JOBS[key].formats) || null;
+    useJob(key);
+    forget();
     $("home").hidden = true;
     const view = $("job");
     view.hidden = false;
-    // Every visit opens on the case: the folded sections start folded.
+    // Every visit opens on the case: the folded sections start folded, and the right answer is shown.
     $("try-toggle").setAttribute("aria-expanded", "false"); $("try-panel").hidden = true;
     $("eng-toggle").setAttribute("aria-expanded", "false"); $("eng-panel").hidden = true;
     $("steps-toggle").setAttribute("aria-expanded", "false"); $("steps-panel").hidden = true;
-    $("examples-toggle").setAttribute("aria-expanded", "false");
+    st().held = false;
+    showArithmetic = false;
     renderJobHead();
     renderCase();
     renderAnswer();
@@ -2478,7 +3079,7 @@ pre {
       // The first draw on a page builds the held-out guard's tables, which takes a moment: the page is up first.
       afterPaint(() => {
         if (current !== key || st(key).task) return;
-        try { setTask(byKey[key].draw("train", s.seed, 0)); }
+        try { setTask(byKey[key].draw("train", s.seed, conf(key).start)); }
         catch (e) { clear($("case-body")).append(h("p", { class: "quiet" }, "No case could be drawn: " + e.message)); }
         findSpecsLater(key);
       });
@@ -2509,9 +3110,26 @@ pre {
   });
   $("examples-toggle").addEventListener("click", () => setExamples(!isOpen("examples-toggle")));
   $("steps-toggle").addEventListener("click", () => { $("steps-toggle").setAttribute("aria-expanded", String(!stepsOpen())); renderSteps(); });
+  $("rest-toggle").addEventListener("click", () => {
+    const open = !restOpen();
+    $("rest-toggle").setAttribute("aria-expanded", String(open));
+    $("rest-panel").hidden = !open;
+    if (open) later(fitTables, 0);
+  });
   $("try-toggle").addEventListener("click", () => fold("try-toggle", "try-panel", !tryOpen(), renderTry));
   $("eng-toggle").addEventListener("click", () => fold("eng-toggle", "eng-panel", !engOpen(), renderEng));
+  // From the case: open "Try it yourself" with the right answer folded until the try is graded.
+  $("try-link").addEventListener("click", () => {
+    const s = st();
+    if (!(s.grade && s.grade.grade)) { s.held = true; renderAnswer(); }
+    if (!tryOpen()) fold("try-toggle", "try-panel", true, renderTry);
+    scrollToEl($("try"));
+    const first = $("try-form") && $("try-form").querySelector ? $("try-form").querySelector("input, select, textarea") : null;
+    if (first) later(() => { try { first.focus({ preventScroll: true }); } catch (e) { first.focus(); } }, reducedMotion.matches ? 0 : 400);
+  });
+  $("versions-link").addEventListener("click", () => { scrollToEl($("versions")); });
   window.addEventListener("hashchange", route);
+  window.addEventListener("resize", () => fitTables());
 
   renderHome();
   route();

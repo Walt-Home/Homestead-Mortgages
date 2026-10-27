@@ -37,6 +37,8 @@
  *   read and neither JSON file is written. The API image builds the Gym it
  *   serves inside the ops console this way (`apps/api/src/routes/console-gym.ts`),
  *   beside the held-out counts committed at `playground/snapshot/scores.json`.
+ *   Its page is marked `data-runs="none"`, so it never asks for a `runs.json`
+ *   it does not carry.
  * - `--out <dir>`: write there instead of `playground/dist/`.
  */
 
@@ -171,11 +173,19 @@ const SKELETON =
   '<!doctype html>\n<html lang="en">\n<head>\n<meta charset="utf-8">\n' +
   '<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">\n' +
   "</head>\n<body>\n";
-writeFileSync(
-  join(out, "index.html"),
-  SKELETON + readFileSync(join(pkg, "playground", "index.html"), "utf8") + "\n</body>\n</html>\n",
+// A --site-only page carries no runs.json, and says so on its root element, so
+// it never asks for one: the request would only ever answer 404.
+const APP = '<div class="app" id="app">';
+let source = readFileSync(join(pkg, "playground", "index.html"), "utf8");
+if (siteOnly) {
+  if (source.split(APP).length !== 2)
+    throw new Error(`playground/index.html must hold ${APP} exactly once`);
+  source = source.replace(APP, '<div class="app" id="app" data-runs="none">');
+}
+writeFileSync(join(out, "index.html"), SKELETON + source + "\n</body>\n</html>\n");
+console.log(
+  `${shown(join(out, "index.html"))}: copied${siteOnly ? ", marked as carrying no runs" : ""}`,
 );
-console.log(`${shown(join(out, "index.html"))}: copied`);
 
 if (siteOnly) {
   console.log("--site-only: runs/ not read, and no runs.json or scores.json written");

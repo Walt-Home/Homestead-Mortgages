@@ -5378,28 +5378,52 @@ labeled by the model alone ("DeepSeek") and comes first; a score at another
 budget names it ("DeepSeek, 16k budget" on boarding-triage, "DeepSeek, 32k
 budget" elsewhere), read off the policy id and the bundle's `outputBudget`.
 
-The page is written for a reader who is not an engineer. It opens on the
-jobs as one list in three groups (Refinance, Servicing, Lending): a plain
-name, one sentence and one figure each, how often the AI (DeepSeek) is right
-on the held-out suite at the environment's own output budget, with Claude's
-beside it where Claude has one. The versions of a job (as a policy, on the
-edges, from the tape, from the ledger, with the APR searched) are not rows of
-the list; they fold under it as "Other versions" on its page. The names and
-sentences are one table in the page, `JOBS`, which `gym-page.test.ts` holds
-to every environment the bundle carries. A job's page is addressed by its
-key (`#refi-review`, so older links still open it) and reads top to bottom:
+The page is written for a reader who is not an engineer. It opens by saying
+what the Gym is (real mortgage jobs an AI practices on, graded by our own
+systems) and who the AI is, then the jobs as one list in three groups
+(Refinance, Servicing, Lending): a plain name, one sentence and one figure
+each, how often the AI (DeepSeek) is right on the held-out suite at the
+environment's own output budget, with Claude's under it where Claude has
+one. Every share on the page follows one rule: one decimal, the ".0" left
+off (191 of 200 is 95.5%). The versions of a job (as a policy, on the edges,
+from the tape, from the ledger, with the APR found without the calculator)
+are not rows of the list; the row says how many there are, and they fold
+under the job as "Other versions" on its page, which its header links to.
+The names and sentences are one table in the page, `JOBS`, which
+`gym-page.test.ts` holds to every environment the bundle carries. A job's
+page is addressed by its key (`#refi-review`, so older links still open it)
+and reads top to bottom:
 
 - the case, from the task's payload, with keys as words, cents as dollars and
   dates as dates; the parts a job reads exactly as written (a transfer
-  package's files, a tape's headers) are left as written. "Another case"
-  draws a training task, and the spec cases are "Worked examples";
-- the right answer: the reference policy's submission, with each tool call it
-  made as a plain line under "How it's worked out";
+  package's files, a tape's headers) are left as written. A list of records
+  is a table only when every cell is one value and the rows share their
+  columns; otherwise each record is a small titled card. A long case shows
+  its first screen and folds the rest, cut between its parts and never
+  inside one, with the parts that matter first (an escrow analysis's bills
+  and account, a refinance's quote, an application's loan). "Another case"
+  draws a training task, and the spec cases are "Worked examples", named
+  without their spec references (those stay under "For engineers"). A
+  findings job (transfer review, tape review, call review, contact audit)
+  opens on its first practice case that has findings;
+- the right answer: the reference policy's submission, its deciding items
+  first (each job names them in `JOBS`: an escrow analysis's decision,
+  shortage, repayment, new payment and date), every other item folded under
+  "Every other item", and an empty item left out and counted. Where a job's
+  empty answer means something, it says so: a price test that cannot be
+  decided reads "Cannot be decided", never "None". "How it's worked out" is
+  each tool call the reference made, as a plain line, with the calculator's
+  arithmetic (in cents) folded into a count until it is asked for;
 - how the AI did: its score, and one recorded attempt it got wrong beside the
-  right answer, the items it missed marked;
-- "Try it yourself", folded: the answer as a form generated from the submit
-  tool's schema, graded by the environment's own parser and grader item by
-  item, and the tools the model is given;
+  right answer, the items it missed marked, or, when none it recorded was
+  wrong, one it got right, with how many it recorded and why the score is
+  still under 100%: the test cases it missed are never shown;
+- "Try it yourself", folded, and opened from the case too, which folds the
+  right answer until the try is graded: the answer as a form generated from
+  the submit tool's schema, with every choice starting on "Choose…" and a
+  list of codes (a refinance's reasons, an escrow analysis's anomalies) as
+  boxes labeled in words, graded by the environment's own parser and grader
+  item by item, the wrong items first; and the tools the model is given;
 - "For engineers", folded: the rulebook, the prompt as the model sees it, the
   seed and index, the spec cases, the version, the output budget, the
   held-out scores with their policy ids and intervals, the reference's
@@ -5423,7 +5447,10 @@ held-out scores beside them are a committed snapshot of counts,
 `playground/snapshot/scores.json`. That copy carries no recorded attempts:
 `runs.json` is model transcripts, and it is not committed, so the home
 screen, each job's "How the AI did" and its "For engineers" say the build
-carries none and link the claude.ai page, where they are. Refresh the snapshot after a held-out run:
+carries none and link the claude.ai page, where they are, saying to ask for
+access, because that page is private to the people it is shared with. The
+`--site-only` page is marked `data-runs="none"` and never asks for a
+`runs.json`. Refresh the snapshot after a held-out run:
 
 ```bash
 npm run env:playground -w @hm/environments     # gathers playground/dist/scores.json from runs/

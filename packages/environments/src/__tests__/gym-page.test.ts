@@ -212,6 +212,8 @@ afterAll(() => {
 });
 
 type RunsAnswer = { status: 404 } | { status: 500 } | { status: 200; body: unknown };
+/** The in-app build marks its page as carrying no runs; a page built with them carries no mark. */
+const RUNS_MARK = ' data-runs="none"';
 
 interface Gym {
   go(key: string): void;
@@ -228,13 +230,19 @@ interface Loaded {
   text: (id: string) => string;
   gym: Gym;
   errors: unknown[];
+  /** Every URL the page fetched. */
+  fetched: string[];
   /** Wait for the page's timers and promises until `ready` holds. */
   until: (ready: () => boolean, what: string) => Promise<void>;
 }
 
-/** Load the page as a browser would, with `runs.json` answered as given. */
-async function load(runs: RunsAnswer): Promise<Loaded> {
-  const markup = html.slice(html.indexOf("</style>") + "</style>".length, html.indexOf("<script"));
+/**
+ * Load the page as a browser would, with `runs.json` answered as given. The page is the in-app build,
+ * which never asks for runs.json; `withRuns` loads it as the claude.ai build is, which does.
+ */
+async function load(runs: RunsAnswer, withRuns = false): Promise<Loaded> {
+  const page = withRuns ? html.replace(RUNS_MARK, "") : html;
+  const markup = page.slice(page.indexOf("</style>") + "</style>".length, page.indexOf("<script"));
   const body = parseMarkup(markup);
   const byId = (id: string) => {
     const el = [...body.walk()].find((e) => e.id === id);
@@ -242,9 +250,11 @@ async function load(runs: RunsAnswer): Promise<Loaded> {
     return el;
   };
   const errors: unknown[] = [];
+  const fetched: string[] = [];
   const answer = (status: number, json: unknown) =>
     Promise.resolve({ ok: status >= 200 && status < 300, status, json: async () => json });
   const fetch = (url: string) => {
+    fetched.push(url);
     if (url === "scores.json") return answer(200, JSON.parse(readFileSync(SNAPSHOT, "utf8")));
     if (url === "runs.json") return answer(runs.status, "body" in runs ? runs.body : null);
     return answer(404, null);
@@ -294,7 +304,7 @@ async function load(runs: RunsAnswer): Promise<Loaded> {
     () => gym.state().runs.status !== "loading" && gym.state().scores.status !== "loading",
     "runs and scores read",
   );
-  return { body, byId, text: (id) => byId(id).textContent, gym, errors, until };
+  return { body, byId, text: (id) => byId(id).textContent, gym, errors, fetched, until };
 }
 
 const links = (el: El) => [...el.walk()].filter((e) => e.tagName === "A");
@@ -343,14 +353,24 @@ describe("the Gym's page", () => {
     expect(rows.length).toBe(19);
     expect(page.text("jobs")).not.toContain("from the tape");
 
-    // The figure is the newest DeepSeek score at the job's own output budget, Claude's beside it.
-    expect(page.text("fig-refi-review")).toBe("AI right 97% of the time  ·  Claude 99.5%");
-    expect(page.text("fig-escrow-analysis")).toBe("AI right 96% of the time");
+    // The figure is the newest DeepSeek score at the job's own output budget, Claude's beside it,
+    // to one decimal everywhere: 193 of 200 is 96.5%, never rounded up to 97%.
+    expect(page.text("fig-refi-review")).toBe("AI right 96.5% of the time · Claude 99.5%");
+    expect(page.text("fig-escrow-analysis")).toBe("AI right 95.5% of the time");
     // Boarding triage's own budget is 32,000: its 95 of 200 there, not its 28 of 200 at 16,000.
-    expect(page.text("fig-boarding-triage")).toBe("AI right 48% of the time");
+    expect(page.text("fig-boarding-triage")).toBe("AI right 47.5% of the time");
     expect(page.text("fig-contact-audit")).toBe("AI right 95% of the time");
+    // A job's other versions are said on its row.
+    expect(page.text("row-refi-review")).toContain("4 more versions");
 
-    // Without runs.json, the home screen says where the recorded attempts are.
+    // The opening says who practices, and who the AI is, before the list.
+    expect(page.text("home-head")).toContain("we give an AI to practice on");
+    expect(page.text("home-note")).toContain(
+      "The AI is DeepSeek V4.1 Flash, an open model; Claude is Claude Opus 5.5, scored on one job so far.",
+    );
+
+    // The in-app build never asks for runs.json, and the home screen says where the recorded attempts are.
+    expect(page.fetched).not.toContain("runs.json");
     expect(page.gym.state().runs.status).toBe("absent");
     expect(page.text("home-runs")).toContain("This copy carries no recorded attempts by the AI.");
     const [a] = links(page.byId("home-runs"));
@@ -397,6 +417,7 @@ describe("the Gym's page", () => {
     expect(page.byId("home").hidden).toBe(true);
     expect(page.byId("job").hidden).toBe(false);
     expect(page.text("job-title")).toBe("Refinance review");
+    expect(page.text("job-versions")).toBe("Also in 4 other versions");
     expect(page.text("job-score")).toContain("The AI gets this right 193 times in 200.");
     expect(page.text("job-score")).toContain("Claude gets it right 199 times in 200.");
 
@@ -416,11 +437,16 @@ describe("the Gym's page", () => {
     page.byId("steps-toggle").click();
     expect(page.byId("steps-toggle").getAttribute("aria-expanded")).toBe("true");
     expect(page.text("steps-panel")).toContain("Daily interest on $721,503.20 at 6.375%: $126.02");
+    // The calculator's arithmetic, in cents, folds into a count until it is asked for.
+    expect(page.text("steps-panel")).toMatch(/\d+ calculations?/);
+    expect(page.text("steps-panel")).not.toMatch(/Arithmetic|72,150,320/);
+    page.byId("arith-toggle").click();
+    expect(page.text("steps-panel")).toContain("72,150,320");
 
     // How the AI did: the score, and where its recorded attempts are.
     expect(page.text("ai-body")).toContain("193 of 200 test cases");
     expect(page.text("ai-elsewhere")).toBe(
-      "The AI's recorded attempts are not in this copy. They are on the Gym's claude.ai page.",
+      "The AI's recorded attempts are not in this copy. They are on the Gym's claude.ai page (ask for access).",
     );
     const [a] = links(page.byId("ai-elsewhere"));
     expect(a?.getAttribute("href")).toBe(RUNS_PAGE);
@@ -459,7 +485,7 @@ describe("the Gym's page", () => {
     expect(page.text("eng-rulebook").length).toBeGreaterThan(1000);
     expect(page.text("eng-prompt")).toContain("submit_triage");
     expect(page.text("eng-attempts")).toContain(
-      "This build carries no recorded attempts by a model on training tasks. They are on the Gym's claude.ai page.",
+      "This build carries no recorded attempts by a model on training tasks. They are on the Gym's claude.ai page (ask for access).",
     );
     const [a] = links(page.byId("eng-attempts"));
     expect(a?.getAttribute("href")).toBe(RUNS_PAGE);
@@ -476,7 +502,11 @@ describe("the Gym's page", () => {
     // An empty form is not graded: it says what to fill in.
     buttonNamed(panel, "Grade my answer").click();
     expect(page.text("try-result")).toContain("A few answers need fixing first.");
-    expect(page.text("try-result")).toContain("Annual: fill this in.");
+    expect(page.text("try-result")).toContain("Total bills for the year: fill this in.");
+    // A choice is never made for you: every select starts on "Choose…".
+    const selects = [...page.byId("try-form").walk()].filter((e) => e.tagName === "SELECT");
+    expect(selects.length).toBeGreaterThan(0);
+    for (const sel of selects) expect(sel.children[0]!.textContent).toBe("Choose…");
     // The right answer, put in the form and graded, passes.
     buttonNamed(panel, "Fill in the right answer").click();
     buttonNamed(panel, "Grade my answer").click();
@@ -484,18 +514,111 @@ describe("the Gym's page", () => {
     expect(page.text("try-result")).toContain("That answer passes.");
     // One figure changed is one item wrong, with the right value beside it.
     const amount = [...page.byId("try-form").walk()].find(
-      (e) => e.tagName === "LABEL" && e.textContent === "Annual",
+      (e) => e.tagName === "LABEL" && e.textContent === "Total bills for the year",
     )!;
     const input = page.byId(amount.getAttribute("for")!);
     input.value = "1.00";
     buttonNamed(panel, "Grade my answer").click();
     expect(page.text("try-result")).toContain("23 of 24 right");
     expect(page.text("try-result")).toMatch(/You said \$1\.00\. Right answer: \$[\d,]+\.\d\d\./);
+    // The wrong item leads, and the right ones fold under a count.
+    expect(page.text("try-result")).toContain("23 others right. Show them");
+    expect(page.text("try-result")).not.toContain("Takes effect");
     expect(page.errors).toEqual([]);
   });
 
+  it("leads the right answer with what decides it, folds the rest, and never shows an undecided test as none", async () => {
+    const page = await load({ status: 404 });
+    await open(page, "escrow-analysis");
+    const head = page.text("answer-body");
+    expect(head.startsWith("DecisionShortage")).toBe(true);
+    expect(head).toContain("New monthly escrow payment");
+    expect(head).not.toMatch(/Total bills for the year|Surplus|None|\$0\.00/);
+    expect(page.byId("rest-panel").hidden).toBe(true);
+    expect(page.text("rest-toggle")).toBe("Every other item (10)");
+    page.byId("rest-toggle").click();
+    expect(page.byId("rest-panel").hidden).toBe(false);
+    expect(page.text("rest-panel")).toContain("Total bills for the year");
+    expect(page.text("rest-panel")).toContain("8 items are empty for this case and not shown.");
+    expect(page.text("rest-panel")).not.toMatch(/None|\$0\.00/);
+
+    await open(page, "regz-price-tests");
+    const tests = page.text("answer-body");
+    expect(tests).toContain("Higher-priced mortgageCannot be decided");
+    expect(tests).toContain("Qualified mortgage statusCannot be decided");
+    expect(tests).toContain("APORNone for this loan");
+    expect(tests).not.toMatch(/mortgageNone|statusNone|metNone/);
+    page.byId("try-toggle").click();
+    const hpml = [...page.byId("try-form").walk()].find(
+      (e) => e.tagName === "LABEL" && e.textContent === "Higher-priced mortgage",
+    )!;
+    const options = page.byId(hpml.getAttribute("for")!).children.map((o) => o.textContent);
+    expect(options).toEqual(["Choose…", "Cannot be decided", "Yes", "No"]);
+    expect(page.errors).toEqual([]);
+  });
+
+  it("takes a refinance's reasons as boxes in words, and grades them as the codes they are", async () => {
+    const page = await load({ status: 404 });
+    await open(page, "refi-review");
+    // From the case: the form opens, and the right answer folds until the try is graded.
+    page.byId("try-link").click();
+    expect(page.byId("try-panel").hidden).toBe(false);
+    expect(page.text("answer-body")).toContain("Folded while you try the case yourself.");
+    const form = page.byId("try-form");
+    const labelled = (text: string) => {
+      const l = [...form.walk()].find(
+        (e) => e.tagName === "LABEL" && e.textContent.trim() === text,
+      );
+      if (!l) throw new Error(`no label "${text}"`);
+      return l;
+    };
+    const verdict = page.byId(labelled("Verdict").getAttribute("for")!);
+    verdict.value = String(verdict.children.findIndex((o) => o.textContent === "Watching") - 1);
+    labelled("Seven-year cost not lower").querySelector("input")!.checked = true;
+    page.byId(labelled("Watch rate").getAttribute("for")!).value = "6.125";
+    buttonNamed(page.byId("try-panel"), "Grade my answer").click();
+    expect(page.text("try-result")).toContain("3 of 3 right");
+    expect(page.text("answer-body")).toContain("Seven-year cost not lower");
+    // Every code the rules can give is a box, and none is written as a code.
+    const boxes = [...form.walk()].filter(
+      (e) => e.tagName === "LABEL" && e.classList.contains("check"),
+    );
+    expect(boxes.length).toBeGreaterThanOrEqual(25);
+    for (const b of boxes) expect(b.textContent).not.toMatch(/_/);
+    expect(page.errors).toEqual([]);
+  });
+
+  it("opens each findings job on a case that has findings, and names worked examples without spec references", async () => {
+    const page = await load({ status: 404 });
+    for (const key of ["boarding-triage", "tape-intake", "contact-audit", "call-qa"]) {
+      await open(page, key);
+      expect(page.text("answer-body"), key).toContain("Findings");
+      expect(page.text("answer-body"), key).not.toContain("FindingsNone");
+    }
+    await open(page, "refi-review");
+    page.byId("examples-toggle").click();
+    await page.until(
+      () => page.byId("examples-list").children.length > 3,
+      "the worked examples listed",
+    );
+    const names = page.byId("examples-list").children.map((li) => li.textContent);
+    expect(names).toContain("A flat rate is watching");
+    for (const n of names) {
+      expect(n).not.toMatch(/\b\d+\.\d+(-T\d+)?\b|\bT\d+\b|\([^)]*\b[A-Z]-\d+\b[^)]*\)/);
+      expect(n.charAt(0)).toBe(n.charAt(0).toUpperCase());
+    }
+    expect(page.errors).toEqual([]);
+  });
+
+  it("reads a runs.json that answers 404 as a build without recorded attempts", async () => {
+    const page = await load({ status: 404 }, true);
+    expect(page.fetched).toContain("runs.json");
+    expect(page.gym.state().runs.status).toBe("absent");
+    expect(page.text("home-runs")).toContain("This copy carries no recorded attempts by the AI.");
+  });
+
   it("still says the runs failed to load when runs.json is there and broken", async () => {
-    const page = await load({ status: 500 });
+    const page = await load({ status: 500 }, true);
     expect(page.gym.state().runs.status).toBe("failed");
     await open(page, "refi-review");
     expect(page.text("ai-body")).toContain("The AI's recorded attempts could not be loaded.");
@@ -544,10 +667,10 @@ describe("the Gym's page", () => {
       },
       transcript: [],
     };
-    const page = await load({
-      status: 200,
-      body: { built_at: "2026-10-26T12:00:00.000Z", records: [record] },
-    });
+    const page = await load(
+      { status: 200, body: { built_at: "2026-10-26T12:00:00.000Z", records: [record] } },
+      true,
+    );
     expect(page.errors).toEqual([]);
     expect(page.gym.state().runs.status).toBe("ready");
     expect(page.gym.state().runs.records).toHaveLength(1);
@@ -555,6 +678,7 @@ describe("the Gym's page", () => {
     await open(page, "refi-review");
     const example = page.text("ai-example");
     expect(example).toContain("One case it got wrong");
+    expect(example).toContain("on another practice case");
     expect(example).toContain("It missed 2 items of 3.");
     expect(example).toContain("Candidate");
     expect(example).toContain("Watching");

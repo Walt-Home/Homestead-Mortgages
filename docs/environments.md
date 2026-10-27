@@ -5377,6 +5377,35 @@ held-out task. A held-out score at its environment's own output budget is
 labeled by the model alone ("DeepSeek") and comes first; a score at another
 budget names it ("DeepSeek, 16k budget" on boarding-triage, "DeepSeek, 32k
 budget" elsewhere), read off the policy id and the bundle's `outputBudget`.
+
+The page is written for a reader who is not an engineer. It opens on the
+jobs as one list in three groups (Refinance, Servicing, Lending): a plain
+name, one sentence and one figure each, how often the AI (DeepSeek) is right
+on the held-out suite at the environment's own output budget, with Claude's
+beside it where Claude has one. The versions of a job (as a policy, on the
+edges, from the tape, from the ledger, with the APR searched) are not rows of
+the list; they fold under it as "Other versions" on its page. The names and
+sentences are one table in the page, `JOBS`, which `gym-page.test.ts` holds
+to every environment the bundle carries. A job's page is addressed by its
+key (`#refi-review`, so older links still open it) and reads top to bottom:
+
+- the case, from the task's payload, with keys as words, cents as dollars and
+  dates as dates; the parts a job reads exactly as written (a transfer
+  package's files, a tape's headers) are left as written. "Another case"
+  draws a training task, and the spec cases are "Worked examples";
+- the right answer: the reference policy's submission, with each tool call it
+  made as a plain line under "How it's worked out";
+- how the AI did: its score, and one recorded attempt it got wrong beside the
+  right answer, the items it missed marked;
+- "Try it yourself", folded: the answer as a form generated from the submit
+  tool's schema, graded by the environment's own parser and grader item by
+  item, and the tools the model is given;
+- "For engineers", folded: the rulebook, the prompt as the model sees it, the
+  seed and index, the spec cases, the version, the output budget, the
+  held-out scores with their policy ids and intervals, the reference's
+  episode, the answer as JSON, and the recorded attempts with their
+  transcripts.
+
 Republish both files after an environment changes:
 
 ```bash
@@ -5392,9 +5421,9 @@ API image builds the page and the bundle from source
 (`build-playground.mjs --site-only`, which reads no `runs/`), and the
 held-out scores beside them are a committed snapshot of counts,
 `playground/snapshot/scores.json`. That copy carries no recorded attempts:
-`runs.json` is model transcripts, and it is not committed, so the attempts
-tab, the overview and the footer say the build carries none and link the
-claude.ai page, where they are. Refresh the snapshot after a held-out run:
+`runs.json` is model transcripts, and it is not committed, so the home
+screen, each job's "How the AI did" and its "For engineers" say the build
+carries none and link the claude.ai page, where they are. Refresh the snapshot after a held-out run:
 
 ```bash
 npm run env:playground -w @hm/environments     # gathers playground/dist/scores.json from runs/

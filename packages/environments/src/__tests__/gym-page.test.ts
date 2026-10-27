@@ -1,19 +1,21 @@
 /**
- * The Gym's page renders whether or not recorded attempts are beside it.
+ * The Gym's page: a list of jobs in plain words, and a page for each job.
  *
  * The copy served inside the ops console (`apps/api/src/routes/console-gym.ts`)
  * has no `runs.json`: model transcripts are not committed, so its build
  * carries none, and the request for them is a 404. The page has to read that
  * as a build without recorded attempts — and say so, and say where they are —
  * while everything else on it works; and the claude.ai build, which carries
- * them, has to keep showing them.
+ * them, has to keep showing them. Its figures are the held-out scores at each
+ * environment's own output budget, and a score at another budget is named by
+ * its budget wherever it is shown.
  *
  * No browser: the page is built as the image builds it
  * (`build-playground.mjs --site-only`), its bundle and its one inline script
  * run in a context holding a small DOM made from the page's own markup, and
  * `fetch` answers `scores.json` with the committed snapshot and `runs.json`
- * as each case says. The DOM is the least the page reaches for at load;
- * anything else it calls is undefined here and throws.
+ * as each case says. The DOM is the least the page reaches for; anything
+ * else it calls is undefined here and throws.
  */
 
 import { spawnSync } from "node:child_process";
@@ -180,7 +182,7 @@ function parseMarkup(html: string): El {
         el.attributes[a[1]!] = a[2] ?? "";
       if ("hidden" in el.attributes) el.hidden = true;
       top.append(el);
-      if (!VOID.has(m[2].toLowerCase())) stack.push(el);
+      if (!VOID.has(m[2].toLowerCase()) && !m[0].endsWith("/>")) stack.push(el);
     } else if (m[4] && m[4].trim()) top.append(m[4]);
   }
   if (stack.length !== 1) throw new Error(`<${stack.at(-1)!.tagName}> is never closed`);
@@ -211,14 +213,23 @@ afterAll(() => {
 
 type RunsAnswer = { status: 404 } | { status: 500 } | { status: 200; body: unknown };
 
+interface Gym {
+  go(key: string): void;
+  jobs: Record<string, { name: string; sentence: string; of?: string; group?: string }>;
+  state: () => {
+    current: string | null;
+    runs: { status: string; records: unknown[]; error: string | null };
+    scores: { status: string };
+  };
+}
 interface Loaded {
   body: El;
   byId: (id: string) => El;
-  state: () => {
-    current: string;
-    runs: { status: string; records: unknown[]; error: string | null };
-  };
+  text: (id: string) => string;
+  gym: Gym;
   errors: unknown[];
+  /** Wait for the page's timers and promises until `ready` holds. */
+  until: (ready: () => boolean, what: string) => Promise<void>;
 }
 
 /** Load the page as a browser would, with `runs.json` answered as given. */
@@ -238,18 +249,8 @@ async function load(runs: RunsAnswer): Promise<Loaded> {
     if (url === "runs.json") return answer(runs.status, "body" in runs ? runs.body : null);
     return answer(404, null);
   };
-  const storage = new Map<string, string>();
   const window: Record<string, unknown> = {
     location: { hash: "" },
-    history: {
-      replaceState: (_s: unknown, _t: string, url: string) => {
-        (window.location as { hash: string }).hash = url;
-      },
-    },
-    localStorage: {
-      getItem: (k: string) => storage.get(k) ?? null,
-      setItem: (k: string, v: string) => storage.set(k, v),
-    },
     matchMedia: () => ({ matches: false, addEventListener() {}, addListener() {} }),
     addEventListener() {},
     getSelection: () => ({ removeAllRanges() {}, addRange() {} }),
@@ -260,6 +261,7 @@ async function load(runs: RunsAnswer): Promise<Loaded> {
     createElementNS: (_ns: string, tag: string) => new El(tag),
     createRange: () => ({ selectNodeContents() {} }),
     activeElement: null,
+    title: "",
   };
   const context = vm.createContext({
     window,
@@ -276,62 +278,233 @@ async function load(runs: RunsAnswer): Promise<Loaded> {
   window.window = window;
   vm.runInContext(bundle, context, { filename: "environments.js" });
   window.HMEnvironments = context.HMEnvironments;
-  const script = /<script>\n?([\s\S]*?)<\/script>/.exec(html)![1]!;
-  vm.runInContext(script, context, { filename: "index.html" });
+  const scripts = [...html.matchAll(/<script>\n?([\s\S]*?)<\/script>/g)];
+  expect(scripts).toHaveLength(1);
+  vm.runInContext(scripts[0]![1]!, context, { filename: "index.html" });
+  const until = async (ready: () => boolean, what: string) => {
+    for (let i = 0; i < 400; i++) {
+      if (ready()) return;
+      await new Promise((r) => setTimeout(r, 10));
+    }
+    throw new Error(`the page never got to: ${what}`);
+  };
+  const gym = window.HMGym as Gym;
   // The two fetches and their renders.
-  for (let i = 0; i < 5; i++) await new Promise((r) => setTimeout(r, 0));
-  const gym = window.HMGym as { state: Loaded["state"] };
-  return { body, byId, state: gym.state, errors };
+  await until(
+    () => gym.state().runs.status !== "loading" && gym.state().scores.status !== "loading",
+    "runs and scores read",
+  );
+  return { body, byId, text: (id) => byId(id).textContent, gym, errors, until };
 }
 
 const links = (el: El) => [...el.walk()].filter((e) => e.tagName === "A");
+const buttonNamed = (root: El, name: string) => {
+  const b = [...root.walk()].find((e) => e.tagName === "BUTTON" && e.textContent.trim() === name);
+  if (!b) throw new Error(`no button "${name}"`);
+  return b;
+};
+
+/** Open a job as a link would, and wait for its case and its right answer. */
+async function open(page: Loaded, key: string) {
+  page.gym.go(key);
+  await page.until(
+    () =>
+      page.text("case-body").length > 40 &&
+      !page.text("answer-body").includes("Working it out") &&
+      page.text("answer-body").length > 0,
+    `${key}'s case and its right answer`,
+  );
+}
 
 describe("the Gym's page", () => {
-  it("renders without runs.json, and says the build carries no recorded attempts and where they are", async () => {
+  it("opens on the jobs in plain words, each with how often the AI gets it right", async () => {
     const page = await load({ status: 404 });
     expect(page.errors).toEqual([]);
-    expect(page.state().runs.status).toBe("absent");
     expect(page.byId("fatal").hidden).toBe(true);
+    expect(page.byId("home").hidden).toBe(false);
+    expect(page.byId("job").hidden).toBe(true);
+    expect(page.gym.state().current).toBe(null);
 
-    // Everything else works: the overview, a task drawn, the held-out counts from the snapshot.
-    expect(page.byId("sides").children.length).toBeGreaterThan(0);
-    expect(page.byId("sides").textContent).toContain("Held-out score");
-    expect(page.byId("task-before").textContent.length).toBeGreaterThan(40);
-    expect(page.byId("rules-text").textContent.length).toBeGreaterThan(1000);
-    expect(page.state().current).toBe("refi-review");
-
-    // Where the attempts would show: the tab, the overview's note and the footer.
-    const attempts = page.byId("att-body");
-    expect(attempts.textContent).toContain("This build carries no recorded attempts.");
-    expect(attempts.textContent).toContain("They are on the Gym's claude.ai page.");
-    expect(page.byId("overview-note").textContent).toContain(
-      "This build carries no recorded attempts on training tasks.",
+    const home = page.byId("home");
+    for (const group of ["Refinance", "Servicing", "Lending"])
+      expect(page.text("jobs")).toContain(group);
+    // No engineering words on the home screen.
+    expect(home.textContent).not.toMatch(
+      /held-out|heldout|training|\bseed|budget|token|version \d|\b\d+\.\d+\.\d+\b|policy id|rulebook|spec case/i,
     );
-    expect(page.byId("foot-runs").textContent).toContain("This build carries no recorded attempts");
-    for (const where of ["att-body", "overview-note", "foot-runs"]) {
-      const [a] = links(page.byId(where));
-      expect(a?.getAttribute("href"), where).toBe(RUNS_PAGE);
-      expect(a?.getAttribute("rel"), where).toBe("noopener noreferrer");
-    }
-    expect(page.byId("tab-attempts-count").textContent).toBe("");
-    // Not an error, and no training reads claimed.
-    expect(page.body.textContent).not.toMatch(/did not load|could not be loaded|Training reads/);
 
-    // Working the task still works: another environment, and its own attempts tab says the same.
-    page.byId("tab-attempts").click();
-    expect(page.byId("panel-attempts").hidden).toBe(false);
-    expect(page.byId("att-body").textContent).toContain("no recorded attempts");
+    // One row per job; the versions of a job fold under it.
+    const rows = [...home.walk()].filter((e) => e.classList.contains("job-row"));
+    const jobs = page.gym.jobs;
+    const mains = Object.keys(jobs).filter((k) => !jobs[k]!.of);
+    expect(rows.map((r) => r.getAttribute("href")).sort()).toEqual(
+      mains.map((k) => `#${k}`).sort(),
+    );
+    expect(rows.length).toBe(19);
+    expect(page.text("jobs")).not.toContain("from the tape");
+
+    // The figure is the newest DeepSeek score at the job's own output budget, Claude's beside it.
+    expect(page.text("fig-refi-review")).toBe("AI right 97% of the time  ·  Claude 99.5%");
+    expect(page.text("fig-escrow-analysis")).toBe("AI right 96% of the time");
+    // Boarding triage's own budget is 32,000: its 95 of 200 there, not its 28 of 200 at 16,000.
+    expect(page.text("fig-boarding-triage")).toBe("AI right 48% of the time");
+    expect(page.text("fig-contact-audit")).toBe("AI right 95% of the time");
+
+    // Without runs.json, the home screen says where the recorded attempts are.
+    expect(page.gym.state().runs.status).toBe("absent");
+    expect(page.text("home-runs")).toContain("This copy carries no recorded attempts by the AI.");
+    const [a] = links(page.byId("home-runs"));
+    expect(a?.getAttribute("href")).toBe(RUNS_PAGE);
+    expect(a?.getAttribute("rel")).toBe("noopener noreferrer");
+  });
+
+  it("is one document with one inline script, no inline handlers and nothing fetched from elsewhere", () => {
+    // The ops console admits the page's one inline script by its hash, and no handler attribute at all.
+    expect([...html.matchAll(/<script>/g)]).toHaveLength(1);
+    expect(html).toContain('<script src="environments.js"></script>');
+    expect(html).not.toMatch(/\son[a-z]+="/);
+    expect(html).not.toMatch(
+      /<link\b|@import|url\(\s*["']?https?:|src="https?:|\beval\(|new Function\(/,
+    );
+  });
+
+  it("names every job in plain words, briefly", async () => {
+    const page = await load({ status: 404 });
+    const ctx = vm.createContext({ crypto: { randomUUID: () => "x" }, TextEncoder, console });
+    vm.runInContext(bundle, ctx);
+    const keys = (ctx.HMEnvironments as { environments: { key: string }[] }).environments.map(
+      (e) => e.key,
+    );
+    const jobs = page.gym.jobs;
+    expect(Object.keys(jobs).sort()).toEqual([...keys].sort());
+    const names = new Set<string>();
+    for (const key of keys) {
+      const j = jobs[key]!;
+      expect(j.name.length, key).toBeGreaterThan(3);
+      expect(names.has(j.name), key).toBe(false);
+      names.add(j.name);
+      expect(j.sentence.split(/\s+/).length, key).toBeLessThanOrEqual(16);
+      expect(j.sentence, key).toMatch(/\.$/);
+      expect(j.sentence, key).not.toMatch(/[a-z]_[a-z]|held-out|training|rulebook|§/);
+      if (j.of) expect(jobs[j.of], key).toBeDefined();
+    }
+  });
+
+  it("opens a job by its link: the case for a person, the right answer, and where the attempts are", async () => {
+    const page = await load({ status: 404 });
+    await open(page, "refi-review");
+    expect(page.errors).toEqual([]);
+    expect(page.byId("home").hidden).toBe(true);
+    expect(page.byId("job").hidden).toBe(false);
+    expect(page.text("job-title")).toBe("Refinance review");
+    expect(page.text("job-score")).toContain("The AI gets this right 193 times in 200.");
+    expect(page.text("job-score")).toContain("Claude gets it right 199 times in 200.");
+
+    // The case, humanized: no raw keys, cents as dollars, dates as dates.
+    expect(page.text("case-intro")).toBe("Review this loan on Jan 14, 2027.");
+    const kase = page.text("case-body");
+    expect(kase).toContain("Original balance");
+    expect(kase).toContain("$972,000.00");
+    expect(kase).toContain("Note rate6.375%");
+    expect(kase).toContain("Jul 4, 2021");
+    expect(kase).not.toMatch(/original_upb_cents|97200000|_cents|_pct/);
+
+    // The right answer, and how it is worked out, line by line.
+    expect(page.text("answer-body")).toContain("Watching");
+    expect(page.text("answer-body")).toContain("6.125%");
+    expect(page.byId("steps-panel").hidden).toBe(true);
+    page.byId("steps-toggle").click();
+    expect(page.byId("steps-toggle").getAttribute("aria-expanded")).toBe("true");
+    expect(page.text("steps-panel")).toContain("Daily interest on $721,503.20 at 6.375%: $126.02");
+
+    // How the AI did: the score, and where its recorded attempts are.
+    expect(page.text("ai-body")).toContain("193 of 200 test cases");
+    expect(page.text("ai-elsewhere")).toBe(
+      "The AI's recorded attempts are not in this copy. They are on the Gym's claude.ai page.",
+    );
+    const [a] = links(page.byId("ai-elsewhere"));
+    expect(a?.getAttribute("href")).toBe(RUNS_PAGE);
+    expect(a?.getAttribute("rel")).toBe("noopener noreferrer");
+
+    // The other versions of the job, by their links.
+    expect(page.byId("versions").hidden).toBe(false);
+    const versions = links(page.byId("versions-list")).map((l) => l.getAttribute("href"));
+    expect(versions).toEqual(["#refi-tape", "#refi-policy", "#refi-hard", "#refi-hard-policy"]);
+
+    // The two folded sections start folded.
+    for (const id of ["try", "eng"]) {
+      expect(page.byId(`${id}-toggle`).getAttribute("aria-expanded")).toBe("false");
+      expect(page.byId(`${id}-panel`).hidden).toBe(true);
+    }
+
+    // A version's page says what it is a version of.
+    await open(page, "refi-tape");
+    expect(page.text("job-title")).toBe("Refinance review from the tape");
+    expect(page.text("job-variant-of")).toBe("A version of Refinance review.");
+  });
+
+  it("keeps everything technical under For engineers, with scores labeled by budget", async () => {
+    const page = await load({ status: 404 });
+    await open(page, "boarding-triage");
+    expect(page.text("job-score")).toContain("The AI gets this right 95 times in 200.");
+    page.byId("eng-toggle").click();
+    expect(page.byId("eng-toggle").getAttribute("aria-expanded")).toBe("true");
+    expect(page.byId("eng-panel").hidden).toBe(false);
+    const eng = page.text("eng-panel");
+    expect(eng).toContain("Held-out scores");
+    expect(eng).toContain("boarding-triage");
+    expect(eng).toContain("output budget 32,000 tokens a turn");
+    expect(page.text("eng-scores")).toContain("DeepSeek: 95 of 200");
+    expect(page.text("eng-scores")).toContain("DeepSeek, 16k budget: 28 of 200");
+    expect(page.text("eng-rulebook").length).toBeGreaterThan(1000);
+    expect(page.text("eng-prompt")).toContain("submit_triage");
+    expect(page.text("eng-attempts")).toContain(
+      "This build carries no recorded attempts by a model on training tasks. They are on the Gym's claude.ai page.",
+    );
+    const [a] = links(page.byId("eng-attempts"));
+    expect(a?.getAttribute("href")).toBe(RUNS_PAGE);
+    expect(a?.getAttribute("rel")).toBe("noopener noreferrer");
+    expect(page.errors).toEqual([]);
+  });
+
+  it("grades an answer made in the form, item by item", async () => {
+    const page = await load({ status: 404 });
+    await open(page, "escrow-analysis");
+    page.byId("try-toggle").click();
+    expect(page.byId("try-panel").hidden).toBe(false);
+    const panel = page.byId("try-panel");
+    // An empty form is not graded: it says what to fill in.
+    buttonNamed(panel, "Grade my answer").click();
+    expect(page.text("try-result")).toContain("A few answers need fixing first.");
+    expect(page.text("try-result")).toContain("Annual: fill this in.");
+    // The right answer, put in the form and graded, passes.
+    buttonNamed(panel, "Fill in the right answer").click();
+    buttonNamed(panel, "Grade my answer").click();
+    expect(page.text("try-result")).toContain("24 of 24 right");
+    expect(page.text("try-result")).toContain("That answer passes.");
+    // One figure changed is one item wrong, with the right value beside it.
+    const amount = [...page.byId("try-form").walk()].find(
+      (e) => e.tagName === "LABEL" && e.textContent === "Annual",
+    )!;
+    const input = page.byId(amount.getAttribute("for")!);
+    input.value = "1.00";
+    buttonNamed(panel, "Grade my answer").click();
+    expect(page.text("try-result")).toContain("23 of 24 right");
+    expect(page.text("try-result")).toMatch(/You said \$1\.00\. Right answer: \$[\d,]+\.\d\d\./);
+    expect(page.errors).toEqual([]);
   });
 
   it("still says the runs failed to load when runs.json is there and broken", async () => {
     const page = await load({ status: 500 });
-    expect(page.state().runs.status).toBe("failed");
-    expect(page.byId("att-body").textContent).toContain("The recorded runs did not load");
-    expect(page.byId("foot-runs").textContent).toContain("could not be loaded");
-    expect(page.body.textContent).not.toContain("This build carries no recorded attempts");
+    expect(page.gym.state().runs.status).toBe("failed");
+    await open(page, "refi-review");
+    expect(page.text("ai-body")).toContain("The AI's recorded attempts could not be loaded.");
+    page.byId("eng-toggle").click();
+    expect(page.text("eng-attempts")).toContain("The recorded runs did not load");
+    expect(page.body.textContent).not.toMatch(/not in this copy|carries no recorded attempts/);
   });
 
-  it("keeps showing recorded attempts where runs.json carries them, as the claude.ai build does", async () => {
+  it("shows a recorded attempt beside the right answer where runs.json carries them, as the claude.ai build does", async () => {
     const ctx = vm.createContext({ crypto: { randomUUID: () => "x" }, TextEncoder, console });
     vm.runInContext(bundle, ctx);
     const env = (
@@ -343,22 +516,31 @@ describe("the Gym's page", () => {
         }[];
       }
     ).environments.find((e) => e.key === "refi-review")!;
-    const task = env.draw("train", 1, 0);
+    const task = env.draw("train", 1, 5);
     const record = {
       env: { name: "refi-review", version: env.version },
       run_id: "run-1",
       policy: "vertex:deepseek-ai/deepseek-v4.1-flash-maas:thinking",
-      task: { id: task.id, split: "train", suite_seed: 1, index: 0, rendered: "" },
+      task: { id: task.id, split: "train", suite_seed: 1, index: 5, rendered: "" },
       result: {
         outcome: "submitted",
-        pass: true,
-        score: 1,
+        pass: false,
+        score: 0.333,
         turns: 1,
         tool_calls: 1,
         usage: { input_tokens: 10, output_tokens: 10 },
         error: null,
         finished_at: "2026-10-26T12:00:00.000Z",
-        fields: [],
+        fields: [
+          { field: "verdict", expected: "watching", got: "candidate", ok: false },
+          {
+            field: "reasons",
+            expected: "seven_year_not_lower",
+            got: "seven_year_not_lower",
+            ok: true,
+          },
+          { field: "watch_rate_pct", expected: "6.125", got: null, ok: false },
+        ],
       },
       transcript: [],
     };
@@ -367,12 +549,26 @@ describe("the Gym's page", () => {
       body: { built_at: "2026-10-26T12:00:00.000Z", records: [record] },
     });
     expect(page.errors).toEqual([]);
-    expect(page.state().runs.status).toBe("ready");
-    expect(page.state().runs.records).toHaveLength(1);
-    expect(page.byId("tab-attempts-count").textContent).toBe("1");
-    expect(page.byId("att-body").textContent).toContain("1 of 1 training tasks passed");
-    expect(page.byId("foot-runs").textContent).toContain("Recorded runs: 1 episode");
-    expect(page.body.textContent).not.toContain("This build carries no recorded attempts");
-    expect(page.byId("task-tried").hidden).toBe(false);
+    expect(page.gym.state().runs.status).toBe("ready");
+    expect(page.gym.state().runs.records).toHaveLength(1);
+    expect(page.text("home-runs")).toBe("");
+    await open(page, "refi-review");
+    const example = page.text("ai-example");
+    expect(example).toContain("One case it got wrong");
+    expect(example).toContain("It missed 2 items of 3.");
+    expect(example).toContain("Candidate");
+    expect(example).toContain("Watching");
+    expect(example).toContain("6.125%");
+    expect(page.body.textContent).not.toMatch(/not in this copy|carries no recorded attempts/);
+    // The case it got wrong can be opened above.
+    page.byId("ai-open-case").click();
+    await page.until(
+      () => !page.text("answer-body").includes("Working it out"),
+      "the new case solved",
+    );
+    expect(page.gym.state().current).toBe("refi-review");
+    page.byId("eng-toggle").click();
+    expect(page.text("eng-panel")).toContain("Training task, seed 1, index 5");
+    expect(page.text("eng-reads")).toContain("0 of 1 training tasks passed");
   });
 });

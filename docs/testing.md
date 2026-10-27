@@ -115,17 +115,19 @@ page and see the portal, never the console.
 
 ## The environments
 
-The Supermortgage Gym, https://claude.ai/artifact/LKEDiyPJyoQ4UwijqwpNw6
-(ask Joe to share it), is the training environments in a browser page. Pick
-one, draw a training task, work it with the tools a model gets, and grade
-your answer field by field against the engine. Then watch the reference
-solve the same task, or read a model's recorded attempts. Every loan is
-synthetic, held-out tasks are never shown, and nothing you type leaves the
-page. Locally, `npm run env:gym -w @hm/environments` builds it and serves it
-at http://localhost:8765.
+The Supermortgage Gym is the training environments as a browser page: in
+the console under Gym, and at
+https://claude.ai/artifact/LKEDiyPJyoQ4UwijqwpNw6 (ask Joe to share it),
+which also carries the AI's recorded attempts. Pick a job to see a made-up
+case, the engine's right answer and how it is worked out, and how often the
+AI gets it right; "Try it yourself" grades your own answer item by item.
+Every loan is synthetic, held-out tasks are never shown, and nothing you
+type leaves the page. Locally, `npm run env:gym -w @hm/environments` builds
+it and serves it at http://localhost:8765.
 
-If you and the engine disagree on a task, check the rulebook's wording
-first. Then say which environment, the seed and index, and the field.
+If you and the engine disagree on a case, check the rulebook's wording
+first: it is under "For engineers", with the case's seed and index. Then
+say which job, the seed and index, and the item.
 
 ## What is real and what is made up
 

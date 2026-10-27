@@ -9866,8 +9866,8 @@ repository is public, so committing them to it publishes them, and whether
 to publish a model's transcripts is a decision of its own, not a side
 effect of putting a page in the console. That decision is left open. Until
 it is made, the in-app build carries no recorded attempts, and the page
-says so where they would show (the attempts tab, the overview's note and
-the footer) and links the claude.ai page; a `runs.json` that answers 404 is
+says so where they would show (the home screen, each job's "How the AI
+did" and its "For engineers") and links the claude.ai page; a `runs.json` that answers 404 is
 read as such a build rather than as a failure (`gym-page.test.ts`). The
 held-out counts are a different thing: numbers this document and the
 environments document already report.

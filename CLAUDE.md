@@ -686,8 +686,10 @@ manual run behind the `production` GitHub environment's approval, which
 promotes the image staging built for that commit and refuses sample data.
 `/api/health` reports the `commit` its image was built from (the console
 shows it under the staff member's name), each deploy fails unless that is
-the commit it deployed, and a promotion moves the `production` tag to it;
-before the approval, the run's summary lists what ships since that tag
+the commit it deployed (promoting a commit built before the image carried
+one warns instead), and a promotion moves the `production` tag to it;
+before the approval, the run's summary lists what ships since the commit
+production reports, or the tag when it reports none
 (`scripts/promotion-summary.mjs`, "Production says what it runs, and the
 approver sees what ships"). Production's secrets are `_PROD`. See
 `docs/decisions.md`, "Two environments, one configuration".

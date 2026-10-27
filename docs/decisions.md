@@ -9941,39 +9941,65 @@ from main, and two things are built around it.
   commit was baked in reports none; promoting one warns rather than fails,
   and `resolve` tells which by reading that commit's Dockerfile.
 - After a promotion succeeds, the `tag` job moves the git tag `production`
-  to the promoted commit, by force-pushing the tag; no branch is ever made
-  or pushed. It is the only job in either workflow with `contents: write`,
-  and it names no environment, because each job naming `production` asks
-  for an approval of its own. Promotions now run one at a time
-  (`concurrency: deploy-production`), so the tag moves in the order the
-  deploys finish. Staging has no tag: its deploys are not serialized, so a
-  `staging` tag could name a commit staging no longer runs, and its health
-  already says exactly which it does.
+  to the promoted commit; no branch is ever made or pushed. It is the only
+  job in either workflow with `contents: write`, it checks nothing out, and
+  it names no environment, because each job naming `production` asks for an
+  approval of its own. It moves the tag through the REST API rather than
+  `git push`: GitHub refuses a push by the Actions token that moves a ref
+  across a change under `.github/workflows/`, that token cannot be granted
+  the `workflows` permission, and most promotions here cross one. Whether
+  the API is held to the same rule has not been tried; if it is, the step
+  warns and the summary says how to move the tag by hand, because by then
+  production has changed and a red run would say otherwise, and a GitHub App
+  token with Workflows: write for that one job is the fix. Promotions now
+  run one at a time (`concurrency: deploy-production`), so the tag moves in
+  the order the deploys finish. Staging has no tag: its deploys are not
+  serialized, so a `staging` tag could name a commit staging no longer runs,
+  and its health already says exactly which it does. For the same reason
+  staging's check proves the commit only while it runs: a push that takes
+  the longer road through the servicing suite can still deploy over a newer
+  one that finished first.
 - The servicing app reports nothing new. Its health endpoint is in the
-  vendored tree, which is not edited here; its image is tagged with the
-  commit at which its tree last changed, and the summary names that image.
+  vendored tree, which is not edited here. Its image is built only by a
+  staging push that touches its tree, the lockfile its image installs from,
+  `deploy.yml` or `scripts/test-database-url.mjs` (or that has no base to
+  diff against), and is tagged with that push's commit. The summary names
+  the newest such image at or before the promoted commit, so a new
+  servicing image does not by itself mean the servicing app changed; when
+  nothing under `apps/servicing` differs between production's commit and
+  the promoted one, the summary says the image is a rebuild.
 
 **The approver sees what ships.** `resolve` names no environment, so it runs
 before the gate, and it now writes the run's summary through
 `scripts/promotion-summary.mjs`. The summary gives the commit being
-promoted, and what production runs: the `production` tag, checked against
-the commit production's health reports (or, for an image too old to report
-one, the commit its image is tagged with). Before the first promotion that
-reading stands in for the tag; when the two disagree, as after a revision
-rolled back by hand, the summary says so; with neither, it says nothing here
+promoted, and what production runs: the commit production's health reports
+(or, for an image too old to report one, the commit its image is tagged
+with), because that is what serves. The `production` tag stands in only
+when the service names no commit the repository holds, and when the two
+disagree the summary says so: a tag that is not what production runs is a
+deploy that failed after it took traffic, a tag that could not move, or
+traffic sent back by hand, and measuring from it would call a rollback a
+redeploy and list commits that already shipped. With neither, it says nothing here
 knows and lists the last fifty commits. Then both images, a compare link,
 the count of commits, how many commits and files fall in each app, package
 and top-level folder, and `git log --oneline --no-merges` over the range,
-three hundred lines at most, with the number cut. A new migration, a change
-to a migration production has already applied, anything under `infra/` and
+three hundred lines at most, with the number cut. A new migration, a change to a
+migration production has already applied, anything under `infra/` and
 anything under `.github/workflows/` are listed under "Look closely" and
-raised as annotations. A redeploy and a rollback are named as such; a
-rollback lists the commits that leave and the migrations that stay applied.
-The Markdown is written straight to the summary and never echoed into the
-log, where the runner would read a commit subject for commands. `resolve`
-still refuses a commit that is not on main, and the requested commit now
-reaches the shell through the environment rather than spliced into the
-script.
+raised as annotations, and each new migration's SQL is read for what a
+rollback cannot stand (below), which is named beside it. A redeploy and a
+rollback are named as such; a rollback lists the commits that leave and the
+migrations that stay applied. When production's commit is not on the
+promoted commit's line, or shares no history with it at all (main's history
+rewritten under the tag), "Look closely" compares the two commits' files
+directly, which needs no common history. The Markdown is written straight
+to the summary and never echoed into the log, where the runner would read a
+commit subject for commands. The summary is advisory: whatever stops it,
+the summary says the list is missing, an error annotation says so too, and
+the promotion goes on, because a rollback must never wait on a summary.
+`resolve` still refuses a commit that is not on main, and that refusal is
+the gate; the requested commit now reaches the shell through the
+environment rather than spliced into the script.
 
 **Why not a production branch.** One build, promoted: the image production
 runs is the image staging tested, byte for byte, because nothing is built
@@ -9986,12 +10012,30 @@ drift.
 **What keeps a rollback possible.** A rollback is traffic sent back to the
 previous Cloud Run revision, or an older commit promoted. Either way the
 database stays where the newer release left it, because nothing rolls a
-migration back. So a migration only adds — a new table, a new column that
-is nullable or carries a default — in the release that introduces it, and
-the revision before it still runs against the schema it leaves. Dropping or
-renaming comes a release later, once no revision that could take traffic
-reads what goes. The summary lists every new migration with that rule
-beside it, which is where the approver checks it.
+migration back, and so do the rows the newer release wrote. So the rule is
+that the revision before a release still reads and writes correctly against
+the schema the release leaves and the rows it writes. A new table, and a
+new column that is nullable or carries a default, keep it in the release
+that introduces them. Three kinds of addition do not, and are spread across
+releases:
+
+- A new enum value lands a release before any code writes it. An older
+  Prisma client throws "Value 'X' not found in enum" on a row holding a
+  value it was never built for, and a list that includes the row fails
+  with it, so `FlowStage` gaining `DECLARATIONS` in the release that writes
+  it would have left the revision before it unable to read those files.
+- A new CHECK, NOT NULL, unique index or trigger on a table that already
+  exists lands a release after the code that obeys it, or the revision
+  before it has writes refused that it still makes. One on a table or over
+  columns the same release makes is safe.
+- Dropping or renaming comes a release later, once no revision that could
+  take traffic reads what goes.
+
+The summary lists every new migration with that rule beside it, and names
+what it reads in each one's SQL: an enum value added, a constraint, NOT
+NULL, unique index or trigger on an existing table, a drop, a rename, a
+type changed. The reading is lexical and is a pointer, never a verdict;
+the approver reads the migration.
 
 **Once, after this lands.** Nothing is required: the first promotion finds
 no tag, measures from the commit Cloud Run's production service was last

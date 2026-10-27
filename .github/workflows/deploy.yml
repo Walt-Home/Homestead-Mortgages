@@ -1058,9 +1058,12 @@ jobs:
 
       # And the revision answering is the image this run built: /api/health
       # reports the commit baked into it, which must be the commit pushed.
-      # Anything else — a revision that never took traffic, a push that
-      # landed beside this one and deployed after it — fails here, rather
-      # than reading as this commit tested on staging.
+      # A revision that never took traffic fails here, rather than reading as
+      # this commit tested on staging. The check proves which commit serves
+      # only while it runs: staging's deploys are not serialized, and a push
+      # that takes the longer road (the servicing suite and its deploy) can
+      # still deploy over a newer one that finished first, with both runs
+      # green. Health always says which commit serves now.
       - name: Confirm the service runs the commit that was pushed
         env:
           EXPECTED: ${{ github.sha }}

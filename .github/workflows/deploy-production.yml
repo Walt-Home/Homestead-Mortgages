@@ -15,11 +15,12 @@ name: Deploy to production
 # instance; the jobs are pointed at the same image.
 #
 # Before the approval, `resolve` writes what ships to the run's summary:
-# every commit since the `production` tag, the areas they touch, and any new
-# migration or change to infra/ or a workflow. After the deploy, health must
-# report the promoted commit, and `tag` moves the `production` tag to it.
-# See docs/decisions.md, "Production says what it runs, and the approver
-# sees what ships".
+# every commit since the one production runs (the commit its health reports,
+# else the `production` tag), the areas they touch, and any new migration or
+# change to infra/ or a workflow. After the deploy, health must report the
+# promoted commit, and `tag` moves the `production` tag to it. See
+# docs/decisions.md, "Production says what it runs, and the approver sees
+# what ships".
 
 on:
   workflow_dispatch:
@@ -75,8 +76,10 @@ jobs:
       - uses: google-github-actions/setup-gcloud@v2
       # The commit to promote must be on main and must have an image: the
       # staging deploy is what builds one, so a commit staging never deployed
-      # cannot reach production. The servicing image is built only when its
-      # tree changed, so its tag is the newest commit at or before this one
+      # cannot reach production. The servicing image is built only by a
+      # staging push that touches its tree, the lockfile it installs from,
+      # deploy.yml or scripts/test-database-url.mjs, and is tagged with that
+      # push's commit, so its tag is the newest commit at or before this one
       # that has one. The input reaches the shell through the environment,
       # never spliced into the script.
       - id: pick
@@ -114,20 +117,28 @@ jobs:
       # What ships, said where the approver reads it. This job names no
       # environment, so it runs before the `production` gate, and the run's
       # page carries this summary while the approval is being asked for.
-      # What production runs is the `production` tag, which the `tag` job
-      # moves after every promotion that succeeds. Beside it, what the
-      # service says: the commit its /api/health reports, or for an image
-      # too old to report one, the commit its image is tagged with. Before
-      # the first promotion that stands in for the tag, and when the two
-      # disagree (a revision rolled back by hand) the summary says so.
-      # scripts/promotion-summary.mjs writes the range, the areas it touches
-      # and what deserves a second look (a new migration, infra/, a
-      # workflow), each also an annotation; its Markdown goes straight to
-      # the summary and never through the log.
+      # What production runs is what the service says: the commit its
+      # /api/health reports, or for an image too old to report one, the
+      # commit its image is tagged with. That is what serves, so the range
+      # is measured from it. The `production` tag, which the `tag` job moves
+      # after every promotion that succeeds, stands in when the service
+      # names nothing, and when the two disagree (a deploy that failed after
+      # it took traffic, a tag that could not move, a revision rolled back
+      # by hand) the summary says so. scripts/promotion-summary.mjs writes
+      # the range, the areas it touches and what deserves a second look (a
+      # new migration and what its SQL does, infra/, a workflow), each also
+      # an annotation; its Markdown goes straight to the summary and never
+      # through the log.
+      #
+      # The summary is advisory, and a promotion — a rollback above all —
+      # never waits on it: whatever stops this step, the summary says the
+      # list is missing, an error annotation says so too, and the job goes
+      # on. The gate that refuses a commit is `pick`, above.
       - uses: actions/setup-node@v4
         with:
           node-version: 22
       - name: Say what ships
+        continue-on-error: true
         env:
           SHA: ${{ steps.pick.outputs.sha }}
           IMAGE: ${{ steps.pick.outputs.image }}
@@ -135,11 +146,25 @@ jobs:
           REPOSITORY: ${{ github.server_url }}/${{ github.repository }}
         run: |
           set -euo pipefail
+          WROTE=""
+          said_nothing() {
+            if [ -z "$WROTE" ]; then
+              {
+                echo "## Promoting \`$SHA\` to production"
+                echo
+                echo "**What ships could not be worked out here.** Read this step's log, and the commits since the one production runs ($REPOSITORY/commits/$SHA), before approving."
+              } >> "$GITHUB_STEP_SUMMARY"
+              echo "::error title=No list of what ships::The promotion summary could not be written. Read the commits since the one production runs before approving."
+            fi
+          }
+          trap said_nothing EXIT
           TAG=""
-          LISTED=$(git ls-remote origin refs/tags/production)
+          LISTED=$(git ls-remote origin refs/tags/production || true)
           if [ -n "$LISTED" ]; then
-            git fetch --no-tags --force origin "+refs/tags/production:refs/tags/production"
-            TAG=$(git rev-parse "refs/tags/production^{commit}")
+            if git fetch --no-tags --force origin "+refs/tags/production:refs/tags/production"; then
+              TAG=$(git rev-parse --verify --quiet "refs/tags/production^{commit}" || true)
+            fi
+            [ -n "$TAG" ] || echo "::warning title=The production tag could not be read::The summary goes without it."
           fi
           describe() {
             gcloud run services describe "$1" \
@@ -160,6 +185,7 @@ jobs:
             SOURCE="the image Cloud Run's production service was last deployed with"
           fi
           echo "production tag: ${TAG:-none}; ${SOURCE}: ${RUNNING:-none}"
+          OUT=$(mktemp)
           node scripts/promotion-summary.mjs "$SHA" \
             --production-tag "$TAG" \
             --running "$RUNNING" \
@@ -167,7 +193,9 @@ jobs:
             --api-image "$IMAGE" \
             --servicing-image "$SERVICING_IMAGE" \
             --servicing-running "$SERVICING_RUNNING" \
-            --repository "$REPOSITORY" >> "$GITHUB_STEP_SUMMARY"
+            --repository "$REPOSITORY" > "$OUT"
+          cat "$OUT" >> "$GITHUB_STEP_SUMMARY"
+          WROTE=yes
 
   deploy-servicing:
     needs: resolve
@@ -596,29 +624,59 @@ jobs:
           echo "ok: production runs $EXPECTED"
 
   # The record of what production runs: the `production` tag, moved to the
-  # commit just promoted once health has reported it. The next promotion's
-  # summary measures from here. A job of its own because it is the one that
-  # writes to this repository — `contents: write` here and on no other job —
-  # and it names no environment: each job naming `production` asks for an
-  # approval of its own, and this one only follows the two that were
-  # approved. It installs nothing and holds no secret. A tag and never a
-  # branch: nothing is built from it, and a rollback moves it back.
+  # commit just promoted once health has reported it. A job of its own
+  # because it is the one that writes to this repository — `contents: write`
+  # here and on no other job — and it names no environment: each job naming
+  # `production` asks for an approval of its own, and this one only follows
+  # the two that were approved. It checks out nothing, installs nothing and
+  # holds no secret. A tag and never a branch: nothing is built from it, and
+  # a rollback moves it back.
+  #
+  # The tag moves through the REST API, not `git push`. GitHub refuses a
+  # push by this workflow's token that moves a ref across a change under
+  # .github/workflows/ (the token cannot be granted the `workflows`
+  # permission), and most promotions cross one. Whether the API is held to
+  # the same rule has not been tried here. If the move is refused,
+  # production still runs the commit its health reported, so the run warns
+  # rather than turning a good deploy red, and the next summary measures
+  # from what health reports rather than from the tag; a GitHub App token
+  # with Workflows: write, for this job alone, is the fix then.
   tag:
     needs: [resolve, deploy]
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ needs.resolve.outputs.sha }}
       - name: Move the production tag to the promoted commit
+        id: move
+        continue-on-error: true
         env:
+          GH_TOKEN: ${{ github.token }}
           SHA: ${{ needs.resolve.outputs.sha }}
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD)" = "$SHA"
-          git tag --force production "$SHA"
-          git push --force origin refs/tags/production
+          if gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/production" --silent 2>/dev/null; then
+            gh api -X PATCH "repos/$GITHUB_REPOSITORY/git/refs/tags/production" \
+              -f sha="$SHA" -F force=true --silent
+          else
+            gh api -X POST "repos/$GITHUB_REPOSITORY/git/refs" \
+              -f ref=refs/tags/production -f sha="$SHA" --silent
+          fi
+          NOW=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/production" --jq .object.sha)
+          test "$NOW" = "$SHA"
           echo "production -> $SHA"
           echo "The \`production\` tag names \`$SHA\`, which production now runs." >> "$GITHUB_STEP_SUMMARY"
+      - name: Say so when the tag did not move
+        if: steps.move.outcome == 'failure'
+        env:
+          SHA: ${{ needs.resolve.outputs.sha }}
+        run: |
+          echo "::warning title=The production tag did not move::Production runs $SHA and its health says so, but the production tag still names an earlier commit, or none. The next summary measures from what health reports; this run's summary says how to move the tag by hand."
+          {
+            echo "**The \`production\` tag did not move.** Production runs \`$SHA\`, and its health says so; the tag still names an earlier commit, or none. The next promotion's summary measures from what health reports, so it is right either way. To move the tag by hand:"
+            echo
+            echo '```'
+            echo "git tag --force production $SHA"
+            echo "git push --force origin refs/tags/production"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

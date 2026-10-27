@@ -174,6 +174,23 @@ describe("the production promotion", () => {
     }
   });
 
+  /**
+   * The summary is advisory. A bug in it, an unreadable tag or a history it
+   * cannot measure must never hold up a promotion, a rollback least of all;
+   * the commit is refused by `pick`, and only there.
+   */
+  it("never holds a promotion up over its summary, and says when there is none", () => {
+    const say = stepNamed(resolveJob, "Say what ships");
+    expect(say).toMatch(/^ {8}continue-on-error: true$/m);
+    // Whatever stops the step, the approver is told the list is missing.
+    expect(say).toMatch(/trap said_nothing EXIT/);
+    expect(say).toMatch(/said_nothing\(\) \{[\s\S]*GITHUB_STEP_SUMMARY[\s\S]*::error title=/);
+    // The script's Markdown reaches the summary whole or not at all.
+    expect(say).toMatch(/> "\$OUT"\n\s+cat "\$OUT" >> "\$GITHUB_STEP_SUMMARY"\n\s+WROTE=yes/);
+    const pick = resolveJob.slice(resolveJob.indexOf("- id: pick"));
+    expect(pick.slice(0, pick.indexOf("- name: Say what ships"))).not.toMatch(/continue-on-error/);
+  });
+
   it("refuses a commit that is not on main", () => {
     expect(resolveJob).toMatch(
       /git merge-base --is-ancestor "\$SHA" origin\/main \|\| \{[^}]*exit 1/,
@@ -197,10 +214,41 @@ describe("the production promotion", () => {
     expect(tag).toMatch(/needs: \[resolve, deploy\]/);
     expect(tag).not.toMatch(/^\s+environment:/m);
     expect(tag).toMatch(/permissions:\s+contents: write\s+steps:/);
-    expect(tag).toContain('git tag --force production "$SHA"');
-    expect(tag).toContain("git push --force origin refs/tags/production");
+    // Nothing from the repository runs beside the token that can write to it.
+    expect(tag).not.toContain("actions/checkout");
     // A tag, never a branch.
     expect(tag).not.toMatch(/refs\/heads|git branch|git push[^\n]*HEAD/);
+  });
+
+  /**
+   * GitHub refuses a `git push` by the Actions token that moves a ref across
+   * a change under .github/workflows/, and that token cannot hold the
+   * `workflows` permission, so a pushed tag would stick at the first
+   * promotion whose range edits a workflow. The tag moves through the REST
+   * API instead, and a refusal warns: production has already changed, and
+   * the next summary measures from what health reports, not from the tag.
+   */
+  it("moves the tag through the API, and a refusal warns rather than failing the deploy", () => {
+    const tag = jobs.get("tag") ?? "";
+    const move = stepNamed(tag, "Move the production tag to the promoted commit");
+    expect(move).not.toMatch(/\bgit (?:tag|push)\b/);
+    expect(move).toContain("GH_TOKEN: ${{ github.token }}");
+    expect(move).toMatch(
+      /gh api -X PATCH "repos\/\$GITHUB_REPOSITORY\/git\/refs\/tags\/production" \\\n\s+-f sha="\$SHA" -F force=true/,
+    );
+    expect(move).toMatch(
+      /gh api -X POST "repos\/\$GITHUB_REPOSITORY\/git\/refs" \\\n\s+-f ref=refs\/tags\/production -f sha="\$SHA"/,
+    );
+    // It reads the tag back rather than trusting the answer.
+    expect(move).toMatch(
+      /NOW=\$\(gh api [^\n]*git\/ref\/tags\/production[^\n]*\)\n\s+test "\$NOW" = "\$SHA"/,
+    );
+    expect(move).toMatch(/^ {8}id: move$/m);
+    expect(move).toMatch(/^ {8}continue-on-error: true$/m);
+    const said = stepNamed(tag, "Say so when the tag did not move");
+    expect(said).toContain("if: steps.move.outcome == 'failure'");
+    expect(said).toContain("::warning title=The production tag did not move::");
+    expect(said).toContain('>> "$GITHUB_STEP_SUMMARY"');
   });
 
   it("asks for `contents: write` nowhere else, in either workflow", () => {
@@ -315,7 +363,7 @@ describe("the promotion summary", () => {
     );
     expect(markdown).toContain("### Look closely");
     expect(markdown).toContain(
-      "**1 new database migration:** `20261027000000_added`. Each must only add",
+      "**1 new database migration:** `20261027000000_added`. The revision production runs now must still read and write correctly",
     );
     expect(markdown).toContain("`infra/main.tf`");
     expect(markdown).toContain("`.github/workflows/deploy.yml`");
@@ -362,7 +410,7 @@ describe("the promotion summary", () => {
     expect(markdown).toContain("**4 commits ship**");
   });
 
-  it("says when the tag is not what production runs, and measures from the tag", () => {
+  it("says when the tag is not what production runs, and measures from what production runs", () => {
     const { markdown, warnings } = summary(
       commits["A page of prose"]!,
       "--production-tag",
@@ -375,9 +423,70 @@ describe("the promotion summary", () => {
     expect(markdown).toMatch(
       /The `production` tag says `[0-9a-f]{7}` What production runs \(2026-10-27\), but production's \/api\/health says `[0-9a-f]{7}` The API answers twice/,
     );
-    expect(markdown).toContain("Everything below is measured from the tag.");
-    expect(markdown).toContain("**4 commits ship**");
+    expect(markdown).toContain("Everything below is measured from what production says it runs.");
+    expect(markdown).toContain("**3 commits ship**");
+    expect(markdown.slice(markdown.indexOf("### Commits"))).not.toContain("The API answers twice");
     expect(warnings).toContain("::warning title=The production tag is not what production runs::");
+  });
+
+  /**
+   * A deploy that fails after its revision took traffic leaves production on
+   * the newer commit with the tag where it was. Promoting the tag's commit
+   * then is a rollback, and the approver must see what leaves and which
+   * migrations stay applied, not "nothing new ships".
+   */
+  it("calls it a rollback when the tag names the promoted commit but production runs a newer one", () => {
+    const { markdown, warnings } = summary(
+      commits["The API answers twice"]!,
+      "--production-tag",
+      commits["The API answers twice"]!,
+      "--running",
+      commits["A page of prose"]!,
+      "--running-source",
+      "production's /api/health",
+    );
+    expect(markdown).not.toContain("Production already runs this commit");
+    expect(markdown).toContain("**This is a rollback.** 3 commits leave production");
+    expect(markdown).toContain("### Commits leaving production");
+    expect(markdown).toContain(
+      "**1 migration production has applied stays applied:** `20261027000000_added`",
+    );
+    expect(warnings).toContain("::warning title=Rollback::");
+  });
+
+  it("lists what ships when production runs older than the tag, as after traffic sent back by hand", () => {
+    const { markdown } = summary(
+      commits["A page of prose"]!,
+      "--production-tag",
+      commits["A page of prose"]!,
+      "--running",
+      commits["The API answers twice"]!,
+      "--running-source",
+      "production's /api/health",
+    );
+    expect(markdown).not.toContain("Production already runs this commit");
+    expect(markdown).toContain("**3 commits ship**");
+    expect(markdown).toContain("**1 new database migration:** `20261027000000_added`");
+  });
+
+  it("measures from the tag when the service names no commit here, and says so", () => {
+    const { markdown, warnings } = summary(
+      commits["A page of prose"]!,
+      "--production-tag",
+      commits["What production runs"]!,
+      "--running",
+      "e".repeat(40),
+      "--running-source",
+      "production's /api/health",
+    );
+    expect(markdown).toContain(
+      `By production's /api/health, production runs \`${"e".repeat(12)}\`, which is no commit in this repository`,
+    );
+    expect(markdown).toMatch(
+      /Production runs:\*\* `[0-9a-f]{7}` What production runs \(2026-10-27\), per the `production` tag/,
+    );
+    expect(markdown).toContain("**4 commits ship**");
+    expect(warnings).toContain("::warning title=What production runs is not a commit here::");
   });
 
   it("lists the last commits when nothing says what production runs", () => {
@@ -430,13 +539,167 @@ describe("the promotion summary", () => {
     expect(warnings).toContain("::warning title=Applied migration changed::");
   });
 
-  it("refuses a production tag this repository does not hold", () => {
-    const r = spawnSync(
-      process.execPath,
-      [script, commits["A page of prose"]!, "--production-tag", "f".repeat(40)],
-      { cwd: repo, env, encoding: "utf8" },
+  it("goes on without a production tag this repository does not hold, and says so", () => {
+    const { markdown, warnings } = summary(
+      commits["A page of prose"]!,
+      "--production-tag",
+      "f".repeat(40),
     );
+    expect(markdown).toContain(
+      `The \`production\` tag names \`${"f".repeat(12)}\`, which is no commit in this repository`,
+    );
+    expect(markdown).toContain("### The last 50 commits up to this one");
+    expect(warnings).toContain("::warning title=The production tag is not a commit here::");
+  });
+
+  it("refuses a commit to promote that this repository does not hold", () => {
+    const r = spawnSync(process.execPath, [script, "f".repeat(40)], {
+      cwd: repo,
+      env,
+      encoding: "utf8",
+    });
     expect(r.status).toBe(1);
     expect(r.stdout).toBe("");
+  });
+
+  it("says when a new servicing image is a rebuild with nothing under apps/servicing changed", () => {
+    const rebuilt = summary(
+      commits["A page of prose"]!,
+      "--production-tag",
+      commits["What production runs"]!,
+      "--servicing-image",
+      "servicing:new",
+      "--servicing-running",
+      "servicing:old",
+    ).markdown;
+    expect(rebuilt).toContain("**Servicing image:** `servicing:new`, replacing `servicing:old`");
+    expect(rebuilt).toContain(
+      "Nothing under apps/servicing differs between production's commit and this one",
+    );
+
+    git("checkout", "-q", "-b", "servicing", commits["A page of prose"]!);
+    commit("The servicing app changes", { "apps/servicing/src/x.ts": "export {};\n" });
+    git("checkout", "-q", "main");
+    const changed = summary(
+      commits["The servicing app changes"]!,
+      "--production-tag",
+      commits["What production runs"]!,
+      "--servicing-image",
+      "servicing:new",
+      "--servicing-running",
+      "servicing:old",
+    ).markdown;
+    expect(changed).toContain("replacing `servicing:old`");
+    expect(changed).not.toContain("Nothing under apps/servicing differs");
+  });
+
+  /**
+   * Whether the revision production runs survives a schema is the rule a
+   * rollback rests on, and a new enum value or a rule on a table it already
+   * writes is an addition that breaks it. The summary names what it reads
+   * in the SQL; a table, a column or a constraint the release makes itself
+   * is none of that.
+   */
+  it("names what a new migration's SQL does that a rollback cannot stand", () => {
+    git("checkout", "-q", "-b", "risky", commits["A page of prose"]!);
+    commit("Three migrations", {
+      "packages/db/prisma/migrations/20261028000000_an_enum_grows/migration.sql":
+        "-- A comment; with a semicolon and a DROP TABLE in it.\nALTER TYPE \"Stage\" ADD VALUE 'C' BEFORE 'D';\n",
+      "packages/db/prisma/migrations/20261028010000_a_rule_on_an_old_table/migration.sql":
+        'ALTER TABLE "a" ADD CONSTRAINT "a_x_is_positive" CHECK ("x" > 0);\n',
+      "packages/db/prisma/migrations/20261028020000_new_things_only/migration.sql": [
+        'CREATE TABLE "d" (\n  "id" UUID NOT NULL,\n  CONSTRAINT "d_pkey" PRIMARY KEY ("id")\n);',
+        'ALTER TABLE "d" ADD CONSTRAINT "d_id_is_set" CHECK ("id" IS NOT NULL);',
+        'ALTER TABLE "a"\n  ADD COLUMN "y" TEXT,\n  ADD COLUMN "z" TEXT NOT NULL DEFAULT \'\';',
+        'ALTER TABLE "a" ADD CONSTRAINT "a_y_and_z" CHECK (("y" IS NULL) = ("z" = \'\'));',
+        'CREATE UNIQUE INDEX "d_once" ON "d" ("id");',
+        'CREATE UNIQUE INDEX "a_y_once" ON "a" ("y") WHERE "y" IS NOT NULL;',
+        'ALTER TABLE "a" DROP CONSTRAINT "a_old_rule";',
+        'CREATE TRIGGER "d_guard" BEFORE INSERT ON "d" FOR EACH ROW EXECUTE FUNCTION f();',
+        "CREATE OR REPLACE FUNCTION f() RETURNS trigger AS $$\nBEGIN\n  DROP TABLE x;\n  RETURN NEW;\nEND;\n$$ LANGUAGE plpgsql;",
+        "",
+      ].join("\n"),
+    });
+    git("checkout", "-q", "main");
+
+    const forward = summary(
+      commits["Three migrations"]!,
+      "--production-tag",
+      commits["A page of prose"]!,
+    ).markdown;
+    expect(forward).toContain("**3 new database migrations:**");
+    expect(forward).toContain(
+      "must still read and write correctly against the schema they leave and the rows this release writes",
+    );
+    expect(forward).toContain("A new enum value lands a release before any code writes it");
+    expect(forward).toContain("  - `20261028000000_an_enum_grows` adds an enum value.");
+    expect(forward).toContain(
+      "  - `20261028010000_a_rule_on_an_old_table` adds a constraint to an existing table.",
+    );
+    expect(forward).not.toContain("`20261028020000_new_things_only` ");
+
+    const back = summary(
+      commits["A page of prose"]!,
+      "--production-tag",
+      commits["Three migrations"]!,
+    ).markdown;
+    expect(back).toContain("**3 migrations production has applied stay applied:**");
+    expect(back).toContain("no enum value it was never built for");
+    expect(back).toContain("  - `20261028000000_an_enum_grows` adds an enum value.");
+  });
+
+  it("flags the risky changes when production's commit is on another line", () => {
+    git("checkout", "-q", "-b", "side", commits["The API answers twice"]!);
+    commit("Production's own line", { "apps/api/src/side.ts": "export {};\n" });
+    git("checkout", "-q", "main");
+    const { markdown, warnings } = summary(
+      commits["A page of prose"]!,
+      "--production-tag",
+      commits["Production's own line"]!,
+    );
+    expect(markdown).toContain("**Production's commit is not on this commit's line.**");
+    expect(markdown).toContain("### Look closely");
+    expect(markdown).toContain("**1 new database migration:** `20261027000000_added`");
+    expect(markdown).toContain("`infra/main.tf`");
+    expect(markdown).toContain("`.github/workflows/deploy.yml`");
+    for (const title of [
+      "New database migrations",
+      "Infrastructure changed",
+      "Workflows changed",
+      "Production is on another line",
+    ]) {
+      expect(warnings).toContain(`::warning title=${title}::`);
+    }
+  });
+
+  /**
+   * After main's history is rewritten, a tag left on the old history shares
+   * no commit with anything promoted from the new one. That must not stop a
+   * promotion: the risky changes are read off the two commits' files.
+   */
+  it("goes on when production's commit shares no history with this one", () => {
+    git("checkout", "-q", "--orphan", "rewritten");
+    git("rm", "-rq", "--cached", ".");
+    rmSync(join(repo, "infra"), { recursive: true, force: true });
+    rmSync(join(repo, ".github"), { recursive: true, force: true });
+    rmSync(join(repo, "packages/db/prisma/migrations/20261027000000_added"), {
+      recursive: true,
+      force: true,
+    });
+    git("add", "-A");
+    git("commit", "-q", "-m", "An old history");
+    commits["An old history"] = git("rev-parse", "HEAD");
+    git("checkout", "-q", "-f", "main");
+
+    const { markdown, warnings } = summary(
+      commits["A page of prose"]!,
+      "--production-tag",
+      commits["An old history"]!,
+    );
+    expect(markdown).toContain("**Production's commit shares no history with this one.**");
+    expect(markdown).toContain("**1 new database migration:** `20261027000000_added`");
+    expect(markdown).toContain("`infra/main.tf`");
+    expect(markdown).toContain("### The last 50 commits up to this one");
+    expect(warnings).toContain("::warning title=Production shares no history with this commit::");
   });
 });

@@ -10138,3 +10138,45 @@ what it was billed on.
 What this does not settle: whether 25 basis points on deferred principal is
 the right price. It is what the revenue sheet charges, and the sheet is the
 company's own record of what the book earns, so it is what the code now does.
+
+**Production carries a failed migration until somebody clears it.** The first
+version of this migration was applied to production by hand on 28 October and
+failed partway:
+
+```
+Error: P3018 … ERROR: servicing_observations is append-only (UPDATE on 810fd9ec…)
+```
+
+The backfill was a plain `UPDATE` against a table that is append-only by
+trigger. It passed in development only because that table was empty there, so
+the `UPDATE` touched no row and the trigger never fired — a backfill proves
+nothing against an empty table. Nothing was changed by the failure: Prisma
+wraps a migration in a transaction, so the `ADD COLUMN` rolled back with it,
+and the only residue is the failed row in `_prisma_migrations`. But Prisma
+refuses every later migration while that row stands, so **the production
+promotion will stop at its `migrate deploy` step** until:
+
+```
+npx prisma migrate resolve --rolled-back 20261028120000_a_book_is_billed_on_the_whole_principal
+```
+
+Staging is unaffected and will apply the corrected migration on the next
+deploy from `main` — which is the better place for it to meet a book with rows
+in it first.
+
+The corrected migration lifts the append-only guard around its own backfill
+and puts it straight back, inside the migration's transaction. That is sound
+rather than a loophole: the guard exists because "your situation changed" is a
+difference between two observations and you cannot diff against a row you
+overwrote, and this fills in a column that did not exist a moment earlier,
+derived from two the row already carries. It needs ownership of
+`servicing_observations`; the pipeline's migration role created the table, so
+it has it, while the runtime role the hand-run used may not.
+
+**September still needs reclosing** once this is deployed. Its closed row holds
+$13,755.22 on the interest-bearing basis; on the whole principal it is
+$13,784.63, the sheet's own figure. The statement is append-only, so it is a
+delete and a fresh close — `DELETE FROM billing_statements WHERE month = DATE
+'2026-09-01'` then `npm run billing:close -- 2026-09`. Nothing is invoiced off
+these rows yet, which is why the closed month is not being protected here
+(Drew, 28 October).

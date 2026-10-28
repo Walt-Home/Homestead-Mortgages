@@ -48,6 +48,9 @@ where it stands for us and for Grander, green / yellow / red, and which vendor
 is real on each environment. Read it before answering "what works today",
 and **update it in the commit that changes what it says**, like
 `docs/du-readiness.md`.
+`docs/product-ecosystem.md` is the map of Supermortgage, HMX and Walt
+together: one organization, three projects, the door each product has, and
+how they can call one another.
 
 `docs/environments.md` is the training and evaluation environments in
 `packages/environments`: a task, primitive tools, and a grader that is the

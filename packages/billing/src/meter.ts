@@ -20,11 +20,16 @@
  *     before the month's end reported.** The tape carries a total that
  *     includes deferred principal too; we store and bill the interest-bearing
  *     figure, which is what the servicer's own fee is earned on.
- *   - **A loan-month is pro-rated by calendar day, from the load day.** The
- *     sheet says "from the day it is loaded", so a loan loaded on the 23rd
- *     is eight thirtieths of a September. It stops the day a tape reports
- *     the loan paid off, transferred, charged off or matured: that day and
- *     after are not billed.
+ *   - **A month is billed whole or not at all** (Drew, 28 October 2026).
+ *     Revenue is tracked as 25 basis points over twelve on a cohort's
+ *     balance for every month the cohort is on the book, with no day-count
+ *     anywhere: the book's 25 October cohort bills all of October. A loan
+ *     reported paid off, transferred, charged off or matured is billed that
+ *     month in full as well, and nothing after it. This replaces the
+ *     pro-rata reading of 29 September ("a loan loaded on the 23rd is eight
+ *     thirtieths of a September"), which matched the tracker only because
+ *     `watched_from` is the first of a month whenever a tape names its
+ *     month — the whole-month answer by coincidence rather than by rule.
  *   - **No delinquency charge.** Section D is priced on top of the cycle,
  *     and the cycle is not running on a monitored book.
  *   - **A touch is an offer sent to the homeowner**, not the claim
@@ -34,6 +39,9 @@
  * Tokens are cents, and the arithmetic is integer: a loan's tokens for a
  * row are `balance × row tokens × days ÷ ($100,000 × days in month × months
  * the row covers)`, rounded half-up once — twelve months for an annual row.
+ * `days` is the whole month or nothing, so the day terms cancel; they are
+ * still written out because the price sheet's rows are quoted per loan-month
+ * and per loan-year, and a rate covering twelve months still needs dividing.
  * A loan's tokens are the sum of its rows and a line's are the sum of its
  * loans, so a statement agrees with its lines and with its loans to the
  * token.
@@ -48,7 +56,6 @@ import {
   min,
   parts,
   startOfMonth,
-  toEpochDays,
   type PlainDate,
 } from "@hm/kernel/calendar";
 import { Decimal, divRound } from "@hm/kernel/money";
@@ -220,12 +227,20 @@ function chargeLoan(
       .at(-1) ?? null;
 
   const touchTokens = BigInt(loan.touches) * BigInt(touch.tokens);
-  const first = max(loan.watchedFrom, from);
-  // The last day counted: the month's end or today, and never the day the
-  // loan was reported ended nor any day after it.
-  const lastCandidate = min(to, through);
-  const last = endedOn === null ? lastCandidate : min(lastCandidate, addDays(endedOn, -1));
-  const days = Math.max(0, toEpochDays(last) - toEpochDays(first) + 1);
+  // A month is billed whole or not at all. Three questions decide it, and
+  // none of them is "on which day":
+  //
+  //   has the month begun      a month still ahead of today bills nothing
+  //   was the loan watched     watched on or before the month's end
+  //   had it already gone      reported ended before the month began
+  //
+  // So a loan that arrives on the 25th is billed all of that month, and one
+  // reported paid off on the 15th is billed all of that month too and
+  // nothing after it.
+  const begun = compare(through, from) >= 0;
+  const watched = compare(loan.watchedFrom, to) <= 0;
+  const goneBefore = endedOn !== null && compare(endedOn, from) < 0;
+  const days = begun && watched && !goneBefore ? daysInTheMonth : 0;
 
   const rows = rates.map((rate) => ({
     code: rate.code,
@@ -243,8 +258,8 @@ function chargeLoan(
   const tokens = rows.reduce((n, r) => n + r.tokens, 0n);
   let notBilled: NotBilled | null = null;
   if (tokens === 0n && touchTokens === 0n) {
-    if (compare(loan.watchedFrom, through) > 0) notBilled = "not_yet_loaded";
-    else if (endedOn !== null && days === 0) notBilled = "ended";
+    if (!watched || !begun) notBilled = "not_yet_loaded";
+    else if (goneBefore) notBilled = "ended";
     else notBilled = "no_balance";
   }
   return {

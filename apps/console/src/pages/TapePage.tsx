@@ -198,7 +198,13 @@ export function TapePage() {
   const [asOf, setAsOf] = useState(todayEt());
   // The month the tape is for. A tape loaded late is for the month it was
   // for, and the book is billed from the first of it, not from the load day.
-  const [billingMonth, setBillingMonth] = useState(todayEt().slice(0, 7));
+  // Not pre-filled, deliberately. It used to default to the month you were
+  // loading in — the one month a tape that arrived late is never for — and
+  // the gate below only checks that it is a month, so a September book
+  // loaded in October was billed from October by simply not being touched
+  // (Drew, 28 October 2026). Empty, the load cannot start until somebody
+  // says which month the tape is for.
+  const [billingMonth, setBillingMonth] = useState("");
   const [tape, setTape] = useState<File | null>(null);
   const [supplement, setSupplement] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
@@ -410,7 +416,8 @@ export function TapePage() {
                 <Field
                   label="Billed from"
                   htmlFor="desk-billing-month"
-                  hint="The month this tape is for. Loans new to the book are billed from the first of it; loans already on the book keep their start."
+                  hint="The month this tape is for — the month its loans are billed for, whole. Loans already on the book keep the month they started in."
+                  error={billingMonth === "" ? "Say which month this tape is for." : undefined}
                 >
                   <Input
                     id="desk-billing-month"

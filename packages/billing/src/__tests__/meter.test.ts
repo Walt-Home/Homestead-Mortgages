@@ -145,17 +145,61 @@ describe("the month's statement", () => {
     for (const c of s.loans) expect(c.notBilled).toBeNull();
   });
 
-  it("counts a loan from the day it was loaded, not the tape's as-of", () => {
-    const loans = [loan("A", "2026-09-23", [{ asOf: "2026-09-01", balance: 10_000_000n }])];
-    const s = meterMonth(loans, day("2026-09-01"));
-    expect(s.loans[0]!.days).toBe(8);
-    expect(s.loans[0]!.basis?.asOf).toBe("2026-09-01");
-    // Eight of thirty days on $100,000, row by row: 467 + 33 + 20 + 13 + 13 + 7 + 1 + 1.
-    expect(s.tokens).toBe(555n);
-    expect(s.loanMonths).toBe("0.27");
+  /**
+   * The revenue tracker is the company's own record of what a book earns
+   * ("Supermortgage Revenue Cohort & Revenue Tracker", the Revenue sheet).
+   * It holds one rate, 25 bps over twelve, on a cohort's balance for every
+   * month that cohort is on the book. This pins the meter to a figure off
+   * that sheet, so a day-count cannot creep back in unnoticed: the cohort of
+   * 25 October 2026 carried $91,192,288.93 and the sheet bills $18,998.39353
+   * for October — all of it, from a cohort that arrived with six days left.
+   */
+  it("bills the revenue tracker's own October figure, whatever day the cohort arrived", () => {
+    const COHORT_BALANCE = 9_119_228_893n;
+    const TRACKER_CENTS = 1_899_839n; // $18,998.39353, to the cent
+    for (const arrived of ["2026-10-01", "2026-10-05", "2026-10-25", "2026-10-31"]) {
+      const s = meterMonth(
+        [loan("A", arrived, [{ asOf: "2026-10-01", balance: COHORT_BALANCE }])],
+        day("2026-10-01"),
+      );
+      expect(s.cents).toBe(TRACKER_CENTS);
+    }
+    // And the month it is paid off in is billed in full, like any other.
+    const paidOff = meterMonth(
+      [
+        loan("A", "2026-10-01", [
+          { asOf: "2026-10-01", balance: COHORT_BALANCE },
+          { asOf: "2026-10-15", balance: 0n, status: "paid_off" },
+        ]),
+      ],
+      day("2026-10-01"),
+    );
+    expect(paidOff.cents).toBe(TRACKER_CENTS);
   });
 
-  it("stops the day a tape reports the loan ended, and reads the balance from before", () => {
+  it("bills a whole month however late in it the loan arrived", () => {
+    // Watched from the 23rd. Under the pro-rata reading this was eight
+    // thirtieths; revenue is tracked in whole months, so it is all of
+    // September (Drew, 28 October 2026).
+    const loans = [loan("A", "2026-09-23", [{ asOf: "2026-09-01", balance: 10_000_000n }])];
+    const s = meterMonth(loans, day("2026-09-01"));
+    expect(s.loans[0]!.days).toBe(30);
+    expect(s.loans[0]!.basis?.asOf).toBe("2026-09-01");
+    // A whole month of $100,000: 1,750 + 125 + 75 + 50 + 50 + 25 + 5 + 3.
+    expect(s.tokens).toBe(2083n);
+    expect(s.loanMonths).toBe("1.00");
+    // The day it arrived changes nothing: the first and the last of the
+    // month cost the same as the 23rd.
+    for (const d of ["2026-09-01", "2026-09-30"]) {
+      const same = meterMonth(
+        [loan("A", d, [{ asOf: "2026-09-01", balance: 10_000_000n }])],
+        day("2026-09-01"),
+      );
+      expect(same.tokens).toBe(2083n);
+    }
+  });
+
+  it("bills the whole month a loan ended in, and reads the balance from before", () => {
     const loans = [
       loan("A", "2026-08-01", [
         { asOf: "2026-09-01", balance: 10_000_000n },
@@ -165,10 +209,12 @@ describe("the month's statement", () => {
     const s = meterMonth(loans, day("2026-09-01"));
     const c = s.loans[0]!;
     expect(c.endedOn).toBe("2026-09-16");
-    expect(c.days).toBe(15);
+    // Paid off halfway through and billed for all of September: a month is
+    // whole or nothing at both ends of a loan's life.
+    expect(c.days).toBe(30);
     expect(c.basis?.principalBalanceCents).toBe(10_000_000n);
-    // Fifteen of thirty days on $100,000, row by row: 875 + 63 + 38 + 25 + 25 + 13 + 3 + 2.
-    expect(c.tokens).toBe(1044n);
+    // A whole month of $100,000: 1,750 + 125 + 75 + 50 + 50 + 25 + 5 + 3.
+    expect(c.tokens).toBe(2083n);
     // The month after, nothing: the loan is counted on the book and billed for nothing.
     const next = meterMonth(loans, day("2026-10-01"));
     expect(next.loansOnBook).toBe(1);
@@ -200,17 +246,24 @@ describe("the month's statement", () => {
     expect(s.tokens).toBe(0n);
   });
 
-  it("counts a month still running only through the day asked for", () => {
+  it("bills a month still running in full from its first day", () => {
     const loans = [loan("A", "2026-09-01", [{ asOf: "2026-09-01", balance: 10_000_000n }])];
     const s = meterMonth(loans, day("2026-09-01"), { through: day("2026-09-10") });
+    // `through` still says how far the month has got, because the page says
+    // so; it no longer decides the charge. A whole-month charge is incurred
+    // when the month starts, so the running month reads the same on the 10th
+    // as it will on the 30th — which is what the revenue tracker shows.
     expect(s.through).toBe("2026-09-10");
-    expect(s.loans[0]!.days).toBe(10);
-    // Ten of thirty days on $100,000, row by row: 583 + 42 + 25 + 17 + 17 + 8 + 2 + 1.
-    expect(s.tokens).toBe(695n);
+    expect(s.loans[0]!.days).toBe(30);
+    expect(s.tokens).toBe(2083n);
+    expect(meterMonth(loans, day("2026-09-01")).tokens).toBe(s.tokens);
     // A day past the month's end is the month's end.
     expect(meterMonth(loans, day("2026-09-01"), { through: day("2026-10-15") }).through).toBe(
       "2026-09-30",
     );
+    // A month that has not begun bills nothing.
+    const ahead = meterMonth(loans, day("2026-11-01"), { through: day("2026-09-10") });
+    expect(ahead.tokens).toBe(0n);
   });
 
   it("charges a touch at 100 tokens flat, on top of the balance line", () => {

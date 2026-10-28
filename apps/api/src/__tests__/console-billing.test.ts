@@ -172,7 +172,7 @@ describe("the month running", () => {
   it("lists every servicer with this month through today, off the price sheet", async () => {
     const { book } = await loadedBook();
     const today = todayEt();
-    const { y, m, d } = parts(today);
+    const { y, m } = parts(today);
     const r = await call<{
       sheet: { version: string; date: string };
       today: string;
@@ -206,8 +206,10 @@ describe("the month running", () => {
     expect(s.running.through).toBe(today);
     expect(s.running.loansBilled).toBe(12);
     expect(s.running.balanceCents).toBe("447158188");
-    // Every loan watched from 15 August: the whole month so far, pro rata by day.
-    expect(s.running.tokens).toBe(expectedTokens(book, d, daysInMonth(y, m)).toString());
+    // A month is billed whole or not at all, so the running month reads the
+    // same on any day of it as it will on the last (Drew, 28 October 2026).
+    const inMonth = daysInMonth(y, m);
+    expect(s.running.tokens).toBe(expectedTokens(book, inMonth, inMonth).toString());
     expect(s.running.cents).toBe(s.running.tokens);
     expect(s.lastClosed).toBeNull();
     expect(s.yearToDate).toEqual({ year: y, tokens: "0", cents: "0" });
@@ -265,11 +267,13 @@ describe("a month that has ended", () => {
     expect(s.through).toBe("2026-08-31");
     expect(s.loansOnBook).toBe(12);
     expect(s.loansBilled).toBe(12);
-    // 15 August through the 31st: seventeen days of thirty-one, every loan.
-    expect(s.loanDays).toBe(17 * 12);
-    expect(s.loanMonths).toBe("6.58");
-    expect(s.tokens).toBe(expectedTokens(book, 17, 31).toString());
-    expect(s.loans.every((c) => c.days === 17 && c.watchedFrom === "2026-08-15")).toBe(true);
+    // Twelve loans, each billed a whole August: the loan-days are the month
+    // itself twelve times over, and the loan-months are simply the loans.
+    expect(s.loanDays).toBe(31 * 12);
+    expect(s.loanMonths).toBe("12.00");
+    expect(s.tokens).toBe(expectedTokens(book, 31, 31).toString());
+    // Watched from the 15th and billed for all thirty-one days of it.
+    expect(s.loans.every((c) => c.days === 31 && c.watchedFrom === "2026-08-15")).toBe(true);
     expect(s.loans.every((c) => c.basis?.asOf === TAPE_AS_OF)).toBe(true);
     // The month before the load: on the book, nothing consumed.
     const before = await call<{ statement: StatementWire }>(
@@ -293,8 +297,8 @@ describe("a month that has ended", () => {
     expect(closed.body.closed).toEqual([
       {
         slug: NORTHLIGHT.slug,
-        tokens: expectedTokens(book, 17, 31).toString(),
-        cents: expectedTokens(book, 17, 31).toString(),
+        tokens: expectedTokens(book, 31, 31).toString(),
+        cents: expectedTokens(book, 31, 31).toString(),
       },
     ]);
     expect(closed.body.alreadyClosed).toEqual([]);
@@ -307,8 +311,8 @@ describe("a month that has ended", () => {
     expect(row.closedBy).toBe("staff-admin");
     expect(row.sheetVersion).toBe("1.1");
     expect(row.loansBilled).toBe(12);
-    expect(row.loanMonths.toFixed(2)).toBe("6.58");
-    expect(row.tokens).toBe(expectedTokens(book, 17, 31));
+    expect(row.loanMonths.toFixed(2)).toBe("12.00");
+    expect(row.tokens).toBe(expectedTokens(book, 31, 31));
 
     // A second close writes nothing and says so.
     const again = await call<{ closed: unknown[]; alreadyClosed: string[] }>("POST", "/close", {
@@ -327,7 +331,7 @@ describe("a month that has ended", () => {
     }>("GET", `/servicers/${NORTHLIGHT.slug}/statements/2026-08`);
     expect(read.body.standing).toBe("closed");
     expect(read.body.closed.closedBy).toBe("staff-admin");
-    expect(read.body.statement.tokens).toBe(expectedTokens(book, 17, 31).toString());
+    expect(read.body.statement.tokens).toBe(expectedTokens(book, 31, 31).toString());
 
     const page = await call<{
       statements: { month: string; tokens: string; closedBy: string }[];
@@ -339,7 +343,7 @@ describe("a month that has ended", () => {
       servicers: { lastClosed: { month: string }; yearToDate: { tokens: string } }[];
     }>("GET", "/servicers");
     expect(list.body.servicers[0]!.lastClosed.month).toBe("2026-08");
-    expect(list.body.servicers[0]!.yearToDate.tokens).toBe(expectedTokens(book, 17, 31).toString());
+    expect(list.body.servicers[0]!.yearToDate.tokens).toBe(expectedTokens(book, 31, 31).toString());
   });
 
   it("refuses to close a month still running, and the job closes the month before by default", async () => {

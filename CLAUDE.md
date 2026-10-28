@@ -321,10 +321,18 @@ UPB (25,000 tokens per $100,000, a token a cent; it was the self-improving
 row alone, 21 basis points, under 1.0) — and offer touches from the day it
 is watched from — `loans.watched_from`, the first
 of the month the tape was said to be for, or the load day (6 October: a
-tape loaded late is for the month it was for; the desk asks, and
-`npm run book:billed-from` moves a book loaded before it asked) — pro-rated
-by calendar day, and nothing else until it boards, which a servicer's own
-book never does here.
+tape loaded late is for the month it was for; the desk asks, with nothing
+pre-filled since 28 October, and `npm run book:billed-from` moves a book
+loaded before it asked) — **a month at a time, whole or not at all**, and
+nothing else until it boards, which a servicer's own book never does here.
+**A month is never pro-rated** (Drew, 28 October 2026): revenue is tracked
+as 25 basis points over twelve on a cohort's balance for every month the
+cohort is on the book, so a loan that arrives on the 25th is billed all of
+that month and one reported paid off on the 15th is billed all of that
+month too and nothing after. The meter pro-rated by calendar day until
+then and agreed with the tracker only because `watched_from` is a month's
+first day whenever a tape names its month. See `docs/decisions.md`, "A
+month is billed whole or not at all".
 `services/billing.ts` feeds it and keeps one append-only
 `billing_statements` row per servicer per month, closed by the
 `billing-close` job on the first at 06:00 Eastern (`npm run billing:close`)

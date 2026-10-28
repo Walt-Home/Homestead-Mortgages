@@ -10045,3 +10045,53 @@ sets the tag when it succeeds. To have the tag before then:
 `git push origin refs/tags/production`. The repository has no ruleset
 today; one that protects tags would have to let the workflow's token move
 `production`.
+
+## A month is billed whole or not at all
+
+The meter pro-rated a loan-month by calendar day, from `watched_from`, on the
+29 September reading of the sheet's "from the day it is loaded" — a loan loaded
+on the 23rd was eight thirtieths of a September. The revenue tracker the company
+actually runs on does no such thing. Its Revenue sheet carries one rate, `25 bps
+÷ 12`, applied to a cohort's balance for every month the cohort is on the book:
+the 25 October cohort of 389 loans and $91,192,288.93 bills $18,998.39 for
+October, the whole month, having arrived with six days left in it.
+
+Measured against that sheet before the change, on that cohort's balance:
+
+| `watched_from` | the meter  | the tracker |              |
+| -------------- | ---------- | ----------- | ------------ |
+| 1 October      | $18,998.39 | $18,998.39  | agreed       |
+| 5 October      | $16,546.99 | $18,998.39  | 12.9 % short |
+| 25 October     | $4,289.97  | $18,998.39  | 77.4 % short |
+
+The reason nobody had noticed is the first row. `billedFromOf` returns the
+**first** of the month a tape names, so `watched_from` is almost always a
+month's first day, the day count comes out as the whole month, and the pro-rata
+rule produced the whole-month answer by coincidence. It diverged only where
+`watched_from` was not a first: a load that named no month (the load day), a
+book moved by `book:billed-from` to a mid-month day, a loan reported paid off
+mid-month, and the running month, which the console drew accruing day by day
+toward a figure the tracker had shown in full since the 1st.
+
+So the rule is now in the code rather than emerging from it. `chargeLoan` asks
+three questions, none of them about a day of the month: has the month begun,
+was the loan watched on or before its end, and had it already gone before it
+started. The answer is the whole month or nothing. A loan reported paid off,
+transferred, charged off or matured is billed that month in full and nothing
+after it — Drew, 28 October 2026, asked directly: "a loan that is paid off mid
+month is billed the full month".
+
+Two things follow that are worth saying out loud. The running month now reads
+the same on the 2nd as on the 31st, because a whole-month charge is incurred
+when the month begins; `through` still reports how far the month has got, and
+no longer decides the charge. And the desk's month picker is no longer
+pre-filled with the month you are loading in — the one month a late tape is
+never for — because the gate only ever checked that the field held _a_ month,
+so a September book loaded in October was billed from October by nobody
+touching it.
+
+What this does not settle: the tracker holds each cohort's balance flat for
+every future month, while the meter reads the newest tape's interest-bearing
+UPB, which amortizes. The two agree on the month a cohort arrives and will
+drift apart after it. That is a question about what the tracker is for — a
+forecast or a ledger — and it is not answered here.

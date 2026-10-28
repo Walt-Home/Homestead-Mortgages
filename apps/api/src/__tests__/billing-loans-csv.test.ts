@@ -166,7 +166,8 @@ describe("a statement's loans, as a CSV", () => {
       loan_number: "NL-100001",
       watched_from: "2026-08-15",
       ended_on: "",
-      days_billed: "17",
+      // Watched from the 15th, billed the whole month.
+      days_billed: "31",
       days_in_month: "31",
       balance_as_of: "2026-08-01",
       balance_status: "current",

@@ -39,8 +39,9 @@ flowchart LR
 | ---------------- | --- | ------------------------------------------------------------------------------- |
 | The book         | 🟢  | 1,866 loans from five tapes, all as of 30 April 2026; one tape taken back       |
 | The daily review | 🟢  | Every loan, every morning since 26 October; 0 candidates at the fixture's 6.25% |
-| The charge       | 🟢  | September closed at $13,755.22; October $73,272.16 through the 28th             |
+| The charge       | 🟡  | On the whole principal: September $13,784.63 once reclosed, October $81,175.22  |
 | Invoice          | 🔴  | None. Grander has no billing profile, so none can be drafted                    |
+| The sheet        | 🟡  | $43.04/month apart: loan 1023991155 is off the book for a blank term            |
 | Portal           | 🔴  | No member invited                                                               |
 | Refinance offers | 🔴  | 0. The pricing port is a fixture                                                |
 | Homeowners       | 🔴  | 0 invited, 0 claimed. The switch is off on production, on purpose               |
@@ -99,8 +100,10 @@ mail, then a password.
   that respells numbers the book already holds is refused.
 - **Servicers.** Add a servicer before its first tape; manage its team,
   billing profile and bank account any day after.
-- **Billing.** The meter (25 basis points a year on balance, by day), one
-  statement per servicer per month, the run rate, and how each is computed.
+- **Billing.** The meter — 25 basis points a year on the whole principal,
+  interest-bearing plus deferred, a month at a time and never pro-rated by
+  day — one statement per servicer per month, the run rate, and how each is
+  computed.
   An invoice is drafted at Stripe, approved by one admin and sent by
   another; credit notes; void; paid by hand. Live at Stripe since 5 October.
 - **Partner book, Staff, Gym.** The book as we hold it; invitations and

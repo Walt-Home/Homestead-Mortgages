@@ -10195,3 +10195,31 @@ delete and a fresh close — `DELETE FROM billing_statements WHERE month = DATE
 '2026-09-01'` then `npm run billing:close -- 2026-09`. Nothing is invoiced off
 these rows yet, which is why the closed month is not being protected here
 (Drew, 28 October).
+
+## A term the tape leaves blank is counted, not refused
+
+Loan 1023991155 came in on Grander's October book with an empty Term cell.
+The reader refuses a row it cannot make a loan from, and a loan with no term
+is one of those, so the row made nothing: the mortgage was absent from the
+book, absent from the daily review, and absent from every statement. It is
+$43.04 a month, and it is the whole of what separates production from the
+revenue sheet now that the balance is right.
+
+The row was not short of information, though. `Date Payment Due First` and
+`Date Maturity` are both required columns and both were there, and the count
+of monthly payments between them _is_ the original term — a loan whose first
+payment falls in January 2000 and which matures in December 2029 runs 360 of
+them. So the reader counts them when the Term cell is blank. That is
+arithmetic on what the row already asserts, not a guess about somebody's
+mortgage, and it is the figure a term and those dates would have to agree on
+anyway.
+
+A stated term still wins; the count is only a fallback. A row carrying
+neither a term nor the dates is refused exactly as before, which is what
+`no_term` now means.
+
+This does not put 1023991155 on the book by itself. Its tape is already
+loaded, and the same bytes load once — so the loan arrives either on a tape
+carrying just that row, which the reader will now take, or by taking October's
+tape back and loading it again. The first is smaller and disturbs nothing
+else.

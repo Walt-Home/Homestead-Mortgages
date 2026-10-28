@@ -119,7 +119,11 @@ const TAPE_C = tape(
   (l) => ({
     as_of_date: "2026-10-31",
     servicer_loan_number: l.n === 11 ? null : number(l.n, 100),
-    ...(l.n === 12 ? { original_term_months: null } : {}),
+    // No term the reader can take: the cell is blank and so are the dates it
+    // would otherwise count the payments between.
+    ...(l.n === 12
+      ? { original_term_months: null, first_payment_date: null, maturity_date: null }
+      : {}),
   }),
   { billingMonth: "2026-10" },
 );

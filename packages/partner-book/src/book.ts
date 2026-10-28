@@ -409,6 +409,26 @@ export type Derived =
  * a derivation that drifted from the contract fails here and never reaches
  * a database.
  */
+/**
+ * The original term in months, counted as the payments from the first one to
+ * maturity: a loan whose first payment falls in January 2000 and which
+ * matures in December 2029 runs 360 of them. Null unless both dates are
+ * there and they make a positive count, so a row carrying neither a term nor
+ * the dates is still refused.
+ */
+function termFromDates(f: Record<string, Fact>): number | null {
+  const first = s(f["first_payment_date"]);
+  const maturity = s(f["maturity_date"]);
+  if (!first || !maturity) return null;
+  const fy = Number(first.slice(0, 4));
+  const fm = Number(first.slice(5, 7));
+  const my = Number(maturity.slice(0, 4));
+  const mm = Number(maturity.slice(5, 7));
+  if (!fy || !fm || !my || !mm) return null;
+  const months = (my - fy) * 12 + (mm - fm) + 1;
+  return months > 0 ? months : null;
+}
+
 export function deriveRecord(row: ParsedRow, servicerSlug: string, asOfDefault: string): Derived {
   const f = row.facts;
   const reject = (code: RowException["code"], column?: string): Derived => ({
@@ -435,7 +455,16 @@ export function deriveRecord(row: ParsedRow, servicerSlug: string, asOfDefault: 
   if (!line1 || !city || !state || !postalCode)
     return reject("no_property_address", "Property Address");
 
-  const termMonths = n(f["original_term_months"]);
+  // The term the tape states, or the term its own dates imply. A row that
+  // leaves the Term cell blank still carries the first payment date and the
+  // maturity date — both required — and the count of monthly payments
+  // between them IS the original term, so reading it off them is arithmetic
+  // on what the row already asserts rather than a guess about somebody's
+  // mortgage. One loan on Grander's October book, 1023991155, was refused
+  // for a blank Term and so was absent from the book and from every
+  // statement, worth $43.04 a month (28 October 2026).
+  const statedTerm = n(f["original_term_months"]);
+  const termMonths = statedTerm !== null && statedTerm > 0 ? statedTerm : termFromDates(f);
   if (!termMonths || termMonths <= 0) return reject("no_term", "Term");
 
   const upb = money(f["upb_cents"]);

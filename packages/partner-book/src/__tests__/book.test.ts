@@ -255,3 +255,57 @@ describe("splitting a name", () => {
     expect(splitName("Smith,")).toBe(null);
   });
 });
+
+describe("a term the tape leaves blank", () => {
+  /**
+   * One loan on Grander's October book, 1023991155, carried no Term and was
+   * refused, so it was absent from the book and from every statement — $43.04
+   * a month (28 October 2026). The row carried its first payment date and its
+   * maturity date all the same, both required columns, and the payments
+   * between them are the term. So the reader counts them rather than refusing
+   * a mortgage over an empty cell.
+   */
+  it("is counted from the first payment to maturity", () => {
+    const book = read(
+      sampleBook((l) =>
+        l.n === 1
+          ? {
+              original_term_months: null,
+              first_payment_date: "2000-01-01",
+              maturity_date: "2029-12-01",
+            }
+          : {},
+      ),
+    );
+    expect(book.exceptions.filter((e) => e.code === "no_term")).toEqual([]);
+    // Thirty years of monthly payments, inclusive of both ends.
+    expect(book.records[0]!.record.terms.termMonths).toBe(360);
+  });
+
+  it("does not override a term the tape states", () => {
+    const book = read(
+      sampleBook((l) =>
+        l.n === 1
+          ? {
+              original_term_months: 180,
+              first_payment_date: "2000-01-01",
+              maturity_date: "2029-12-01",
+            }
+          : {},
+      ),
+    );
+    expect(book.records[0]!.record.terms.termMonths).toBe(180);
+  });
+
+  it("still refuses a row that carries neither a term nor the dates", () => {
+    // The columns are there and the cells are not, which is the real case.
+    const book = read(
+      sampleBook((l) =>
+        l.n === 1
+          ? { original_term_months: null, first_payment_date: null, maturity_date: null }
+          : {},
+      ),
+    );
+    expect(book.exceptions.some((e) => e.code === "no_term")).toBe(true);
+  });
+});

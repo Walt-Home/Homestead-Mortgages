@@ -335,6 +335,10 @@ tape loaded late is for the month it was for; the desk asks, with nothing
 pre-filled since 28 October, and `npm run book:billed-from` moves a book
 loaded before it asked) — **a month at a time, whole or not at all**, and
 nothing else until it boards, which a servicer's own book never does here.
+The balance is `servicing_observations.total_principal_balance_cents`, which
+is `NOT NULL`: a missing total could only mean an unfinished backfill, and
+billing the interest-bearing figure in its place undercharges a servicer
+while reporting success.
 **A month is never pro-rated** (Drew, 28 October 2026): revenue is tracked
 as 25 basis points over twelve on a cohort's balance for every month the
 cohort is on the book, so a loan that arrives on the 25th is billed all of

@@ -151,9 +151,10 @@ async function meteredBook(
       status: o.status.toLowerCase() as ObservedStatus,
       // The whole principal the homeowner owes, deferred included, which is
       // what the revenue tracker's cohort balances are and so what the book
-      // is billed on (28 October 2026). A row from before the column carries
-      // no total and is read as the interest-bearing figure it was billed on.
-      principalBalanceCents: o.totalPrincipalBalanceCents ?? o.principalBalanceCents,
+      // is billed on (28 October 2026). The column is NOT NULL, deliberately:
+      // there is no interest-bearing figure to fall back to here, because
+      // falling back would undercharge a servicer and report success.
+      principalBalanceCents: o.totalPrincipalBalanceCents,
     });
     byLoan.set(o.loanId, list);
   }

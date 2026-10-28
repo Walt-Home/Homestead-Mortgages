@@ -10131,9 +10131,16 @@ column, because a sum cannot disagree with its parts. It is stored as
 `total_principal_balance_cents` on each observation, backfilled for every row
 the book already held, with a CHECK that the whole is never less than the part
 that bears interest. Both figures stay on the row, so a page can still show
-what a servicer's own fee is earned on; only the meter's basis moved. A row
-from before the column reads as the interest-bearing figure alone, which is
-what it was billed on.
+what a servicer's own fee is earned on; only the meter's basis moved.
+
+The column is `NOT NULL` (`a_billed_balance_is_never_a_guess`). It was
+nullable for an hour, with the readers falling back to the interest-bearing
+figure for a row written before it existed, and that fallback is a trap: a
+null can only mean a backfill that did not finish, and reading through it
+bills the old basis on every loan while reporting success. The half-state
+above was exactly that, and promoting it would have undercharged a servicer
+silently. The database refuses a null now, so no reader has anything to guess
+with.
 
 What this does not settle: whether 25 basis points on deferred principal is
 the right price. It is what the revenue sheet charges, and the sheet is the
@@ -10150,11 +10157,19 @@ Error: P3018 … ERROR: servicing_observations is append-only (UPDATE on 810fd9e
 The backfill was a plain `UPDATE` against a table that is append-only by
 trigger. It passed in development only because that table was empty there, so
 the `UPDATE` touched no row and the trigger never fired — a backfill proves
-nothing against an empty table. Nothing was changed by the failure: Prisma
-wraps a migration in a transaction, so the `ADD COLUMN` rolled back with it,
-and the only residue is the failed row in `_prisma_migrations`. But Prisma
-refuses every later migration while that row stands, so **the production
-promotion will stop at its `migrate deploy` step** until:
+nothing against an empty table.
+
+**It did not roll back, and the first account of this said it had.** Prisma
+does not wrap this migration in one transaction: the record read
+`applied_steps_count = 0` while the column was there all the same, so
+production sat with the column added, 1,866 of 1,866 rows null, and no CHECK,
+because the statements after the failed `UPDATE` never ran. The column was
+dropped by hand and the record resolved before the migration was applied
+properly. Anyone recovering a failed migration here should read the table
+rather than trust the step count, because the two disagree.
+
+Prisma also refuses every later migration while a failed row stands, so **a
+production promotion stops at its `migrate deploy` step** until:
 
 ```
 npx prisma migrate resolve --rolled-back 20261028120000_a_book_is_billed_on_the_whole_principal

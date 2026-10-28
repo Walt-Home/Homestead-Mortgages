@@ -2256,9 +2256,11 @@ model ServicingObservation {
   principalBalanceCents      BigInt    @map("principal_balance_cents")
   /// Interest-bearing plus deferred: the whole principal the homeowner owes,
   /// and what we bill on (28 October 2026 — the revenue tracker's cohort
-  /// balances are this figure, to the cent). Null for a row written before
-  /// the column, which is read as the interest-bearing figure alone.
-  totalPrincipalBalanceCents BigInt?   @map("total_principal_balance_cents")
+  /// balances are this figure, to the cent). Never null, so that no reader
+  /// has a figure to fall back to: a missing total could only mean a
+  /// backfill that did not finish, and billing the interest-bearing figure
+  /// in its place undercharges a servicer while reporting success.
+  totalPrincipalBalanceCents BigInt    @map("total_principal_balance_cents")
   escrowBalanceCents         BigInt?   @map("escrow_balance_cents")
   scheduledPaymentCents      BigInt?   @map("scheduled_payment_cents")
   /// The rate as the servicer states it, to the thousandth of a percent —

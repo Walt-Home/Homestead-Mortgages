@@ -620,6 +620,7 @@ describe("one writer to a book at a time", () => {
         asOf: true,
         status: true,
         principalBalanceCents: true,
+        totalPrincipalBalanceCents: true,
         recordHash: true,
       },
     });

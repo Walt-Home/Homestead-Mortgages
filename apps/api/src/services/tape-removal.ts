@@ -306,11 +306,31 @@ export interface TapeRemovalRecord {
   readonly removedAt: string;
 }
 
+/** A refused row no tape has since carried onto the book, and where it came from. */
+export interface OutstandingRow extends RefusedRow {
+  readonly tapeId: string;
+  readonly tapeAsOf: string;
+  readonly tapeFilename: string | null;
+}
+
 export interface BookTapes {
   readonly servicer: { readonly slug: string; readonly displayName: string };
   readonly loansOnBook: number;
   readonly tapes: readonly BookTape[];
   readonly removals: readonly TapeRemovalRecord[];
+  /**
+   * The loans the book is missing: a row some tape refused whose number is
+   * still not on the book, or that carried no readable number at all.
+   *
+   * Per-tape refusals are history — what one delivery could not read. This
+   * is the part that is still true, and it stays here until a tape carries
+   * the loan. A refused row is a mortgage nobody bills: 1023991155 was
+   * refused for a blank term on Grander's October book and sat unnoticed
+   * for two days, $65.05 a month of a gap against the revenue sheet, listed
+   * all along under the tape that refused it and under nothing that said it
+   * was still outstanding (28 October 2026).
+   */
+  readonly outstanding: readonly OutstandingRow[];
   /** The tapes' loans, less what removals took, against the book: `adds` when they agree. */
   readonly check: {
     readonly created: number;
@@ -508,6 +528,42 @@ export async function bookTapes(slug: string, db: Db = prisma): Promise<BookTape
     };
   });
 
+  // A refused row is outstanding until a tape carries its loan. Ask the book
+  // once for every number any tape refused; a row with no readable number
+  // can never be matched, so it stays outstanding until somebody looks.
+  const refusedNumbers = [
+    ...new Set(exceptions.map((e) => e.number).filter((n): n is string => !!n)),
+  ];
+  const onBook = new Set(
+    refusedNumbers.length === 0
+      ? []
+      : (
+          await db.loan.findMany({
+            where: { servicerId: servicer.id, servicerLoanNumber: { in: refusedNumbers } },
+            select: { servicerLoanNumber: true },
+          })
+        ).map((l) => l.servicerLoanNumber!),
+  );
+  const byId = new Map(imports.map((i) => [i.id, i] as const));
+  const outstanding: OutstandingRow[] = [];
+  for (const [importId, rows] of refusedBy) {
+    const tape = byId.get(importId);
+    if (!tape) continue;
+    for (const r of rows.values()) {
+      if (r.number !== null && onBook.has(r.number)) continue;
+      outstanding.push({
+        ...r,
+        tapeId: importId,
+        tapeAsOf: isoDay(tape.asOf),
+        tapeFilename: tape.tapeFilename,
+      });
+    }
+  }
+  // Newest tape first, then tape order, so the most recent delivery's gaps read first.
+  outstanding.sort((a, b) =>
+    a.tapeAsOf === b.tapeAsOf ? a.row - b.row : a.tapeAsOf < b.tapeAsOf ? 1 : -1,
+  );
+
   const created =
     imports.reduce((n, i) => n + i.loansCreated, 0) +
     removals.reduce((n, r) => n + r.loansCreated, 0);
@@ -517,6 +573,7 @@ export async function bookTapes(slug: string, db: Db = prisma): Promise<BookTape
     loansOnBook,
     tapes,
     removals: removals.map(removalRecord),
+    outstanding: outstanding.slice(0, REFUSED_SHOWN),
     check: { created, removed, loansOnBook, adds: created - removed === loansOnBook },
   };
 }

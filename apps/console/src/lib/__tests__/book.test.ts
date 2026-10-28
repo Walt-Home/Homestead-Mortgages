@@ -127,6 +127,7 @@ describe("the book adds up", () => {
       tape({ id: "f", loansCreated: 362, loansStillOnBook: 362 }),
     ],
     removals: [],
+    outstanding: [],
     check: { created: 2111, removed: 0, loansOnBook: 2111, adds: true },
   };
 

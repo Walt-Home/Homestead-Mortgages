@@ -172,6 +172,15 @@ interface Tapes {
     removedByName: string | null;
     removedAt: string;
   }[];
+  outstanding: {
+    row: number;
+    number: string | null;
+    code: string;
+    column: string | null;
+    tapeId: string;
+    tapeAsOf: string;
+    tapeFilename: string | null;
+  }[];
   check: { created: number; removed: number; loansOnBook: number; adds: boolean };
 }
 
@@ -873,5 +882,64 @@ describe("renumbering a book stored in scientific notation", () => {
     const next = await preview();
     expect(next.body.nearDuplicates.count).toBe(0);
     expect(next.body.counts.created).toBe(0);
+  });
+});
+
+describe("the loans the book is missing", () => {
+  it("names every refused row no tape has since carried, and lets one go when a tape does", async () => {
+    const { c, d } = await book();
+    const r = await tapes();
+
+    // Tape C refused two rows — row 11 carries no number, row 12 no term —
+    // and tape D refused nine. None of those loans is on the book, so every
+    // one of them is still outstanding.
+    expect(r.outstanding).toHaveLength(11);
+    expect(r.outstanding.filter((o) => o.tapeId === c)).toHaveLength(2);
+    expect(r.outstanding.filter((o) => o.tapeId === d)).toHaveLength(9);
+
+    // The newest tape's gaps read first, and each row says which tape it
+    // came from and why it was refused, which is what chasing one needs.
+    expect(r.outstanding[0]!.tapeAsOf).toBe("2026-10-31");
+    expect(r.outstanding).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          number: number(12, 100),
+          code: "no_term",
+          column: "Term",
+          tapeId: c,
+          tapeFilename: "october.csv",
+        }),
+      ]),
+    );
+
+    // The loan refused for a blank term, delivered again with the term filled
+    // in. It joins the book and stops being outstanding; the refusal stays on
+    // tape C, because that is what tape C did.
+    await load(
+      tape(
+        "october-fixed.csv",
+        // Every row numbered, so this delivery refuses nothing of its own:
+        // loan 12 under the number tape C could not load, the rest fresh.
+        (l) => ({
+          as_of_date: "2026-10-31",
+          servicer_loan_number: l.n === 12 ? number(12, 100) : number(l.n, 500),
+        }),
+        { billingMonth: "2026-10" },
+      ),
+    );
+    const after = await tapes();
+    expect(after.outstanding.some((o) => o.number === number(12, 100))).toBe(false);
+    expect(after.outstanding).toHaveLength(10);
+    // Tape C still reports what it refused: history does not change.
+    const tc = after.tapes.find((t) => t.id === c)!;
+    expect(tc.rowsRefused).toBe(2);
+    expect(tc.refused.map((x) => x.code)).toContain("no_term");
+  });
+
+  it("is empty for a book every tape loaded whole", async () => {
+    await load(TAPE_A);
+    const r = await tapes();
+    expect(r.tapes).toHaveLength(1);
+    expect(r.outstanding).toEqual([]);
   });
 });

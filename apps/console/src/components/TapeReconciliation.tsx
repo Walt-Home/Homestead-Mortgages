@@ -356,10 +356,50 @@ export function TapeReconciliation({ slug }: { slug: string }) {
         </Notice>
       )}
 
+      {data.outstanding.length ? (
+        <section>
+          <h3 className="mb-2 text-sm font-medium text-fg">
+            {plural(data.outstanding.length, "loan")} the book is missing
+          </h3>
+          <p className="mb-3 max-w-prose text-sm text-fg-2">
+            A row a tape refused whose loan is still not on the book. Each one is a mortgage nothing
+            bills, and it stays here until a tape carries it &mdash; ask the servicer to send the
+            loan again with what the reader could not read filled in.
+          </p>
+          <div className="overflow-hidden rounded-lg border border-warn/25 bg-surface">
+            <Table
+              dense
+              columns={[
+                {
+                  key: "number",
+                  header: "Loan number",
+                  primary: true,
+                  mono: true,
+                  render: (r) => r.number ?? <span className="text-fg-3">None readable</span>,
+                },
+                { key: "why", header: "Why", render: (r) => refusalWords(r.code, r.column) },
+                {
+                  key: "tape",
+                  header: "Refused by",
+                  render: (r) => (
+                    <span className="break-all text-fg-2">
+                      {r.tapeFilename ?? fmtDate(r.tapeAsOf)}
+                    </span>
+                  ),
+                },
+                { key: "row", header: "Row", mono: true, align: "right", render: (r) => r.row },
+              ]}
+              rows={data.outstanding}
+              rowKey={(r) => `${r.tapeId}-${r.row}`}
+            />
+          </div>
+        </section>
+      ) : null}
+
       {refused.length ? (
         <section>
           <h3 className="mb-2 text-sm font-medium text-fg">
-            {plural(refused.length, "row")} the load refused
+            {plural(refused.length, "row")} the load refused, tape by tape
           </h3>
           <div className="overflow-hidden rounded-lg border border-line-2 bg-surface">
             <Table

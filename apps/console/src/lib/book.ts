@@ -48,6 +48,13 @@ export interface TapeRefusal {
   readonly column: string | null;
 }
 
+/** A refused row no tape has since carried onto the book, and the tape it came from. */
+export interface OutstandingRow extends TapeRefusal {
+  readonly tapeId: string;
+  readonly tapeAsOf: string;
+  readonly tapeFilename: string | null;
+}
+
 /** One tape loaded onto the book, and what of it is still there. */
 export interface ReconciledTape {
   readonly id: string;
@@ -107,6 +114,14 @@ export interface TapeReconciliation {
   /** Oldest first. */
   readonly tapes: readonly ReconciledTape[];
   readonly removals: readonly TapeRemoval[];
+  /**
+   * The loans the book is missing: a row some tape refused whose number is
+   * still not on the book, or that carried no readable number at all. The
+   * per-tape refusals are what one delivery could not read; this is what is
+   * still true, and it stays until a tape carries the loan. A loan that
+   * never reaches the book never reaches a statement.
+   */
+  readonly outstanding: readonly OutstandingRow[];
   /** Every loan a tape created, less every loan a removal took, is the book. */
   readonly check: {
     readonly created: number;

@@ -43,6 +43,12 @@ claims to look like a subservicer's.
 data has, each with its public evidence, how to plant it in synthetic data and
 what should catch it.
 
+`docs/product-suite.md` is the product list: every product in this repo,
+where it stands for us and for Grander, green / yellow / red, and which vendor
+is real on each environment. Read it before answering "what works today",
+and **update it in the commit that changes what it says**, like
+`docs/du-readiness.md`.
+
 `docs/environments.md` is the training and evaluation environments in
 `packages/environments`: a task, primitive tools, and a grader that is the
 engine itself, on synthetic loans only. Read it before changing

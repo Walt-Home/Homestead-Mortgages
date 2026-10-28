@@ -133,7 +133,13 @@ async function meteredBook(
     }),
     db.servicingObservation.findMany({
       where: { loan: { servicerId }, asOf: { lte: dateOf(monthEnd) } },
-      select: { loanId: true, asOf: true, status: true, principalBalanceCents: true },
+      select: {
+        loanId: true,
+        asOf: true,
+        status: true,
+        principalBalanceCents: true,
+        totalPrincipalBalanceCents: true,
+      },
       orderBy: { asOf: "asc" },
     }),
   ]);
@@ -143,7 +149,11 @@ async function meteredBook(
     list.push({
       asOf: isoDay(o.asOf),
       status: o.status.toLowerCase() as ObservedStatus,
-      principalBalanceCents: o.principalBalanceCents,
+      // The whole principal the homeowner owes, deferred included, which is
+      // what the revenue tracker's cohort balances are and so what the book
+      // is billed on (28 October 2026). A row from before the column carries
+      // no total and is read as the interest-bearing figure it was billed on.
+      principalBalanceCents: o.totalPrincipalBalanceCents ?? o.principalBalanceCents,
     });
     byLoan.set(o.loanId, list);
   }

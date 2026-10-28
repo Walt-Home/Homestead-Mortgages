@@ -316,8 +316,12 @@ its own sums by tests, plus one rule changed as version 1.1 on 7 October —
 and the tape meter over it: a monitored loan on a partner's book consumes
 the whole standard servicing cycle — every section A row, the monthly
 ones per loan-month and the two annual ones a twelfth each month, one
-statement line each, adding to 25 basis points a year on interest-bearing
-UPB (25,000 tokens per $100,000, a token a cent; it was the self-improving
+statement line each, adding to 25 basis points a year on the whole
+principal — interest-bearing plus deferred, `servicing_observations.
+total_principal_balance_cents`, which is the figure the revenue tracker's
+cohort balances carry (28 October 2026; it was the interest-bearing column
+alone until then, $51.49 a month short across Grander's book)
+(25,000 tokens per $100,000, a token a cent; it was the self-improving
 row alone, 21 basis points, under 1.0) — and offer touches from the day it
 is watched from — `loans.watched_from`, the first
 of the month the tape was said to be for, or the load day (6 October: a

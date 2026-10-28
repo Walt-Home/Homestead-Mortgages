@@ -63,6 +63,17 @@ import { toDomainLoanState } from "./loan-transition.js";
 import { createImportedLoans } from "./loans.js";
 import { assertPartnerFactsMany, createProvisionalParties, type PartnerFact } from "./party.js";
 
+/** A tape's deferred principal for one row: absent, blank or unreadable is none. */
+function deferredOf(cell: unknown): bigint {
+  if (cell === null || cell === undefined || cell === "") return 0n;
+  try {
+    const n = BigInt(cell as string | number);
+    return n > 0n ? n : 0n;
+  } catch {
+    return 0n;
+  }
+}
+
 export interface ImportBookInput {
   readonly servicerId: string;
   /** The PARTNER principal every row this import causes is attributed to. */
@@ -489,6 +500,12 @@ async function load(
             asOf: dateOf(sv.asOf.slice(0, 10)),
             status: enumOf<ServicingStatus>(sv.status)!,
             principalBalanceCents: sv.principalBalanceCents,
+            // The whole principal, which is what the book is billed on: the
+            // interest-bearing figure plus whatever a modification or a
+            // partial claim deferred. Summed rather than read off the tape's
+            // own Total column, so it cannot disagree with its parts.
+            totalPrincipalBalanceCents:
+              sv.principalBalanceCents + deferredOf(p.facts["deferred_upb_cents"]),
             escrowBalanceCents: sv.escrowBalanceCents,
             scheduledPaymentCents: sv.scheduledPaymentCents,
             currentRatePct: sv.currentRatePct,

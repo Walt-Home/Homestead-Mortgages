@@ -2251,14 +2251,21 @@ model ServicingObservation {
   asOf   DateTime        @map("as_of") @db.Date
   status ServicingStatus
 
-  principalBalanceCents BigInt    @map("principal_balance_cents")
-  escrowBalanceCents    BigInt?   @map("escrow_balance_cents")
-  scheduledPaymentCents BigInt?   @map("scheduled_payment_cents")
+  /// The interest-bearing balance, which is what the tape's "Interest Bearing
+  /// UPB" column says and what a servicer's own fee is earned on.
+  principalBalanceCents      BigInt    @map("principal_balance_cents")
+  /// Interest-bearing plus deferred: the whole principal the homeowner owes,
+  /// and what we bill on (28 October 2026 — the revenue tracker's cohort
+  /// balances are this figure, to the cent). Null for a row written before
+  /// the column, which is read as the interest-bearing figure alone.
+  totalPrincipalBalanceCents BigInt?   @map("total_principal_balance_cents")
+  escrowBalanceCents         BigInt?   @map("escrow_balance_cents")
+  scheduledPaymentCents      BigInt?   @map("scheduled_payment_cents")
   /// The rate as the servicer states it, to the thousandth of a percent —
   /// the unit a note is quoted in. The loan's integer-bps column rounds.
-  currentRatePct        Decimal?  @map("current_rate_pct") @db.Decimal(6, 3)
-  nextPaymentDueOn      DateTime? @map("next_payment_due_on") @db.Date
-  delinquencyDays       Int?      @map("delinquency_days")
+  currentRatePct             Decimal?  @map("current_rate_pct") @db.Decimal(6, 3)
+  nextPaymentDueOn           DateTime? @map("next_payment_due_on") @db.Date
+  delinquencyDays            Int?      @map("delinquency_days")
 
   facts      Json
   recordHash String @map("record_hash")

@@ -426,3 +426,101 @@ describe("the annual token pool", () => {
     ).toBe(400);
   });
 });
+
+describe("a book with deferred principal", () => {
+  /**
+   * The revenue tracker's cohort balances are the tape's Total UPB —
+   * interest-bearing plus whatever a modification or a partial claim
+   * deferred — and the meter billed the interest-bearing figure alone until
+   * 28 October 2026. On Grander's September tape the difference is
+   * $141,521.62 against $66,024,686.13, and the tracker's figure for that
+   * cohort is their sum.
+   */
+  /** `deferredDollars` is the tape's own unit; its cells are dollars and the facts are cents. */
+  async function bookWithDeferred(deferredDollars: number) {
+    const servicer = await prisma.servicer.create({
+      data: { slug: NORTHLIGHT.slug, displayName: NORTHLIGHT.legal_name, integrationDepth: "API" },
+      select: { id: true, slug: true },
+    });
+    const principalId = await partnerPrincipal(prisma, servicer.slug);
+    const book = sampleBook(() => ({
+      as_of_date: TAPE_AS_OF,
+      deferred_upb_cents: deferredDollars,
+    }));
+    const imported = await importPartnerBook({
+      servicerId: servicer.id,
+      principalId,
+      profile: "m3-v1",
+      billedFrom: LOADED_ON.toISOString().slice(0, 10),
+      tape: { filename: "northlight.xlsx", bytes: book.tape },
+      supplement: { filename: "supplement.csv", bytes: utf8(book.supplement) },
+    });
+    if (imported.status !== "loaded") throw new Error(imported.status);
+    return { servicer, book };
+  }
+
+  it("bills the interest-bearing balance plus the deferred, not the interest-bearing alone", async () => {
+    const DEFERRED = 100_000n; // $1,000 a loan, in cents
+    const { servicer, book } = await bookWithDeferred(1_000);
+    const interestBearing = book.loans.reduce((n, l) => n + BigInt(l.upb_cents), 0n);
+    const whole = interestBearing + DEFERRED * BigInt(book.loans.length);
+
+    const s = await statementFor({ slug: servicer.slug, month: plainDate("2026-08-01") }, prisma);
+    // The statement's balance is the whole principal, and the charge is read
+    // from it: every loan a whole August, as every month is billed.
+    expect(s.statement.balanceCents).toBe(whole.toString());
+    expect(s.statement.loansBilled).toBe(12);
+    const onWhole = book.loans.reduce(
+      (n, l) =>
+        n +
+        CYCLE_CODES.map(priceRow).reduce(
+          (t, r) =>
+            t +
+            tokensForBalance(
+              BigInt(l.upb_cents) + DEFERRED,
+              r.tokens,
+              31,
+              31,
+              monthsPer(r.cadence),
+            ),
+          0n,
+        ),
+      0n,
+    );
+    expect(s.statement.tokens).toBe(onWhole.toString());
+    // And it is strictly more than the interest-bearing figure would have been.
+    expect(BigInt(s.statement.tokens)).toBeGreaterThan(expectedTokens(book, 31, 31));
+
+    // The observation keeps both figures, so a page can still show what the
+    // servicer's own fee is earned on.
+    const o = await prisma.servicingObservation.findFirstOrThrow({
+      where: { loan: { servicerId: servicer.id } },
+      select: { principalBalanceCents: true, totalPrincipalBalanceCents: true },
+    });
+    expect(o.totalPrincipalBalanceCents).toBe(o.principalBalanceCents + DEFERRED);
+  });
+
+  it("bills Grander's September cohort what the revenue sheet bills it", async () => {
+    // The real figures, read off production on 28 October 2026: 245 loans,
+    // $66,024,686.13 interest-bearing, $141,521.62 deferred. The sheet bills
+    // 25 bps over twelve on the sum.
+    const INTEREST_BEARING = 6_602_468_613n;
+    const DEFERRED = 14_152_162n;
+    const whole = INTEREST_BEARING + DEFERRED;
+    const sheetCents = 1_378_463n; // $13,784.63, the tracker's September figure
+    const tokens = CYCLE_CODES.map(priceRow).reduce(
+      (t, r) => t + tokensForBalance(whole, r.tokens, 30, 30, monthsPer(r.cadence)),
+      0n,
+    );
+    // Within a cent of the sheet: the sheet rounds once, the meter rounds per row.
+    expect(Number(tokens - sheetCents)).toBeGreaterThanOrEqual(-1);
+    expect(Number(tokens - sheetCents)).toBeLessThanOrEqual(1);
+    // And the interest-bearing figure alone would have been short by the
+    // deferred principal's own charge.
+    const short = CYCLE_CODES.map(priceRow).reduce(
+      (t, r) => t + tokensForBalance(INTEREST_BEARING, r.tokens, 30, 30, monthsPer(r.cadence)),
+      0n,
+    );
+    expect(tokens - short).toBeGreaterThan(0n);
+  });
+});

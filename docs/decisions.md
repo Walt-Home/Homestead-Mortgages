@@ -10095,3 +10095,46 @@ every future month, while the meter reads the newest tape's interest-bearing
 UPB, which amortizes. The two agree on the month a cohort arrives and will
 drift apart after it. That is a question about what the tracker is for — a
 forecast or a ledger — and it is not answered here.
+
+## A book is billed on the whole principal, deferred included
+
+The meter billed `principal_balance_cents`, the tape's "Interest Bearing UPB"
+column, on the 29 September reading that a servicer's own fee is earned on that
+figure. The revenue tracker the company runs on uses the tape's Total UPB.
+Between them sits the principal a modification or a partial claim deferred,
+which the homeowner still owes.
+
+Read off production on 28 October 2026, every tape with all three figures:
+
+| cohort    | interest-bearing | deferred    | total          |
+| --------- | ---------------- | ----------- | -------------- |
+| 245 loans | $66,024,686.13   | $141,521.62 | $66,166,207.75 |
+| 430 loans | $70,973,111.01   | $20,610.50  | $70,993,721.51 |
+| 362 loans | $77,349,422.10   | $48,091.09  | $77,397,513.19 |
+| 440 loans | $83,860,413.81   | $30,888.64  | $83,891,302.45 |
+| 389 loans | $91,186,246.97   | $6,041.96   | $91,192,288.93 |
+
+The tracker's cohort balances are the right-hand column: $66,166,208,
+$83,891,302.45 and $91,192,288.93 are its own figures for three of these, to
+the cent. So the sheet was never disagreeing with us about arithmetic — it was
+billing a different balance.
+
+Across the book: $389,393,880.02 interest-bearing against $389,641,033.83
+whole, which at 25 basis points over twelve is $81,123.73 a month against
+$81,175.22. The remaining $43.04 to the tracker's $81,218.26 is loan
+1023991155, refused for a blank term and on no tape — the same loan the
+tapes page now lists as outstanding. Loading it closes the gap exactly.
+
+The figure is **derived, not read**: interest-bearing plus deferred, both of
+which every row already carries in `facts`, rather than the tape's own Total
+column, because a sum cannot disagree with its parts. It is stored as
+`total_principal_balance_cents` on each observation, backfilled for every row
+the book already held, with a CHECK that the whole is never less than the part
+that bears interest. Both figures stay on the row, so a page can still show
+what a servicer's own fee is earned on; only the meter's basis moved. A row
+from before the column reads as the interest-bearing figure alone, which is
+what it was billed on.
+
+What this does not settle: whether 25 basis points on deferred principal is
+the right price. It is what the revenue sheet charges, and the sheet is the
+company's own record of what the book earns, so it is what the code now does.

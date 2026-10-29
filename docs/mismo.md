@@ -1,11 +1,23 @@
-# MISMO, and what it can do for Grander
+# MISMO, and what our data can do for Grander
 
-What MISMO is, what we already do with it, and where mortgage and
-application data can add value for Grander, ranked, with the simplest
-version of each. Researched 29 October 2026; sources at the end.
+What Supermortgage can do for Grander now, with what is built. Then what
+MISMO is, what we already do with it, and where mortgage and application
+data can add value, ranked, with the simplest version of each. Researched
+29 October 2026; sources at the end.
 
 ## Bottom line
 
+- **Two things work on Grander's book today, and nobody at Grander can see
+  them.** Every morning each loan gets a verdict on whether it can leave,
+  and every tape is checked before it is believed. Both are in the Servicer
+  Portal, and no one at Grander has been invited yet.
+- **Two checks on Grander's servicer are one mapping away.** Our engines
+  already compute when mortgage insurance must end and when a delinquent
+  borrower must be called. Grander's tape carries every input either one
+  needs.
+- **Keeping refinancing borrowers waits on one vendor.** The review, the
+  offer, the prefilled application and the casefile are built. With pricing
+  a fixture, no loan is a candidate.
 - **MISMO is how mortgage systems talk at the door, not how they work
   inside.** It is one reference model (3.6.3, June 2026) and datasets cut
   from it: the application (ULAD and iLAD, on 3.4), the closing (UCD),
@@ -20,10 +32,9 @@ version of each. Researched 29 October 2026; sources at the end.
   model.** When a homeowner says yes, Grander gets a file its systems can
   open. And what homeowners tell us gives Grander a fresher read of its own
   loans. Reading a tape in MISMO can wait until a servicer sends one.
-- **None of it pays until homeowners arrive.** No offer can open while
-  pricing is a fixture. No homeowner is invited while homeowner mail is off
-  on production. One part of the book refresh, a current value per loan,
-  needs no homeowner.
+- **The MISMO moves pay only once homeowners arrive.** No offer can open
+  while pricing is a fixture. One part of the book refresh, a current value
+  per loan, needs no homeowner.
 
 ## Grander, in one paragraph
 
@@ -40,7 +51,42 @@ How much that first gain is worth: servicers keep about one refinancing
 borrower in three. ICE measured 32% in the first quarter of 2026, and 37% on
 rate-and-term refinances. The rest pay the loan off to another lender.
 
-## Three moves, ranked
+## Now, with what is built
+
+🟢 working on Grander's book today · 🟡 built, one thing missing
+
+### For Grander, as a servicer
+
+|     | What Grander gets                                                                                                                                                                                                                                                                                                                    | Built                                                                                                                                                                                                                            | Missing                                                               |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| 🟢  | **Which loans can leave.** Every loan gets a verdict each morning, with its reason in words: candidate; watching (current and eligible, but the numbers are not there yet); not now; or excluded (bankruptcy, foreclosure, delinquent, loss mitigation). On 28 October 15 loans were watching: they move first when rates fall.      | The daily review, on production since 26 October; the verdict on each loan's page in the Servicer Portal                                                                                                                         | An invitation to Grander's team                                       |
+| 🟢  | **A check on every tape.** Each tape says what it made, what it refused, and why. Grander's tapes have already shown loan numbers written in scientific notation, a re-export that would have made 245 loans twice, a loan with no term, and values more than 24 months old.                                                         | The tape desk and the book's tapes page                                                                                                                                                                                          | The same invitation                                                   |
+| 🟡  | **Mortgage insurance that should have ended.** The Homeowners Protection Act ends borrower-paid PMI when the scheduled balance first reaches 78% of the original value, or at the loan's midpoint, if the borrower is current. A loan still paying after that date means a refund is owed and the servicer has a finding against it. | Our PMI engine finds that date to the cent (`buildSchedule`, `scheduledDateForPct`, `midpoint`). The tape carries every input: PMI flag, original value, balance, rate and term, first payment, occupancy, loan type, pay string | Mapping the tape's columns into the engine, and a list on the portal  |
+| 🟡  | **Delinquent loans nobody called.** Regulation X requires live contact by the 36th day of a delinquency and a written notice by the 45th.                                                                                                                                                                                            | Our early-intervention engine computes the windows. The tape carries the next due date, the last contact date, bankruptcy and foreclosure                                                                                        | The same: the mapping and a list                                      |
+| 🟡  | **Keep the borrowers who refinance.** A candidate becomes an offer, and a yes becomes an application with Grander as the creditor.                                                                                                                                                                                                   | The review, the offer, the five screens, the DU casefile                                                                                                                                                                         | A pricing vendor. The fixture quotes 6.25%, so no loan is a candidate |
+
+The two checks read a monthly snapshot, so each flag is a question to put
+to Grander's servicer, not a finding.
+
+### For Grander's borrowers
+
+|     | What the borrower gets                                                                                                                                                                                                                                                                                                           | Built                                     | Missing                                                                                                                |
+| --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| 🟢  | **Their mortgage on a page, sent by Grander.** A single-use link claims the loan. The page shows the loan, each morning's verdict in plain words, and any offer. Grander mints the links with its partner key and sends them in its own statements or mail; our homeowner-mail switch is not in that path.                       | The claim, the loan page, the partner key | Grander choosing to send them. It is worth more once an offer can open                                                 |
+| 🟡  | **Mortgage insurance off on time.** The payment drops by the premium, and anything paid after the date comes back.                                                                                                                                                                                                               | The PMI engine, as above                  | The mapping and the list                                                                                               |
+| 🟡  | **An offer only when it helps, and no nagging.** An offer opens only when the rate cut clears the floor, the savings over the holding period are positive and the seven-year cost is lower, and it carries the benefit disclosure. "Not now" holds for 90 days, "never" holds for good, and there are at most two offers a year. | All of it                                 | The pricing vendor                                                                                                     |
+| 🟡  | **A refinance that starts filled in.** A yes opens the application with the property, occupancy, value, balance and payment already answered. The borrower states an income and starts on screen 2. The bank report (Plaid) and the property record (CoreLogic) are live.                                                        | The five screens, prefilled from the loan | A credit vendor, and the step that decides whether an income continues. Until both exist, every decision ends Referred |
+
+### Do first
+
+1. **Invite Grander's team to the Servicer Portal.** This needs no build.
+   They see each loan's verdict and every tape's check the day they sign in.
+2. **Run the PMI and early-intervention checks over the book** and give
+   Grander the list. It is a small build, and the first thing that finds
+   money for Grander's borrowers.
+3. **Sign a pricing vendor.** Every retention row above waits on it.
+
+## MISMO: three moves, ranked
 
 | #   | Move                         | Data flow                        | Grander gets                                               | Effort                    |
 | --- | ---------------------------- | -------------------------------- | ---------------------------------------------------------- | ------------------------- |
@@ -165,7 +211,7 @@ field lists for the Loan Boarding Data Segment and iLAD 2.5. Grander needs
 no license, because it uses MISMO only through vendor software. So: one
 membership for us, bought before move 1 reaches a real borrower.
 
-## What to do, in order
+## MISMO, in order
 
 1. Ask Grander which origination system it uses, and whether it wants the
    application as a download or through the partner key.

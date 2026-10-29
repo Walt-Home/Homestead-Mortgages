@@ -51,6 +51,10 @@ and **update it in the commit that changes what it says**, like
 `docs/product-ecosystem.md` is the map of Supermortgage, HMX and Walt
 together: one organization, three projects, the door each product has, and
 how they can call one another.
+`docs/mismo.md` is what MISMO is, where we already speak it, and the three
+places mortgage and application data can add value for Grander, ranked.
+Read it before building an export to a partner's systems or a reader for a
+MISMO tape.
 
 `docs/environments.md` is the training and evaluation environments in
 `packages/environments`: a task, primitive tools, and a grader that is the
